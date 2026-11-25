@@ -1,5 +1,5 @@
-# Rich start: Gunpowder Age
-# Start in the Gunpowder Age with its research done and plenty of every resource.
+# Rich start: Age of Discovery
+# Start in the Age of Discovery with its research done and plenty of every resource.
 # Bundled with the launcher (task 112), from docs/tasks/rich-start-03-gunpowder-script.txt.
 # Only you get the research and the resources.
 0 grant-age age.gunpowder

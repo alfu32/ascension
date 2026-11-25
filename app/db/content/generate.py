@@ -13,8 +13,15 @@ BEGIN = '-- BEGIN GENERATED CONTENT'
 END = '-- END GENERATED CONTENT'
 AGES = 'ancient classical medieval gunpowder enlightenment industrial modern information automation fusion starfaring expansion abundance galactic'.split()
 # Ages whose name is not their key (task 146, owner 2026-11-23: "the information age should be
-# called the freedom age"); the key stays.
-AGE_NAMES = {'information': 'Freedom'}
+# called the freedom age"; task 155, owner 2026-11-25: "i'd rename it spacefaring age and the
+# expansion age i'd make into starfaring age", and issue #160: "Please rename the gunpowder age to
+# the age of discovery"); the keys stay.
+AGE_NAMES = {'gunpowder': 'Discovery', 'information': 'Freedom', 'starfaring': 'Spacefaring',
+             'expansion': 'Starfaring'}
+# Task 155: the advance into an age costs this share (percent) of the usual price and research
+# time. The owner found the spacefaring age (key `starfaring`) came too soon; the fusion age
+# before it now opens the own star system.
+AGE_ADVANCE_PCT = {'starfaring': 150}
 
 
 def age_name(age):
@@ -55,10 +62,15 @@ BUILDINGS = [
     ('airfield', 'Airfield', 'military', 5, 'military.6', 1800, 200, 6, 0),
     ('spaceport', 'Spaceport', 'military', 10, '', 2500, 300, 8, 0),
 ]
-# Task 130 (owner, 2026-11-23): buildings that may be built before the age their stats and look
-# are of. The spaceport opens in the information age with satellites and space probes only; its
-# other ships keep their own starfaring prerequisite.
-BUILDABLE_FROM = {'spaceport': 'information'}
+# Buildings and units that may be built from another age than the one their stats and look are
+# of (`first_age_id` stays that age). Task 130 (owner, 2026-11-23): the spaceport opens in the
+# information age with satellites and space probes. Task 155 (owner, 2026-11-25): the own star
+# system is reached in the fusion age, with the space frigate, the transport that founds colonies
+# on its other planets, and the ground battery that answers ships in orbit; the corvette and the
+# rest of the fleet come in the spacefaring age (key `starfaring`); the survey ship, a picket
+# for jumps, in the starfaring age (key `expansion`), when ships first jump to other stars.
+BUILDABLE_FROM = {'spaceport': 'information', 'space_frigate': 'fusion', 'transport_ship': 'fusion',
+                  'ground_battery': 'fusion', 'survey_ship': 'expansion'}
 # line, producer (switch at age 5), steps key:name:age
 LINES = [
     ('infantry', 'barracks', 'spearman:Spearmen:0|hoplite:Hoplites:1|pikeman:Pikemen:2|musketeer:Musketeers:3|fusilier:Fusiliers:4|rifleman:Riflemen:5|infantry:Infantry:6|assault_infantry:Assault Infantry:7|combat_robot:Combat Robots:8|exo_trooper:Exo-Troopers:9|marine:Marines:10|shock_marine:Shock Marines:12'),
@@ -611,7 +623,7 @@ def generate():
                 # (population, one unit each).
                 row('et_container', entity_type_id=Ref(full), capacity=20 if line == 'transport' else squads,
                     accept_tag_id=Ref('passenger', 'tag'))
-            need(full, 'age.' + AGES[age])
+            need(full, 'age.' + BUILDABLE_FROM.get(key, AGES[age]))
             produce('bld.' + building, full, 'train', 'units')
             cost(full, prices, True)
             if old:
@@ -642,12 +654,14 @@ def generate():
         modifier(key, stat, value, op, target)
     for age in range(1, 14):
         key = 'tech.age.' + AGES[age]
-        prices = {'food': 250 * age}
+        pct = AGE_ADVANCE_PCT.get(AGES[age], 100)
+        prices = {'food': 250 * age * pct // 100}
         if age >= 2:
-            prices['knowledge'] = 250 * age
+            prices['knowledge'] = 250 * age * pct // 100
         if age >= 12:
             prices = {}
-        tech(key, 'Advance to ' + age_name(age), age - 1, 'library', 600 + 200 * (age - 1), prices, 'age', level=age)
+        tech(key, 'Advance to ' + age_name(age), age - 1, 'library', (600 + 200 * (age - 1)) * pct // 100, prices,
+             'age', level=age)
         # An age advance needs all four track levels of its row, one prerequisite group each.
         for group, track in enumerate(TRACKS, 1):
             need(key, f'tech.{track}.{age}', group)
@@ -803,7 +817,7 @@ def orbital_combat(definition, row, tag, need, produce, cost, weapon):
         armor_class_id=Ref('structure', 'armor_class'), los=building_sight(age, 3, 14000), footprint_w=3, footprint_h=3,
         build_ticks=150 + 25 * age, ramp_mode='per_type', first_age_id=Ref('age.starfaring'))
     tag(full, 'building', 'mechanical')
-    need(full, 'age.starfaring')
+    need(full, 'age.' + BUILDABLE_FROM['ground_battery'])
     cost(full, {'metal': 400, 'energy': 200}, True)
     for builder in ('citizen', 'worker_drone'):
         produce('unit.' + builder, full, 'construct', 'military')
@@ -1246,7 +1260,8 @@ DETECTOR_COST = {'metal': 300, 'energy': 150}
 # The survey ship's sensor: once researched, a survey ship standing still in a system's plane
 # detects arrivals within this distance of it (milli-tiles of the plane; 40 tiles).
 SURVEY_SENSOR_RADIUS = 40_000
-SURVEY_SENSOR_AGE = 'starfaring'
+# Since task 155 with the survey ship, in the starfaring age (key `expansion`).
+SURVEY_SENSOR_AGE = 'expansion'
 
 
 def alerts_and_detectors(definition, row, tag, need, produce, cost, tech):

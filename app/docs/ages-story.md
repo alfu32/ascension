@@ -26,7 +26,7 @@ ladder under their own names. Ages 8–9 (continental blocs) are humanity's alon
 
 **Status of the music** (from the owner's first session, 2026-11-22): the Classical, Medieval,
 Enlightenment, Industrial, Modern and Freedom pieces exist as sketches (scores in code,
-synthesised, with General MIDI files). The owner accepted them. The Ancient and Gunpowder ages
+synthesised, with General MIDI files). The owner accepted them. The Ancient and Discovery (called Gunpowder until task 155) ages
 of the game's ladder, and ages 8–13, are new here. A heroic, age-less statement of the theme
 (the sketch: solo trumpet, then brass over galloping strings) is the **main title** of the game
 and plays in the launcher.
@@ -127,7 +127,7 @@ shadow gathering under the light.
 hurdy-gurdy. Then it darkens: a Phrygian F♭, a deep drum, a tolling bell, a tritone under the
 last B♭.
 
-**Hand-over.** The tolling ends in darkness: plague, and the end of a world. The Gunpowder age
+**Hand-over.** The tolling ends in darkness: plague, and the end of a world. The Age of Discovery
 opens out of that darkness.
 
 **Interlude.** A distant bell on E♭, and once in a while the theme in a single chanting voice,
@@ -137,7 +137,7 @@ as if heard through a church wall.
 castles, your knights ride under oath and your bells call the hours. Stone cathedrals reach for
 heaven. Beyond the walls, famine and plague wait their turn."
 
-## 3. Gunpowder — the first age of discovery
+## 3. Discovery — powder, sail and new coasts
 
 **Forces.** *Social:* rebirth after the plague: the printing press, a new confidence in the
 human eye. *Economic:* ocean trade, silver from overseas, the first joint-stock companies.
@@ -326,8 +326,8 @@ people for now?"
 
 **Forces.** *Social:* energy without limit; cities that never go dark. *Economic:* **energy**
 becomes a resource of its own, and whoever controls it controls everything else. *Political:*
-the blocs race for power plants; vehicles fly, dive and reach near orbit; armour in every
-medium.
+the blocs race for power plants; vehicles fly, dive and reach near orbit; the first ships
+cross to the other worlds of the home star; armour in every medium.
 
 **Outcome.** Power: the fire of the stars in human hands.
 
@@ -346,7 +346,7 @@ fanfare. A second time, the harmony turns unstable, with a darker edge in the lo
 before the glow returns stronger.
 
 **Hand-over.** The strings rise in harmonics to the edge of hearing, as if leaving the
-atmosphere. The last sound is a very high, thin E♭, and Starfaring opens in the silence of
+atmosphere. The last sound is a very high, thin E♭, and Spacefaring opens in the silence of
 space.
 
 **Interlude.** A low E♭ in the basses with overtones slowly coming and going, and a solo viola
@@ -354,13 +354,14 @@ playing the theme every so often.
 
 *Story:* "Your scientists have lit a star inside a machine. Energy is now a resource like metal
 or food, and whoever commands it commands the world. Your vehicles fly, dive and climb to the
-edge of space. The fire is yours. Make sure it does not burn you."
+edge of space, and your first ships cross to the other worlds of your own sun. The fire is yours.
+Make sure it does not burn you."
 
-## 10. Starfaring — the second age of discovery
+## 10. Spacefaring — the second age of discovery
 
 **Forces.** *Social:* the blocs unite as **Humanity**; for the first time there is one people.
-*Economic:* the spaceport and the spacetime drive; resource worlds to claim. *Political:*
-rivalry carries on in space; other peoples are out there.
+*Economic:* the spaceport's fleets; the moons, belts and planets of the home star to claim.
+*Political:* rivalry carries on in space; other peoples are out there, beyond reach for now.
 
 **Outcome.** Union and departure: humanity leaves home, together.
 
@@ -371,28 +372,28 @@ grand.
 **Art form.** The symphonic tone poem at its largest: vast spacing, distant choir, slow strings.
 This is the second age of discovery, so it remembers the first.
 
-**The theme.** Silence, then from very far away, the Gunpowder age's call and answer returns,
+**The theme.** Silence, then from very far away, the Age of Discovery's call and answer returns,
 now between two orchestral groups set wide apart: the violins on one side play B♭ B♭, and the cellos
 answer from the other side of the sound with B♭ → E♭. The Renaissance imitation returns in the full
 orchestra, slow and vast. A wordless choir (humanity, one voice) sings the theme in unison, then
 in full harmony.
 
 **Hand-over.** The choir holds the last E♭; under it, the low strings begin a steady motion, a
-fleet getting under way, and Expansion picks it up.
+fleet getting under way, and Starfaring picks it up.
 
 **Interlude.** A wordless choir humming the theme very softly, far apart from a solo
 violin's call.
 
 *Story:* "Your ships have broken free of your world. The blocs are one now: Humanity, together
-for the first time, looking up at a sky full of worlds no one has walked on. Out there are
-resources for the taking and, perhaps, others who got there first. This is your second age of
-discovery."
+for the first time, looking up at a sky full of worlds no one has walked on. Every world of
+your own sun is within reach, with resources for the taking; the other stars, and perhaps
+others who got there first, are still beyond it. This is your second age of discovery."
 
-## 11. Expansion — colonies, fleets and trade lanes
+## 11. Starfaring — jumps, colonies and trade lanes
 
 **Forces.** *Social:* colonists on new worlds, each with its own sky and its own customs;
-home becomes a memory. *Economic:* trade lanes between stars, the colony economy, fleets
-protecting the lanes. *Political:* frontier governance; distance makes every colony half
+home becomes a memory. *Economic:* the jump drive opens the routes to other stars; trade
+lanes between them, the colony economy, fleets protecting the lanes. *Political:* frontier governance; distance makes every colony half
 independent.
 
 **Outcome.** Diaspora: humanity spreads out and starts to become many peoples again.
@@ -416,8 +417,8 @@ to fight for, and Abundance begins in that calm.
 **Interlude.** The colony variations heard one at a time, far apart: a solo flute dance, a
 distant work song, the violins' lament.
 
-*Story:* "Colonies now dot a dozen worlds, linked by trade lanes your fleets keep open. Each
-new settlement learns its own sky and sings its own songs, and some are starting to forget the
+*Story:* "Your ships jump between the stars now, and colonies dot a dozen worlds, linked by
+trade lanes your fleets keep open. Each new settlement learns its own sky and sings its own songs, and some are starting to forget the
 old home. Expand, connect and defend the lanes: an empire among the stars is made of
 distances."
 
@@ -470,9 +471,9 @@ the cycle. The music sums up everything and then lets it go.
 
 **The theme.** The strings answer Abundance's unfinished question, and the whole orchestra joins
 them in a vast tutti of the theme. Then history passes in review in the orchestra, each age a few bars in its own colours:
-the Ancient drone and reed pipe, the Classical lyre (harp), the Medieval bell, the Gunpowder consort,
+the Ancient drone and reed pipe, the Classical lyre (harp), the Medieval bell, the Discovery consort,
 the Enlightenment Allegro, the Industrial train, the Modern march, the Freedom hook, the
-Automation canon, the Fusion glow, the Starfaring choir, the Expansion march. All of it is
+Automation canon, the Fusion glow, the Spacefaring choir, the Starfaring march. All of it is
 gathered into one last tutti of the theme, the grandest in the game.
 
 **Ascension (coda).** Everything falls away: the orchestra thins and rises, and the theme is

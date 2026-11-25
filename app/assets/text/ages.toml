@@ -29,8 +29,8 @@ story = """The empire has fallen, but the faith remains. Your lords hold the lan
 
 [[age]]
 ordinal = 3
-name = "Gunpowder"
-subtitle = "the first age of discovery"
+name = "Discovery"
+subtitle = "powder, sail and new coasts"
 theme = "gunpowder.theme"
 interlude = "gunpowder.interlude"
 story = """Powder and shot have broken the castle walls and your ships have crossed the ocean. New coasts, new peoples, new riches: the world is larger than your fathers knew and smaller than your rivals would like. The first city on a new continent must touch the shore. Claim it before someone else does."""
@@ -81,23 +81,23 @@ name = "Fusion"
 subtitle = "the sun on earth"
 theme = "fusion.theme"
 interlude = "fusion.interlude"
-story = """Your scientists have lit a star inside a machine. Energy is now a resource like metal or food, and whoever commands it commands the world. Your vehicles fly, dive and climb to the edge of space. The fire is yours. Make sure it does not burn you."""
+story = """Your scientists have lit a star inside a machine. Energy is now a resource like metal or food, and whoever commands it commands the world. Your vehicles fly, dive and climb to the edge of space, and your first ships cross to the other worlds of your own sun. The fire is yours. Make sure it does not burn you."""
 
 [[age]]
 ordinal = 10
-name = "Starfaring"
+name = "Spacefaring"
 subtitle = "the second age of discovery"
 theme = "starfaring.theme"
 interlude = "starfaring.interlude"
-story = """Your ships have broken free of your world. The blocs are one now: Humanity, together for the first time, looking up at a sky full of worlds no one has walked on. Out there are resources for the taking and, perhaps, others who got there first. This is your second age of discovery."""
+story = """Your ships have broken free of your world. The blocs are one now: Humanity, together for the first time, looking up at a sky full of worlds no one has walked on. Every world of your own sun is within reach, with resources for the taking; the other stars, and perhaps others who got there first, are still beyond it. This is your second age of discovery."""
 
 [[age]]
 ordinal = 11
-name = "Expansion"
-subtitle = "colonies, fleets and trade lanes"
+name = "Starfaring"
+subtitle = "jumps, colonies and trade lanes"
 theme = "expansion.theme"
 interlude = "expansion.interlude"
-story = """Colonies now dot a dozen worlds, linked by trade lanes your fleets keep open. Each new settlement learns its own sky and sings its own songs, and some are starting to forget the old home. Expand, connect and defend the lanes: an empire among the stars is made of distances."""
+story = """Your ships jump between the stars now, and colonies dot a dozen worlds, linked by trade lanes your fleets keep open. Each new settlement learns its own sky and sings its own songs, and some are starting to forget the old home. Expand, connect and defend the lanes: an empire among the stars is made of distances."""
 
 [[age]]
 ordinal = 12

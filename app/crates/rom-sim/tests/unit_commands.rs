@@ -434,8 +434,8 @@ fn universe(rules: &Arc<Rules>) -> World {
 }
 
 /// Ships leaving a spaceport's queue go to its rally point as units leaving a barracks do: a
-/// satellite (bound to its orbit) and a survey ship both move within the orbit to above the
-/// point on the ground, and stay in orbit there.
+/// satellite (bound to its orbit) and a corvette (the survey ship until task 155 moved it one age
+/// later) both move within the orbit to above the point on the ground, and stay in orbit there.
 #[test]
 fn ships_launched_from_a_spaceport_go_to_its_rally_point_in_orbit() {
     let r = rules("");
@@ -450,7 +450,7 @@ fn ships_launched_from_a_spaceport_go_to_its_rally_point_in_orbit() {
             ..order(port, "set_rally")
         })
         .unwrap();
-        for key in ["unit.satellite", "unit.survey_ship"] {
+        for key in ["unit.satellite", "unit.corvette"] {
             let mut train = order(port, "train");
             train.subject = Some(id(&w, key));
             train.queue = true;
@@ -462,7 +462,7 @@ fn ships_launched_from_a_spaceport_go_to_its_rally_point_in_orbit() {
         let mut arrived = 0;
         for _ in 0..4000 {
             w.step();
-            arrived = ["unit.satellite", "unit.survey_ship"]
+            arrived = ["unit.satellite", "unit.corvette"]
                 .iter()
                 .filter(|key| {
                     w.entities().any(|e| {

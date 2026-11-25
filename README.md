@@ -81,15 +81,15 @@ merchant fleets earn wealth on trade routes, at home and, later, between star sy
 | 0 | Ancient | cities, farms, the first soldiers |
 | 1 | Classical | metalwork, temples and priests, stables, siege engines |
 | 2 | Medieval | castles, heavy cavalry |
-| 3 | Gunpowder | firearms, cannon, ocean-going ships: the first age of discovery |
+| 3 | Discovery | firearms, cannon, ocean-going ships: the first age of discovery |
 | 4 | Enlightenment | line infantry, universities |
 | 5 | Industrial | oil, factories, medics, the first aircraft |
 | 6 | Modern | tanks, carriers, missiles |
 | 7 | Freedom | drones in the air, at sea and on the ground |
 | 8 | Automation | robot workers and soldiers; nuclear power; nations merge into continental blocs |
-| 9 | Fusion | fusion power; craft that fly, dive and reach near orbit |
-| 10 | Starfaring | the spaceport and the space drive: the second age of discovery; the blocs unite as humanity |
-| 11 | Expansion | colonies on other worlds, trade between systems, fleets |
+| 9 | Fusion | fusion power; craft that fly, dive and reach near orbit; the first ships and colonies on the other worlds of the home star |
+| 10 | Spacefaring | the whole fleet, and the home star system its own: the second age of discovery; the blocs unite as humanity |
+| 11 | Starfaring | the jump to other stars: colonies on their worlds, trade between systems |
 | 12 | Abundance | everything costs nothing; building still takes time |
 | 13 | Galactic Empires | rival human empires and their great works |
 
@@ -98,7 +98,7 @@ merchant fleets earn wealth on trade routes, at home and, later, between star sy
 You pick a race before the match and keep it: **humans**, **avians** or **reptilians**,
 twenty nations in all, from Romans, Egyptians, Chinese and Inca to the broods and flights of
 the other races. In the Automation Age the nations of one continent merge into a **bloc**
-(Africa, the Americas, Asia, Europe, Oceania); in the Starfaring Age the blocs become
+(Africa, the Americas, Asia, Europe, Oceania); in the Spacefaring Age the blocs become
 **united humanity**.
 
 ### Armies, sieges and fire from orbit
@@ -129,8 +129,9 @@ target has a counter within reach.
 
 ### Into space: star systems and the star map
 
-From the Starfaring Age your view opens beyond the home planet: moons, asteroid belts,
-gas giants and the other systems on the star map. Resource worlds are **claimed by keeping a
+From the Fusion Age your view opens beyond the home planet to the moons, asteroid belts and
+gas giants of the home star, and your first ships settle its other worlds; from the Starfaring
+Age ships jump to the other systems on the star map. Resource worlds are **claimed by keeping a
 starship beside them**; habitable planets take colonies, and ground battles are fought on
 their surfaces. Six map styles set the scale, from a single planet shared by everyone to a
 solar system, a cluster, a sector, a quadrant or a whole galaxy, with real star names.

@@ -392,7 +392,7 @@ fn the_descent_resources_follow_the_library_research_costs() {
             .find(|(r, _)| *r == food)
             .unwrap()
             .1,
-        52_290
+        53_415
     );
 }
 
