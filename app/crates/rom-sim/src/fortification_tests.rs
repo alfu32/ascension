@@ -674,3 +674,33 @@ fn a_diagonal_line_with_its_gate_runs_alike_twice_and_across_a_save() {
         .count();
     assert_eq!(segments + 3, 13, "the line stands");
 }
+
+/// Task 147b: a town walled all round is no refuge: an attack-moving column finds no way in,
+/// stops at the wall and breaks through it.
+#[test]
+fn an_army_breaks_through_a_wall_that_rings_its_target() {
+    let mut w = world_sized(48, 48, "age.classical", &[]);
+    let city = spawn(&mut w, "bld.city", P1, 24, 24);
+    let ring = [at(16, 16), at(32, 16), at(32, 32), at(16, 32), at(16, 16)];
+    let sites = w
+        .line_sites(P1, id(&w, "bld.stone_wall"), &ring, &[])
+        .unwrap();
+    for site in &sites {
+        w.place_turned_for_setup(site.subject, P1, site.pos, site.facing)
+            .unwrap();
+    }
+    let walls = sites.len();
+    let raiders: Vec<EntityId> = (0..4)
+        .map(|n| spawn(&mut w, "unit.catapult", P2, 22 + n * 2, 44))
+        .collect();
+    let target = w.entity(city).unwrap().pos;
+    for r in &raiders {
+        command(&mut w, *r, "attack_move", None, None, Some(target), false).unwrap();
+    }
+    ticks(&mut w, 3000);
+    let standing = w
+        .entities()
+        .filter(|e| e.type_id == id(&w, "bld.stone_wall"))
+        .count();
+    assert!(standing < walls, "a breach: {standing} of {walls} stand");
+}

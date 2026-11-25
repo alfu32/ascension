@@ -344,6 +344,8 @@ pub struct Controller {
     /// The brush stroke under way: the left button is held on the ground (task 150).
     stroke: Option<BrushStroke>,
     placement: Option<Placement>,
+    /// The fortification line or minefield being dragged (task 147b).
+    line: Option<lines::LineDrag>,
     markers: Vec<Marker>,
     helpers: Vec<Helpers>,
     requeue: Vec<Requeue>,
@@ -963,9 +965,16 @@ impl Controller {
             } => self.box_select(world, &entities, modifiers),
             PickEvent::Stroke { surface, start, .. } => {
                 let at = self.pos_of(surface);
-                self.stroke_to(world, at, start);
+                if self.line_armed(world).is_some() && !self.view.in_space {
+                    self.line_stroke(world, at, start);
+                } else {
+                    self.stroke_to(world, at, start);
+                }
             }
-            PickEvent::StrokeEnd => self.stroke = None,
+            PickEvent::StrokeEnd => {
+                self.stroke = None;
+                self.finish_line(world, false);
+            }
             PickEvent::RightClick {
                 surface,
                 entity,
@@ -1000,6 +1009,7 @@ impl Controller {
             PickEvent::Hotkey { ch, modifiers } => self.hotkey(world, ch, modifiers),
             PickEvent::Escape => {
                 self.placement = None;
+                self.line = None;
                 self.descend_pick = false;
                 self.life_pick = false;
                 self.brush = None;
@@ -1460,7 +1470,9 @@ impl Controller {
             .filter(|w| w.pos.body == body && sees(w.pos))
             .filter_map(|w| {
                 let et = rules.entity_type(w.type_id)?;
-                let (fw, fh) = (et.footprint_w.clamp(1, 255), et.footprint_h.clamp(1, 255));
+                // Turned with the building (task 147).
+                let (fw, fh) = rom_sim::turned_footprint(et.footprint_w, et.footprint_h, w.facing);
+                let (fw, fh) = (fw.clamp(1, 255), fh.clamp(1, 255));
                 // The plain box height the views give a building of this footprint and kind; the
                 // simulation thread puts the height of its model in its place.
                 let height = 1000 + (w.type_id.0 % 4) as i64 * 400 + 150 * fw.max(fh);
@@ -1595,6 +1607,10 @@ impl Controller {
         entity: Option<u32>,
         mods: Modifiers,
     ) {
+        // While a line is dragged a right click drops a gate there (task 147b).
+        if self.drop_gate(world, Some(target)) {
+            return;
+        }
         if self.placement.take().is_some() {
             return;
         }
@@ -2072,6 +2088,10 @@ impl Controller {
     }
 
     fn hotkey(&mut self, world: &mut OrderSink<'_>, ch: char, mods: Modifiers) {
+        // G drops a gate at the pointer into the line being dragged (task 147b).
+        if ch.eq_ignore_ascii_case(&'g') && self.drop_gate(world, None) {
+            return;
+        }
         if ch == DELETE_KEY {
             self.delete_selected(world);
             return;
@@ -4050,22 +4070,30 @@ impl Controller {
                 hud.help = rejection_message(world, self.me(), &reason, Some(p.def));
             }
         }
-        hud.painting = self.brush.is_some()
-            && !self.view.in_space
-            && self.placement.is_none()
-            && !self.descend_pick;
-        hud.placement = self.placement.as_ref().and_then(|p| {
-            p.centre.map(|c| HudPlacement {
-                face: c.face,
-                width: p.footprint.0.clamp(1, 255) as u8,
-                height: p.footprint.1.clamp(1, 255) as u8,
-                x: c.x,
-                y: c.y,
-                kind: u16::try_from(p.def.0).unwrap_or(u16::MAX),
-                owner: me.0 as u8,
-                valid: p.valid,
-            })
-        });
+        hud.painting = (self.brush.is_some() && self.placement.is_none() && !self.descend_pick
+            || self.line_armed(world).is_some())
+            && !self.view.in_space;
+        // A line being dragged shows its sites and their price (task 147b).
+        hud.line = self.line_hud(world);
+        if let Some(help) = self.line_help(world) {
+            hud.help = help;
+        }
+        hud.placement = self
+            .placement
+            .as_ref()
+            .filter(|_| self.line.is_none())
+            .and_then(|p| {
+                p.centre.map(|c| HudPlacement {
+                    face: c.face,
+                    width: p.footprint.0.clamp(1, 255) as u8,
+                    height: p.footprint.1.clamp(1, 255) as u8,
+                    x: c.x,
+                    y: c.y,
+                    kind: u16::try_from(p.def.0).unwrap_or(u16::MAX),
+                    owner: me.0 as u8,
+                    valid: p.valid,
+                })
+            });
         let city_selected = own.iter().any(|e| {
             rules.entity_types[&e.type_id]
                 .territory
@@ -4373,6 +4401,7 @@ fn rejection_message(
 }
 
 mod formations;
+mod lines;
 mod pointer;
 #[cfg(test)]
 mod tests;

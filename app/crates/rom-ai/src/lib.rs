@@ -24,6 +24,7 @@ mod construction;
 mod economy;
 mod fleet;
 mod formations;
+mod fortify;
 pub mod governor;
 mod market;
 mod memory;

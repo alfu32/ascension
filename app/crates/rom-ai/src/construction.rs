@@ -64,8 +64,7 @@ fn role(view: &View<'_>, building: DefId) -> Role {
 }
 
 /// Building types an own builder can construct now, one per upgrade line. Walls, gates and
-/// minefields are left out: they are laid along lines, which the computer player does not do
-/// yet (task 147b).
+/// minefields are left out: they are laid along lines by `fortify` (task 147b).
 pub(crate) fn constructible(view: &View<'_>) -> Vec<DefId> {
     let rules = view.rules;
     let mut seen = BTreeSet::new();

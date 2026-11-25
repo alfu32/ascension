@@ -461,6 +461,15 @@ impl World {
         self.surface(a.body)?.geo.distance(a, b)
     }
 
+    /// The local vector from `a` to `b` in milli-tiles in the frame of `a`'s face, across face
+    /// edges on a sphere; None between bodies or out of reach (as [`World::distance`]).
+    pub fn vector(&self, a: Pos, b: Pos) -> Option<(i64, i64)> {
+        if a.body != b.body {
+            return None;
+        }
+        self.surface(a.body)?.geo.vector(a, b)
+    }
+
     /// Steps a position by a local vector in milli-tiles, crossing face edges; a position
     /// on a body without a surface is returned unchanged.
     pub fn offset(&self, pos: Pos, dx: i64, dy: i64) -> Pos {

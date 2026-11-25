@@ -131,7 +131,8 @@ impl World {
             .values()
             .map(|t| {
                 if t.class == EntityClass::Building {
-                    (t.footprint_w + t.footprint_h) * 500
+                    // Its longer side either way: a building may be turned (task 147).
+                    t.footprint_w.max(t.footprint_h) * 1000
                 } else {
                     t.radius
                 }

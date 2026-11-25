@@ -4156,3 +4156,154 @@ fn only_the_render_threads_pointed_pick_names_the_hovered_entity() {
     point_at(&mut fx, None);
     assert_eq!(fx.hud_snapshot().pointer, None);
 }
+
+/// Task 147b: a palisade armed, two builders selected and a town to wall.
+fn wall_fixture(age: &str, techs: &[&str], segment: &str) -> (Fx, DefId, Vec<EntityId>) {
+    let mut fx = fixture_config(10_000, age, techs);
+    let id = |key: &str| fx.rules.id_of(key).unwrap();
+    let (city, def) = (id("bld.city"), id(segment));
+    fx.world
+        .place_for_setup(city, PLAYER, at(20, 20))
+        .expect("town");
+    let builder = fx
+        .rules
+        .production
+        .iter()
+        .find(|(_, rows)| {
+            rows.iter()
+                .any(|r| r.mode == ProductionMode::Construct && r.product_def_id == def)
+        })
+        .map(|(t, _)| *t)
+        .unwrap();
+    let builders = vec![fx.spawn(builder, 1, 14, 28), fx.spawn(builder, 1, 27, 28)];
+    fx.ctl.set_selection(builders.clone());
+    let et = fx.rules.entity_types[&def].clone();
+    fx.ctl.placement = Some(Placement {
+        def,
+        footprint: (et.footprint_w, et.footprint_h),
+        centre: None,
+        valid: None,
+        dirty: false,
+        checked: None,
+        checked_age: None,
+    });
+    (fx, def, builders)
+}
+
+fn stroke(fx: &mut Fx, x: f32, y: f32, start: bool) {
+    fx.ctl.handle(
+        &mut fx.world,
+        PickEvent::Stroke {
+            world_point: (x, y),
+            surface: flat_surface((x, y)),
+            start,
+        },
+    );
+}
+
+#[test]
+fn a_wall_is_dragged_with_a_gate_and_its_builders_take_it_in_order() {
+    let (mut fx, palisade, builders) =
+        wall_fixture("age.ancient", &["tech.military.1"], "bld.palisade");
+    let gate = fx.rules.id_of("bld.palisade_gate").unwrap();
+    // Armed, the left drag draws instead of selecting.
+    assert!(fx.hud_snapshot().painting);
+    stroke(&mut fx, 15.5, 25.5, true);
+    stroke(&mut fx, 20.5, 25.5, false);
+    // G drops a gate at the pointer.
+    fx.ctl.handle(
+        &mut fx.world,
+        PickEvent::Hotkey {
+            ch: 'g',
+            modifiers: Modifiers::default(),
+        },
+    );
+    stroke(&mut fx, 25.5, 25.5, false);
+    let hud = fx.hud_snapshot();
+    assert_eq!(
+        hud.line.len(),
+        11 - 3 + 1,
+        "the gate replaces three segments"
+    );
+    assert!(hud.line.iter().all(|s| s.valid));
+    let gates: Vec<_> = hud.line.iter().filter(|s| s.gate).collect();
+    assert_eq!(gates.len(), 1);
+    assert_eq!(
+        (gates[0].x, gates[0].width, gates[0].facing),
+        (20_500, 3, 0)
+    );
+    assert!(hud.help.contains("8 segments, 1 gate"), "{}", hud.help);
+    assert!(
+        hud.placement.is_none(),
+        "the line shows instead of one ghost"
+    );
+    fx.ctl.handle(&mut fx.world, PickEvent::StrokeEnd);
+    fx.step(2);
+    let sites = |fx: &Fx, def| {
+        fx.world
+            .entities()
+            .filter(|e| e.type_id == def && e.build_progress.is_some())
+            .map(|e| (e.pos.x / 1000, e.facing))
+            .collect::<Vec<_>>()
+    };
+    // The nearer builder takes the first stretch, the other the rest, each in line order.
+    let first: Vec<_> = fx
+        .world
+        .entity(builders[0])
+        .unwrap()
+        .orders()
+        .iter()
+        .filter_map(|o| o.subject)
+        .collect();
+    let second: Vec<_> = fx
+        .world
+        .entity(builders[1])
+        .unwrap()
+        .orders()
+        .iter()
+        .filter_map(|o| o.subject)
+        .collect();
+    assert_eq!(
+        first.len() + second.len() + sites(&fx, palisade).len() + sites(&fx, gate).len() >= 9,
+        true
+    );
+    assert_eq!(sites(&fx, gate), vec![(20, 0)]);
+    assert_eq!(sites(&fx, palisade).len(), 8);
+    // The tool stays armed: a press on the wall's end continues it, leaving that end out.
+    assert!(fx.ctl.placement.is_some());
+    stroke(&mut fx, 25.5, 25.5, true);
+    stroke(&mut fx, 25.5, 30.5, false);
+    let hud = fx.hud_snapshot();
+    assert_eq!(hud.line.len(), 5);
+    assert_eq!((hud.line[0].x, hud.line[0].y), (25_500, 26_500));
+    assert!(hud.line.iter().all(|s| s.valid && s.facing == 90));
+    // A right click while dragging drops a gate too; Escape drops the line and the tool.
+    fx.ctl.handle(
+        &mut fx.world,
+        PickEvent::RightClick {
+            world_point: (25.5, 28.5),
+            surface: flat_surface((25.5, 28.5)),
+            entity: None,
+            modifiers: Modifiers::default(),
+        },
+    );
+    let hud = fx.hud_snapshot();
+    assert_eq!(hud.line.iter().filter(|s| s.gate).count(), 1);
+    assert_eq!(hud.line.iter().find(|s| s.gate).unwrap().facing, 90);
+    fx.ctl.handle(&mut fx.world, PickEvent::Escape);
+    assert!(fx.hud_snapshot().line.is_empty() && fx.ctl.placement.is_none());
+}
+
+#[test]
+fn a_minefield_is_dragged_as_a_rectangle() {
+    let (mut fx, mine, _) = wall_fixture("age.industrial", &[], "bld.minefield");
+    stroke(&mut fx, 16.5, 26.5, true);
+    stroke(&mut fx, 19.5, 27.5, false);
+    let hud = fx.hud_snapshot();
+    assert_eq!(hud.line.len(), 8, "four by two mines");
+    assert!(hud.help.contains("8 mines"), "{}", hud.help);
+    fx.ctl.handle(&mut fx.world, PickEvent::StrokeEnd);
+    fx.step(2);
+    let laid = fx.world.entities().filter(|e| e.type_id == mine).count();
+    assert_eq!(laid, 8);
+}
