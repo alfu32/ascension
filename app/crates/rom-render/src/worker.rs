@@ -155,6 +155,8 @@ struct Shared {
     pointer_hand: AtomicBool,
     /// Whether a right click where the pointer rests gives an attack (a crosshair, task 151).
     pointer_attack: AtomicBool,
+    /// Whether the person hid the rankings panel (F8, task 160).
+    rankings_hidden: AtomicBool,
     space: Mutex<Arc<SpaceSnapshot>>,
     ship_scales: Mutex<Arc<ShipScales>>,
     view_state: Mutex<ViewState>,
@@ -294,6 +296,18 @@ impl RenderBridge {
     /// window shows a crosshair.
     pub fn pointer_attack(&self) -> bool {
         self.shared.pointer_attack.load(Ordering::Relaxed)
+    }
+
+    /// Shows the rankings panel if hidden, hides it if shown (F8, task 160).
+    pub fn toggle_rankings(&self) {
+        self.shared
+            .rankings_hidden
+            .fetch_xor(true, Ordering::Relaxed);
+    }
+
+    /// Whether the rankings panel is hidden (task 160).
+    pub fn rankings_hidden(&self) -> bool {
+        self.shared.rankings_hidden.load(Ordering::Relaxed)
     }
 
     /// What the camera looks at now.
@@ -600,6 +614,7 @@ impl Shared {
             zoom_all: AtomicBool::new(false),
             pointer_hand: AtomicBool::new(false),
             pointer_attack: AtomicBool::new(false),
+            rankings_hidden: AtomicBool::new(false),
             space: Mutex::new(Arc::new(SpaceSnapshot::default())),
             ship_scales: Mutex::new(Arc::new(ShipScales::default())),
             view_state: Mutex::new(ViewState::default()),
@@ -1715,6 +1730,7 @@ fn render_loop(shared: &Shared) {
                             .or_else(|| space_picker.drag_rect())
                             .map(|r| Rect::new(r.x * ratio, r.y * ratio, r.w * ratio, r.h * ratio)),
                         world_help,
+                        hide_rankings: shared.rankings_hidden.load(Ordering::Relaxed),
                     }
                 };
                 let mut drawing = rl.begin_texture_mode(&thread, texture);
@@ -2723,6 +2739,7 @@ mod tests {
                 price: String::new(),
                 state: crate::hud_model::ButtonState::Ready,
                 armed: false,
+                effects: Vec::new(),
             }],
             ..HudPalette::default()
         });

@@ -548,6 +548,7 @@ pub fn snapshot_of(world: &World, player_id: PlayerId) -> HudSnapshot {
     let Some(player) = world.players().find(|p| p.id == player_id) else {
         return result;
     };
+    result.age = crate::ranking_view::age_label(world, player_id);
     result.wealth = rom_render::HudWealth {
         relics: world
             .entities()

@@ -305,6 +305,11 @@ impl WorldView {
                 self.quick_load(window, cx);
                 return;
             }
+            // Shows or hides the rankings panel (task 160).
+            "f8" => {
+                self.bridge.toggle_rankings();
+                return;
+            }
             _ => {}
         }
         let current = self.bridge.render_scale();

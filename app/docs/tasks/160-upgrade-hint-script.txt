@@ -1,0 +1,12 @@
+# Task 160: the pointer on an upgrade names what it replaces and lists the new type's gains
+# (universe match, seed 1, --sun fixed, 1280 x 800, --players 4, the default computer players).
+# Player one starts in the Classical age with barracks beside its city; the barracks are
+# selected with the Research tab open and the pointer on the upgrade to Hoplites (slot Q): over
+# the help line "Upgrades Spearmen → Hoplites". Shot as img/160-upgrade-hint.png.
+#   --universe --seed 1 --players 4 --sun fixed --size 1280x800
+#   --script docs/tasks/160-upgrade-hint-script.txt --screenshot <file> --after 8
+0 grant-age age.classical
+0 place 1 bld.barracks @9,0
+2 producers
+4 hud tab 3
+8 cam point 44,669

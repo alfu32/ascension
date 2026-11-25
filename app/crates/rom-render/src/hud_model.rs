@@ -376,6 +376,9 @@ pub struct HudButton {
     pub state: ButtonState,
     /// True while the button's mode is active (placement, stance).
     pub armed: bool,
+    /// What it does or is, in plain words, one short line each (task 160): shown over the help
+    /// line while the button is hovered; empty for none.
+    pub effects: Vec<String>,
 }
 
 /// The command palette of the current selection.

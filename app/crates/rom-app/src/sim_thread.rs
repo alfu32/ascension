@@ -370,6 +370,8 @@ pub struct SimLink {
     keep_playing: Arc<AtomicBool>,
     /// The new-age dialog (task 133): the simulation thread opens it, the window closes it.
     age_dialog: Arc<Mutex<AgeDialogSlot>>,
+    /// The live rankings, worked out once per game second (task 160).
+    rankings: Arc<crate::ranking_view::RankingBoard>,
 }
 
 /// The new-age dialog while it is open, and a count of its changes (the HUD is published again
@@ -543,6 +545,7 @@ impl SimLink {
             end: Arc::default(),
             keep_playing: Arc::default(),
             age_dialog: Arc::default(),
+            rankings: Arc::default(),
         }
     }
 
@@ -774,6 +777,7 @@ impl SimThread {
             end: Arc::default(),
             keep_playing: Arc::default(),
             age_dialog: Arc::default(),
+            rankings: Arc::default(),
         };
         let thread_link = link.clone();
         let thread = thread::Builder::new()
@@ -1222,6 +1226,7 @@ fn run(
                                 }
                             }
                         }
+                        ScriptAction::ToggleRankings => bridge.toggle_rankings(),
                         ScriptAction::Visit(body) => bridge.fly_to_body(body),
                         ScriptAction::Look(at) => bridge.focus_surface(at),
                         ScriptAction::PointAt { target, dx, dy } => {
@@ -1758,6 +1763,7 @@ fn publish(
         bridge.publish_vision(Arc::new(memory.fog.build_on(world, me, body)));
     }
     let mut hud = crate::hud::snapshot_of(world, me);
+    hud.rankings = link.rankings.rows(world, me);
     hud.age_dialog = link.age_dialog().0;
     hud.rename = link.rename_view();
     controller.fill(world, &mut hud);
@@ -1848,6 +1854,7 @@ fn publish_hud(
     link: &SimLink,
 ) {
     let mut hud = crate::hud::snapshot_of(world, me);
+    hud.rankings = link.rankings.rows(world, me);
     hud.age_dialog = link.age_dialog().0;
     hud.rename = link.rename_view();
     controller.fill(world, &mut hud);

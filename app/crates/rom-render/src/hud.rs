@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use crate::hud_atlas::{self, AtlasError, AtlasImage, AtlasRect};
-use crate::hud_layout::{Group, HudLayout, Rect, Region};
+use crate::hud_layout::{Group, HudLayout, Rect, Region, TOP_BAR_HEIGHT};
 use crate::hud_text::{Align, GlyphAtlas, TextSize, TextStyle};
 
 /// One resource's stock and income per configured simulation income period.
@@ -136,6 +136,43 @@ pub struct HudSnapshot {
     /// Each player's side as the person sees them, indexed by player id: selection rings take
     /// their colour from it, never from the team colour (task 151).
     pub sides: Vec<crate::Side>,
+    /// The person's age as the top bar names it, "AGE 10 OF 14 · FUSION AGE" (task 160); empty
+    /// for none.
+    pub age: String,
+    /// Every player of the match, best score first, for the rankings panel (task 160).
+    pub rankings: Vec<HudRanking>,
+}
+
+/// How a player in the rankings stands (task 160).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum RankStanding {
+    /// Still in the match.
+    #[default]
+    Playing,
+    /// Out of it: the row is greyed.
+    Defeated,
+    /// Ascended: the row says so.
+    Ascended,
+}
+
+/// One player's row of the live rankings (task 160): public facts only, as the match report
+/// shows them. Text is formatted by the app, so drawing it formats nothing.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct HudRanking {
+    /// The player's colour.
+    pub colour: [u8; 4],
+    /// Its name ("You" for the person).
+    pub name: String,
+    /// Its age, short ("Fusion").
+    pub age: String,
+    /// Its score, formatted.
+    pub score: String,
+    /// Military, economy and research parts of its score, per mille of the best player's part.
+    pub bars: [u16; 3],
+    /// The person's own row: highlighted.
+    pub me: bool,
+    /// Playing, defeated or ascended.
+    pub standing: RankStanding,
 }
 
 /// The dialog that tells a new age's story (task 133): drawn over the world and the HUD until
@@ -268,6 +305,8 @@ impl Default for HudSnapshot {
             pointer: None,
             flashes: Vec::new(),
             sides: Vec::new(),
+            age: String::new(),
+            rankings: Vec::new(),
         }
     }
 }
@@ -279,6 +318,11 @@ const CHAT_WINDOW: usize = 34;
 pub(crate) const SELECTION_HEADING: Rect = Rect::new(998.0, 681.0, 320.0, 21.0);
 /// Rows of the open chat history.
 pub const CHAT_HISTORY_ROWS: usize = 14;
+
+/// Width of the rankings panel in design pixels (task 160).
+const RANKINGS_WIDTH: f32 = 320.0;
+/// Colours of the rankings' bars: military, economy, research.
+const RANKING_BARS: [[u8; 4]; 3] = [[232, 92, 70, 255], [61, 220, 61, 255], [63, 208, 255, 255]];
 
 const WHITE: [u8; 4] = [242, 242, 242, 255];
 const MUTED: [u8; 4] = [151, 165, 177, 255];
@@ -330,6 +374,8 @@ pub struct HudOverlay {
     pub pointed: Option<u32>,
     /// Where the pointer is, in the same pixels as the layout: the order badge stands beside it.
     pub pointer_at: Option<(f32, f32)>,
+    /// The person hid the rankings panel (F8, task 160); shown by default.
+    pub hide_rankings: bool,
 }
 
 impl HudOverlay {
@@ -359,6 +405,8 @@ pub struct HudPainter {
     /// Baked glyphs.
     pub glyphs: GlyphAtlas,
     quads: Vec<HudQuad>,
+    /// Glyph quads of one text, reused so that drawing text allocates nothing once warm.
+    glyph_scratch: Vec<crate::hud_text::GlyphQuad>,
     scale: f32,
     /// The atlas slot holding each model's picture (task 91).
     model_slots: BTreeMap<u16, usize>,
@@ -461,6 +509,7 @@ impl HudPainter {
             greyscale,
             glyphs: GlyphAtlas::bake(scale),
             quads: Vec::new(),
+            glyph_scratch: Vec::new(),
             scale,
             model_slots: BTreeMap::new(),
             portrait_slots: Vec::new(),
@@ -807,26 +856,34 @@ impl HudPainter {
         colour: [u8; 4],
     ) {
         let (size, factor) = style;
-        // Fit long labels and help to their own field; numbers retain their right anchor.
+        // Fit long labels and help to their own field; numbers retain their right anchor. Text
+        // that fits is drawn as given, without a copy.
         let ratio = self.scale / self.glyphs.scale * factor;
-        let mut label = text.to_owned();
         let max_width = area.w / ratio;
-        if self.glyphs.measure(&label, size) as f32 > max_width {
-            while !label.is_empty()
-                && self.glyphs.measure(&(label.clone() + "..."), size) as f32 > max_width
-            {
-                label.pop();
+        let shortened;
+        let label = if self.glyphs.measure(text, size) as f32 > max_width {
+            let ellipsis = self.glyphs.measure("...", size) as f32;
+            let mut end = text.len();
+            for (at, _) in text.char_indices().rev() {
+                end = at;
+                if self.glyphs.measure(&text[..at], size) as f32 + ellipsis <= max_width {
+                    break;
+                }
             }
-            label.push_str("...");
-        }
+            shortened = format!("{}...", &text[..end]);
+            shortened.as_str()
+        } else {
+            text
+        };
         let x = match align {
             Align::Left => area.x,
             Align::Centre => area.centre().0,
             Align::Right => area.right(),
         };
-        let mut glyphs = Vec::new();
+        let mut glyphs = std::mem::take(&mut self.glyph_scratch);
+        glyphs.clear();
         self.glyphs.draw(
-            &label,
+            label,
             TextStyle {
                 size,
                 align,
@@ -839,7 +896,7 @@ impl HudPainter {
         let baseline = area.y
             + (area.h - self.glyphs.line_height(size) as f32 * ratio) / 2.0
             + self.glyphs.ascent(size) as f32 * ratio;
-        self.quads.extend(glyphs.into_iter().map(|q| HudQuad {
+        self.quads.extend(glyphs.iter().map(|q| HudQuad {
             texture: HudTexture::Glyphs,
             source: Rect::new(
                 q.src.0 as f32,
@@ -855,6 +912,7 @@ impl HudPainter {
             ),
             colour: q.colour,
         }));
+        self.glyph_scratch = glyphs;
     }
 
     /// Scale factor (at most 1) at which `text` fits `width` screen pixels whole.
@@ -1740,6 +1798,182 @@ impl HudPainter {
         }
     }
 
+    /// The live rankings (task 160): a panel at the right edge of the world, under the top bar
+    /// and clear of the bottom panels; every player best score first, the own row lit, then a
+    /// legend of the bars and the key that hides it.
+    fn rankings(&mut self, l: &HudLayout, rows: &[HudRanking]) {
+        if rows.is_empty() {
+            return;
+        }
+        let s = l.scale;
+        let (width, row_h, head, foot) = (RANKINGS_WIDTH, 20.0, 24.0, 20.0);
+        let x = l.width - (width + 12.0) * s;
+        let top = (TOP_BAR_HEIGHT + 12.0) * s;
+        // Rows that fit above the bottom right panels.
+        let floor = l.map(Group::BottomRight, Rect::new(0.0, 662.0, 0.0, 0.0)).y - 8.0 * s;
+        let room = ((floor - top) / s - head - foot - 8.0) / row_h;
+        let shown = rows.len().min(room.max(0.0) as usize);
+        if shown == 0 {
+            return;
+        }
+        let at =
+            |dx: f32, dy: f32, w: f32, h: f32| Rect::new(x + dx * s, top + dy * s, w * s, h * s);
+        let height = head + shown as f32 * row_h + foot + 8.0;
+        let panel = at(0.0, 0.0, width, height);
+        self.solid(panel, [8, 11, 18, 205]);
+        self.frame(panel, s.max(1.0), [232, 201, 138, 160]);
+        self.text(
+            "RANKINGS",
+            at(10.0, 4.0, 120.0, 17.0),
+            TextSize::Small,
+            Align::Left,
+            GOLD,
+        );
+        self.text(
+            "SCORE",
+            at(180.0, 4.0, 82.0, 17.0),
+            TextSize::Small,
+            Align::Right,
+            MUTED,
+        );
+        for (i, row) in rows.iter().take(shown).enumerate() {
+            let y = head + i as f32 * row_h;
+            let out = row.standing == RankStanding::Defeated;
+            let grey = [110, 118, 128, 255];
+            if row.me {
+                self.solid(at(3.0, y, width - 6.0, row_h), [232, 201, 138, 38]);
+                self.frame(
+                    at(3.0, y, width - 6.0, row_h),
+                    s.max(1.0),
+                    [232, 201, 138, 200],
+                );
+            }
+            let swatch = if out {
+                [
+                    row.colour[0] / 3 + 60,
+                    row.colour[1] / 3 + 60,
+                    row.colour[2] / 3 + 60,
+                    255,
+                ]
+            } else {
+                row.colour
+            };
+            self.solid(at(10.0, y + 5.0, 9.0, 10.0), swatch);
+            let text = if out { grey } else { WHITE };
+            let name = at(25.0, y + 1.0, 100.0, 18.0);
+            let factor = self.fit_factor(&row.name, name.w, TextSize::Small).max(0.8);
+            self.text_scaled(
+                &row.name,
+                name,
+                (TextSize::Small, factor),
+                Align::Left,
+                text,
+            );
+            let (age, age_colour): (&str, [u8; 4]) = match row.standing {
+                RankStanding::Ascended => ("Ascended", CYAN),
+                RankStanding::Defeated => ("Defeated", grey),
+                RankStanding::Playing => (row.age.as_str(), if row.me { GOLD } else { MUTED }),
+            };
+            let age_area = at(129.0, y + 1.0, 84.0, 18.0);
+            let factor = self.fit_factor(age, age_area.w, TextSize::Small).max(0.7);
+            self.text_scaled(
+                age,
+                age_area,
+                (TextSize::Small, factor),
+                Align::Left,
+                age_colour,
+            );
+            self.number_fitted(&row.score, at(214.0, y + 1.0, 48.0, 18.0), text);
+            for (n, (value, colour)) in row.bars.iter().zip(RANKING_BARS).enumerate() {
+                let bar = at(270.0, y + 4.0 + n as f32 * 4.5, 40.0, 3.0);
+                let colour = if out { grey } else { colour };
+                self.bar(bar, f32::from(*value) / 1000.0, colour);
+            }
+        }
+        // The legend: what each bar is, and the key that hides the panel.
+        let y = head + shown as f32 * row_h + 5.0;
+        let mut dx = 10.0;
+        for (label, colour) in ["MILITARY", "ECONOMY", "RESEARCH"]
+            .into_iter()
+            .zip(RANKING_BARS)
+        {
+            self.solid(at(dx, y + 6.0, 7.0, 7.0), colour);
+            self.text_scaled(
+                label,
+                at(dx + 10.0, y, 72.0, 18.0),
+                (TextSize::Small, 0.8),
+                Align::Left,
+                MUTED,
+            );
+            dx += 78.0;
+        }
+        self.text_scaled(
+            "F8 HIDES",
+            at(width - 72.0, y, 62.0, 18.0),
+            (TextSize::Small, 0.8),
+            Align::Right,
+            MUTED,
+        );
+    }
+
+    /// What a hovered build, train or research button does (task 160): a panel just over the
+    /// help line, one line per effect, as wide as its longest line.
+    fn effects_tip(&mut self, l: &HudLayout, h: &HudSnapshot, overlay: &HudOverlay) {
+        use crate::pick::HudRegionKind as K;
+        let Some(HudTarget {
+            region: K::CommandSlot,
+            index,
+        }) = overlay.hover
+        else {
+            return;
+        };
+        let Some(button) = h
+            .palette
+            .as_ref()
+            .and_then(|p| p.buttons.iter().find(|b| b.slot == index))
+            .filter(|b| !b.effects.is_empty())
+        else {
+            return;
+        };
+        let s = l.scale;
+        let ratio = s / self.glyphs.scale;
+        let widest = button
+            .effects
+            .iter()
+            .map(|line| self.glyphs.measure(line, TextSize::Small) as f32 * ratio / s)
+            .fold(0.0_f32, f32::max);
+        let width = (widest + 28.0).clamp(220.0, 580.0);
+        let row = 19.0;
+        let height = button.effects.len() as f32 * row + 12.0;
+        let bottom = 640.0;
+        let panel = l.map(
+            Group::BottomLeft,
+            Rect::new(22.0, bottom - height, width, height),
+        );
+        self.solid(panel, [8, 11, 18, 232]);
+        self.frame(panel, s.max(1.0), [232, 201, 138, 190]);
+        for (i, line) in button.effects.iter().enumerate() {
+            // The last line counts what did not fit, in the muted colour.
+            let colour = if line.starts_with('+') && line.ends_with(" more") {
+                MUTED
+            } else {
+                WHITE
+            };
+            self.caption(
+                l,
+                Group::BottomLeft,
+                line,
+                Rect::new(
+                    36.0,
+                    bottom - height + 6.0 + i as f32 * row,
+                    width - 24.0,
+                    row,
+                ),
+                colour,
+            );
+        }
+    }
+
     fn research_overview(&mut self, l: &HudLayout, overview: &ResearchOverview) {
         use Group::BottomRight as R;
         let cell = |this: &mut Self, rect: Rect, state: ResearchCell| {
@@ -1962,6 +2196,12 @@ impl HudPainter {
                 l.map(T, Rect::new(x + 9.0, 51.0, 32.0, 32.0)),
             );
         }
+        // The person's age, over the clock and the buttons (task 160).
+        if !h.age.is_empty() {
+            let area = l.map(T, Rect::new(1342.0, 13.0, 306.0, 24.0));
+            let factor = self.fit_factor(&h.age, area.w, TextSize::Large);
+            self.text_scaled(&h.age, area, (TextSize::Large, factor), Align::Centre, GOLD);
+        }
         self.art("icons/chat", l.map(L, Rect::new(24.0, 585.0, 18.0, 18.0)));
         self.chat_line(l, &h.chat);
         if let Some(panel) = &h.panel {
@@ -2113,6 +2353,10 @@ impl HudPainter {
             Align::Right,
             MUTED,
         );
+        if !overlay.hide_rankings {
+            self.rankings(l, &h.rankings);
+        }
+        self.effects_tip(l, h, overlay);
         if let Some(drag) = overlay.drag_box {
             self.solid(drag, [63, 208, 255, 36]);
             self.frame(drag, (1.5 * l.scale).max(1.0), CYAN);
@@ -2676,5 +2920,153 @@ mod portrait_tests {
             .store_model_icon(4, &vec![3; edge * edge * 4], &h)
             .expect("stored");
         assert_eq!(quads_from(&mut p, &l, &h, rect), 1);
+    }
+}
+
+#[cfg(test)]
+mod ranking_tests {
+    use super::*;
+    use crate::pick::HudRegionKind;
+
+    fn row(name: &str, me: bool, standing: RankStanding) -> HudRanking {
+        HudRanking {
+            colour: [200, 40, 40, 255],
+            name: name.to_owned(),
+            age: "Fusion".to_owned(),
+            score: "12,345".to_owned(),
+            bars: [1000, 500, 0],
+            me,
+            standing,
+        }
+    }
+
+    fn four() -> Vec<HudRanking> {
+        vec![
+            row("You", true, RankStanding::Playing),
+            row("Romans (2)", false, RankStanding::Ascended),
+            row("Ashscale Brood (3)", false, RankStanding::Playing),
+            row("Franks (4)", false, RankStanding::Defeated),
+        ]
+    }
+
+    /// Task 160: the rankings panel lists every row at the right edge of the world, clear of
+    /// the top bar, the minimap and the selection panel, and F8 hides it.
+    #[test]
+    fn the_rankings_panel_stays_clear_of_the_minimap_and_the_selection() {
+        for (w, h) in [(1280, 800), (1672, 941), (1920, 1080), (1024, 640)] {
+            let l = HudLayout::new(w, h, None);
+            let mut p = HudPainter::bake(l.scale).expect("artwork bakes");
+            let bare = p.compose(&l, &HudSnapshot::default()).len();
+            let snapshot = HudSnapshot {
+                rankings: four(),
+                ..HudSnapshot::default()
+            };
+            let quads = p.compose(&l, &snapshot).to_vec();
+            assert!(
+                quads.len() > bare + 40,
+                "{w}x{h}: {} -> {}",
+                bare,
+                quads.len()
+            );
+            for q in &quads[bare..] {
+                for region in [
+                    Region::MinimapFrame,
+                    Region::SelectionPanel,
+                    Region::DataView,
+                ] {
+                    assert!(
+                        !q.dest.overlaps(&l.rect(region)),
+                        "{w}x{h}: {:?} covers {region:?}",
+                        q.dest
+                    );
+                }
+                assert!(
+                    q.dest.y >= TOP_BAR_HEIGHT * l.scale,
+                    "{w}x{h}: under the top bar"
+                );
+                assert!(q.dest.right() <= l.width + 0.5, "{w}x{h}: inside the frame");
+            }
+            let hidden = HudOverlay {
+                hide_rankings: true,
+                ..HudOverlay::default()
+            };
+            assert_eq!(p.compose_with(&l, &snapshot, &hidden).len(), bare);
+        }
+    }
+
+    /// Task 160: the age stands over the clock in gold.
+    #[test]
+    fn the_age_is_named_on_the_top_bar() {
+        let l = HudLayout::new(1280, 800, None);
+        let mut p = HudPainter::bake(l.scale).expect("artwork bakes");
+        let gold = |p: &mut HudPainter, h: &HudSnapshot| {
+            p.compose(&l, h)
+                .iter()
+                .filter(|q| matches!(q.texture, HudTexture::Glyphs) && q.colour == GOLD)
+                .filter(|q| q.dest.bottom() <= TOP_BAR_HEIGHT * l.scale)
+                .count()
+        };
+        let bare = gold(&mut p, &HudSnapshot::default());
+        let label = "AGE 10 OF 14  ·  FUSION AGE";
+        let aged = gold(
+            &mut p,
+            &HudSnapshot {
+                age: label.to_owned(),
+                ..HudSnapshot::default()
+            },
+        );
+        assert_eq!(
+            aged - bare,
+            label.chars().filter(|c| !c.is_whitespace()).count()
+        );
+    }
+
+    /// Task 160: hovering a button with effects shows them in a panel over the help line.
+    #[test]
+    fn a_hovered_button_lists_its_effects_over_the_help_line() {
+        let l = HudLayout::new(1280, 800, None);
+        let mut p = HudPainter::bake(l.scale).expect("artwork bakes");
+        let button = |effects: Vec<String>| HudButton {
+            slot: 2,
+            icon: "icons/pic_scroll".into(),
+            model: None,
+            mark: IconMark::None,
+            name: "Agriculture".into(),
+            price: "100 Food".into(),
+            state: ButtonState::Ready,
+            armed: false,
+            effects,
+        };
+        let snapshot = |effects| HudSnapshot {
+            palette: Some(HudPalette {
+                buttons: vec![button(effects)],
+                ..HudPalette::default()
+            }),
+            ..HudSnapshot::default()
+        };
+        let hover = HudOverlay {
+            hover: Some(HudTarget {
+                region: HudRegionKind::CommandSlot,
+                index: 2,
+            }),
+            ..HudOverlay::default()
+        };
+        let plain = p.compose_with(&l, &snapshot(Vec::new()), &hover).len();
+        let lines = vec!["+10 % gathering: Food".to_owned(), "+2 more".to_owned()];
+        let quads = p.compose_with(&l, &snapshot(lines), &hover).to_vec();
+        assert!(quads.len() > plain + 20);
+        let help = l.rect(Region::HelpLine);
+        for q in &quads[plain..] {
+            assert!(
+                q.dest.bottom() <= help.y + 0.5,
+                "{:?} over the help line",
+                q.dest
+            );
+        }
+        // Not hovered, nothing extra.
+        let still = p
+            .compose(&l, &snapshot(vec!["+10 % gathering: Food".to_owned()]))
+            .len();
+        assert_eq!(still, p.compose(&l, &snapshot(Vec::new())).len());
     }
 }

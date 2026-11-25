@@ -84,6 +84,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 price: "200 Food, 200 Timber".into(),
                 state,
                 armed: false,
+                effects: Vec::new(),
             })
             .collect(),
             ..HudPalette::default()

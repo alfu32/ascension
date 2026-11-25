@@ -2823,10 +2823,18 @@ impl Controller {
             price: String::new(),
             state: ButtonState::Ready,
             armed: false,
+            effects: Vec::new(),
         };
         match action {
             Action::Construct(def) | Action::Train(def) | Action::Research(def) => {
                 button.name = rules.display_name(def, faction).to_owned();
+                // What it does or is, in plain words (task 160).
+                button.effects = crate::effects::capped(crate::effects::effect_lines(
+                    rules,
+                    faction,
+                    &player.active_sources(),
+                    def,
+                ));
                 let icon = crate::palette_icons::product_icon(
                     rules,
                     self.models.as_deref(),

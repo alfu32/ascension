@@ -585,7 +585,7 @@ impl WorldView {
                         div()
                             .text_xs()
                             .text_color(rgb(MUTED))
-                            .child("F5 quick save · F9 quick load · Esc closes"),
+                            .child("F5 quick save · F9 quick load · F8 rankings · Esc closes"),
                     );
             }
             Page::Save => {

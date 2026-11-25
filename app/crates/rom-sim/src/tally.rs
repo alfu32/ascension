@@ -65,6 +65,20 @@ pub struct HistorySample {
     pub age: DefId,
 }
 
+/// A player's score in parts (task 160): what its fighting, its economy and its research
+/// brought, and its ascensions.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct ScoreParts {
+    /// Units trained, kills and cities captured.
+    pub military: i64,
+    /// Resources gathered, buildings completed and cities founded.
+    pub economy: i64,
+    /// Technologies researched and the highest age reached.
+    pub research: i64,
+    /// Ascensions.
+    pub ascension: i64,
+}
+
 /// The counters of every player and the sampled history.
 #[derive(Debug, Default)]
 pub(crate) struct TallyState {
@@ -124,9 +138,30 @@ impl World {
     /// `score.gathered_per`, units trained, buildings completed, cities founded and
     /// captured, kills, technologies, the ordinal of the highest age reached and ascensions.
     pub fn score(&self, player: PlayerId) -> i64 {
-        let weight = |key: &str| self.rules.constant(key).unwrap_or(0).max(0);
+        let sum = self.score_terms(player).iter().sum::<i128>();
+        sum.clamp(0, i128::from(i64::MAX)) as i64
+    }
+
+    /// The score of `player` in its parts (task 160), read-only: they add up to
+    /// [`World::score`] unless that is clamped.
+    pub fn score_parts(&self, player: PlayerId) -> ScoreParts {
+        let part = |n: i128| n.clamp(0, i128::from(i64::MAX)) as i64;
+        let [military, economy, research, ascension] = self.score_terms(player);
+        ScoreParts {
+            military: part(military),
+            economy: part(economy),
+            research: part(research),
+            ascension: part(ascension),
+        }
+    }
+
+    /// The weighted counters of the score, by part: military (units trained, kills, cities
+    /// captured), economy (resources gathered, buildings completed, cities founded), research
+    /// (technologies, the highest age) and ascension.
+    fn score_terms(&self, player: PlayerId) -> [i128; 4] {
+        let weight = |key: &str| i128::from(self.rules.constant(key).unwrap_or(0).max(0));
         let Some(t) = self.tally(player) else {
-            return 0;
+            return [0; 4];
         };
         let age = t
             .ages
@@ -137,29 +172,22 @@ impl World {
             .max()
             .unwrap_or(0);
         let kills = self.stats.kills.get(&player).copied().unwrap_or(0);
-        let per = weight("score.gathered_per").max(1);
-        let terms: [(i128, i64); 8] = [
-            (i128::from(t.units_trained), weight("score.unit_trained")),
-            (
-                i128::from(t.buildings_completed),
-                weight("score.building_completed"),
-            ),
-            (i128::from(t.cities_founded), weight("score.city_founded")),
-            (i128::from(t.cities_captured), weight("score.city_captured")),
-            (i128::from(kills), weight("score.kill")),
-            (i128::from(t.techs_researched), weight("score.tech")),
-            (i128::from(age), weight("score.age")),
-            (
-                i128::from(self.ascensions(player)),
-                weight("score.ascension"),
-            ),
-        ];
-        let sum = terms
-            .iter()
-            .fold(i128::from(t.gathered_total() / per), |sum, (n, w)| {
-                sum + n * i128::from(*w)
-            });
-        sum.clamp(0, i128::from(i64::MAX)) as i64
+        let per = self
+            .rules
+            .constant("score.gathered_per")
+            .unwrap_or(0)
+            .max(1);
+        let n = i128::from;
+        [
+            n(t.units_trained) * weight("score.unit_trained")
+                + n(kills) * weight("score.kill")
+                + n(t.cities_captured) * weight("score.city_captured"),
+            i128::from(t.gathered_total() / per)
+                + n(t.buildings_completed) * weight("score.building_completed")
+                + n(t.cities_founded) * weight("score.city_founded"),
+            n(t.techs_researched) * weight("score.tech") + i128::from(age) * weight("score.age"),
+            i128::from(self.ascensions(player)) * weight("score.ascension"),
+        ]
     }
 
     /// The ages the players hold now, where first held; before the first tick, the ages the
