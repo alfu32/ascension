@@ -222,7 +222,7 @@ impl Launcher {
         let sentence = if current == "on" {
             "Buildings of a city stand inside its area, the ring that grows with them."
         } else {
-            "Buildings may stand anywhere in your borders; the area still grows, and a city's shield covers only it."
+            "Buildings may stand anywhere in your borders; the city area still grows."
         };
         let items = vec![
             ("on".to_owned(), "Limits building".to_owned()),
