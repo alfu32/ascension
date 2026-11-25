@@ -2774,7 +2774,9 @@ interface, the drawing of joined segments and the computer player's use of them 
   Measured: `rom playthrough --seed 1` hash `abee291cb764153a`, ascension `1ee55ed65a7c141b`
   (before: `acc4db242db8a622`, `91692088c29e53a3`); with the gates set back to one tile in the
   same build both come back exactly, so the move is the playthrough bot's gate standing three
-  tiles wide. Rules fingerprint `367cf6ad6ec6c5c1`.
+  tiles wide. Rules fingerprint `f6ba40204370fc84` (gate footprints, gate models, the order
+  table). The gate models keep the art direction's team colour share: a part widened across
+  the gate is structure, with the team colour on its middle tile only.
 - **The computer player (147b)**: see `computer-player.md`, "Fortifications and minefields".
 - **The computer player (147a)** read none of this. Its construction manager builds the first of a
   building line it has none of at a low score when nothing better waits, so it may lay one

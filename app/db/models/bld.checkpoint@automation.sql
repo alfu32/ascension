@@ -8,7 +8,8 @@ WITH v(name,shape,mat,team,attach,params) AS (VALUES
   ('pillar_l','box','mat.white_composite',0,'','{"x":-1.41,"w":0.16,"d":0.3,"h":1.7,"taper":0.15}'),
   ('pillar_r','box','mat.white_composite',0,'','{"x":1.41,"w":0.16,"d":0.3,"h":1.7,"taper":0.15}'),
   ('lintel','box','mat.white_composite',0,'','{"y":1.6,"w":2.98,"d":0.3,"h":0.12}'),
-  ('panel','box','mat.cloth',1,'','{"y":1.72,"w":2.6,"d":0.2,"h":0.03}'),
+  ('panel','box','mat.white_composite',0,'','{"y":1.72,"w":2.6,"d":0.2,"h":0.03}'),
+  ('panel_band','box','mat.cloth',1,'','{"y":1.71,"w":1.3,"d":0.22,"h":0.05}'),
   ('scan_l','box','mat.light_strip',0,'','{"x":-1.335,"y":0.2,"w":0.02,"d":0.12,"h":1.2}'),
   ('scan_r','box','mat.light_strip',0,'','{"x":1.335,"y":0.2,"w":0.02,"d":0.12,"h":1.2}'),
   ('lamp','dome','mat.light_strip',0,'','{"y":1.72,"w":0.16,"h":0.1,"segments":6}'))

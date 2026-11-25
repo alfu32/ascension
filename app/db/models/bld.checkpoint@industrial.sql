@@ -7,7 +7,8 @@ WITH v(name,shape,mat,team,attach,params) AS (VALUES
   ('bed','box','mat.soil',0,'','{"w":2.96,"d":0.86,"h":0.02}'),
   ('sandbags_l','box','mat.sandbag',0,'','{"x":-1.37,"w":0.24,"d":0.6,"h":0.6,"taper":0.15}'),
   ('sandbags_r','box','mat.sandbag',0,'','{"x":1.37,"w":0.24,"d":0.6,"h":0.6,"taper":0.15}'),
-  ('boom','box','mat.cloth',1,'','{"x":0.0,"y":0.75,"w":2.95,"d":0.08,"h":0.08}'),
+  ('boom','box','mat.sawn_timber',0,'','{"x":0.0,"y":0.75,"w":2.95,"d":0.08,"h":0.08}'),
+  ('boom_band','box','mat.cloth',1,'','{"x":0.0,"y":0.74,"w":0.95,"d":0.1,"h":0.1}'),
   ('boom_stripe','box','mat.signal_red',0,'','{"x":-1.2,"y":0.745,"w":0.18,"d":0.07,"h":0.07,"repeat":7,"dx":0.4}'),
   ('post','box','mat.sawn_timber',0,'','{"x":1.42,"w":0.08,"d":0.08,"h":0.8}'),
   ('flag','banner','mat.cloth',1,'','{"x":-1.38,"y":0.6,"h":0.8,"fw":0.34,"fh":0.22}'))
