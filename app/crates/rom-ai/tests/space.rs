@@ -6,7 +6,7 @@ mod common;
 
 use rom_ai::{Brain, Job};
 use rom_geo::CubeSurface;
-use rom_rules::{BodyKind, Rules};
+use rom_rules::{BodyKind, FormationShape, Rules};
 use rom_sim::{
     BodyId, BodyInfo, PlanetSurface, Player, PlayerId, Pos, RouteInfo, SystemInfo, UniverseSetup,
     World,
@@ -16,6 +16,8 @@ use std::{collections::BTreeMap, sync::Arc};
 const ME: PlayerId = PlayerId(1);
 const HOME: BodyId = BodyId(2);
 const NEIGHBOUR: BodyId = BodyId(5);
+/// The habitable planet of the second system.
+const FAR: BodyId = BodyId(11);
 const N: u32 = 48;
 
 /// Every planet: plain ground with a forest and a mountain block.
@@ -38,6 +40,11 @@ fn planet(rules: &Rules) -> PlanetSurface {
 /// One system with the home planet, a second habitable planet and two ore asteroids, and a
 /// second system on a route. Player one has a city, a spaceport, builders and plenty.
 fn world(rules: &Arc<Rules>) -> World {
+    world_with(rules, &[])
+}
+
+/// The world of `world`, with the ground of the planets `more` generated too.
+fn world_with(rules: &Arc<Rules>, more: &[BodyId]) -> World {
     let players = (0..=2)
         .map(|p| Player {
             id: PlayerId(p),
@@ -96,7 +103,11 @@ fn world(rules: &Arc<Rules>) -> World {
             length: 22,
         }],
         // The host generates other planets when a ship first heads there; here they exist.
-        planets: BTreeMap::from([(HOME, planet(rules)), (NEIGHBOUR, planet(rules))]),
+        planets: [HOME, NEIGHBOUR]
+            .iter()
+            .chain(more)
+            .map(|body| (*body, planet(rules)))
+            .collect(),
     };
     let mut w = World::from_universe(
         Arc::clone(rules),
@@ -487,4 +498,82 @@ fn a_lost_spaceport_is_rebuilt() {
         (w.hash(), brain.save())
     };
     assert_eq!(play(), play());
+}
+
+/// Task 153: warships sent to strike an enemy world in another system travel in a formation
+/// chosen by its row: line abreast, the ranks of one; the simulation gives each ship its own
+/// place in the destination system. The same strike twice gives the same state.
+#[test]
+fn a_fleet_travels_in_formation() {
+    let mut rules = (*common::rules()).clone();
+    rules.ai_difficulties.get_mut("tougher").unwrap().sees_all = true;
+    let rules = Arc::new(rules);
+    let play = || {
+        let mut w = world_with(&rules, &[FAR]);
+        w.place_for_setup(
+            rules.id_of("bld.city").unwrap(),
+            PlayerId(2),
+            Pos::on(FAR, 0, 24_500, 24_500),
+        )
+        .unwrap();
+        for _ in 0..4 {
+            into_orbit(
+                &mut w,
+                "unit.space_frigate",
+                ME,
+                Pos::on(HOME, 0, 22_500, 24_500),
+            );
+        }
+        let mut brain = Brain::new(Arc::clone(&rules), ME, "balanced", "tougher", 61).unwrap();
+        let mut sent = Vec::new();
+        for _ in 0..1200 {
+            let tick = w.tick();
+            let commands = brain.think(&w, tick);
+            let travel: Vec<rom_sim::Command> = commands
+                .iter()
+                .filter(|c| c.kind == "travel")
+                .cloned()
+                .collect();
+            for command in commands {
+                match w.submit(command.clone()) {
+                    Ok(_) => brain.accepted(),
+                    Err(error) => brain.rejected(&command, &error, tick),
+                }
+            }
+            w.step();
+            if travel.len() >= 2 {
+                sent = travel;
+                break;
+            }
+        }
+        let places: Vec<Pos> = sent
+            .iter()
+            .filter_map(|c| {
+                w.entity(c.executor)?
+                    .orders()
+                    .iter()
+                    .find(|o| o.kind == "travel")?
+                    .target_pos
+            })
+            .collect();
+        run(&mut w, &mut brain, 400);
+        (sent, places, w.hash(), brain.save())
+    };
+    let (sent, places, hash, saved) = play();
+    assert!(sent.len() >= 2, "the fleet did not set off together");
+    let subject = sent[0].subject.expect("a formation");
+    assert_eq!(rules.formations[&subject].shape, FormationShape::Line);
+    assert!(sent.iter().all(|c| c.subject == Some(subject)));
+    let point = sent[0].target_pos.expect("a point");
+    assert!(sent.iter().all(|c| c.target_pos == Some(point)));
+    assert_eq!(places.len(), sent.len());
+    let mut distinct: Vec<(i32, i32)> = places.iter().map(|p| (p.x, p.y)).collect();
+    distinct.sort_unstable();
+    distinct.dedup();
+    assert_eq!(
+        distinct.len(),
+        sent.len(),
+        "ships share a place: {places:?}"
+    );
+    assert_eq!(play(), (sent, places, hash, saved));
 }

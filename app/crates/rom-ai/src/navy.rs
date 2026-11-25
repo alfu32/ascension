@@ -436,7 +436,16 @@ impl Sea {
         }
         shore.sort_by_key(|(rank, distance, s)| (*rank, *distance, s.id));
         sea.shore = shore.into_iter().map(|(_, _, s)| s).collect();
-        sea.warranted = !sea.fleet.is_empty() || !sea.shore.is_empty();
+        // A shore target calls for a navy only when a warship the player can train would
+        // outrange its defences (task 153): before, ships that could not shell the coast were
+        // kept at the harbour all match, a fifth of the army that never fought.
+        let shellable = sea.shore.iter().any(|s| {
+            let defence = shore_defence(view, memory, s.pos);
+            sea.trainable
+                .iter()
+                .any(|t| reach_at(rules, *t, Layer::Ground) > defence)
+        });
+        sea.warranted = !sea.fleet.is_empty() || shellable;
         if sea.warranted {
             let army = army_target(view, weights, difficulty, memory);
             let share = army * weights.sea_share / 100;
@@ -618,6 +627,19 @@ fn send(plan: &mut Plan<'_>, probe: DefId, ships: &[&Entity], goal: Pos, kind: &
     true
 }
 
+/// The farthest any armed enemy building near a shore target fires at ships.
+fn shore_defence(view: &View<'_>, memory: &Memory, target: Pos) -> i64 {
+    memory
+        .enemies
+        .values()
+        .filter(|e| e.building && e.pos.body == target.body)
+        .map(|e| (reach_at(view.rules, e.type_id, Layer::Fluid), e.pos))
+        .filter(|(reach, pos)| *reach > 0 && view.distance(*pos, target) <= 2 * *reach as u64)
+        .map(|(reach, _)| reach)
+        .max()
+        .unwrap_or(0)
+}
+
 /// The ships of `own` that outrange the defences around a shore target: their reach at the
 /// ground beyond the farthest any armed enemy building near it fires at ships.
 fn bombarders<'a>(
@@ -626,19 +648,10 @@ fn bombarders<'a>(
     own: &[&'a Entity],
     target: &Shore,
 ) -> Vec<&'a Entity> {
-    let rules = view.rules;
-    let defence = memory
-        .enemies
-        .values()
-        .filter(|e| e.building && e.pos.body == target.pos.body)
-        .map(|e| (reach_at(rules, e.type_id, Layer::Fluid), e.pos))
-        .filter(|(reach, pos)| *reach > 0 && view.distance(*pos, target.pos) <= 2 * *reach as u64)
-        .map(|(reach, _)| reach)
-        .max()
-        .unwrap_or(0);
+    let defence = shore_defence(view, memory, target.pos);
     own.iter()
         .copied()
-        .filter(|e| reach_at(rules, e.type_id, Layer::Ground) > defence)
+        .filter(|e| reach_at(view.rules, e.type_id, Layer::Ground) > defence)
         .collect()
 }
 

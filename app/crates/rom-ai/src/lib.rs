@@ -23,6 +23,7 @@ mod catalogue;
 mod construction;
 mod economy;
 mod fleet;
+mod formations;
 pub mod governor;
 mod market;
 mod memory;

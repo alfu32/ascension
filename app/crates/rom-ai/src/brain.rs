@@ -601,6 +601,13 @@ fn heed_failures(
                     memory.blocked.insert(building.0, tick + RETRY_TICKS);
                 }
             }
+            // A city no trader found a way to is not a route's end for a while (task 153):
+            // traders sent there again thought after thought spent the whole order budget.
+            "trade" if failure.reason == "no_path" => {
+                if let Some(city) = failure.target_entity {
+                    memory.unreachable.insert(city.0, tick + RETRY_TICKS);
+                }
+            }
             "attack" | "attack_move" | "guard" if failure.reason == "no_path" => {
                 if let Some(target) = failure.target_entity {
                     memory.unreachable.insert(target.0, tick + 2 * RETRY_TICKS);
