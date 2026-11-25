@@ -1022,6 +1022,7 @@ CREATE TABLE match (
   stat_orders_unsupported INTEGER NOT NULL,
   stat_orders_no_slot INTEGER NOT NULL,
   stat_orders_target_gone INTEGER NOT NULL,
+  city_area        TEXT NOT NULL DEFAULT 'on' CHECK (city_area IN ('on','off')), -- the setup option of task 158: 'off' lets buildings of the city area stand anywhere in the borders (format 22)
   CHECK ((outcome_team IS NULL) = (outcome_rule IS NULL) AND (outcome_rule IS NULL) = (outcome_tick IS NULL))
 ) STRICT;
 

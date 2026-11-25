@@ -3,7 +3,7 @@
 //! it as `report.json` and `rom report` prints it.
 
 use rom_save::{Controller, MatchInfo};
-use rom_sim::{EndReason, MatchEnd, Outcome, PlayerId, PlayerStatus, World};
+use rom_sim::{CityArea, EndReason, MatchEnd, Outcome, PlayerId, PlayerStatus, World};
 
 /// An aspect the players are ranked in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -150,6 +150,8 @@ pub struct MatchReport {
     pub map_style: String,
     /// The seed.
     pub seed: u64,
+    /// The setup's city area option (task 158).
+    pub city_area: CityArea,
     /// The end, once reached.
     pub end: Option<MatchEnd>,
     /// The first victory: team, rule and tick.
@@ -278,6 +280,7 @@ impl MatchReport {
             ticks_per_second: rules.constant("sim.ticks_per_second").unwrap_or(20).max(1) as u64,
             map_style: info.map_style.clone(),
             seed: info.seed,
+            city_area: world.match_options().city_area,
             end: world.match_end(),
             victory,
             players,
@@ -296,6 +299,14 @@ impl MatchReport {
         match self.map_style.rsplit('.').next() {
             Some(name) if !name.is_empty() => name.replace('_', " "),
             _ => "default".to_owned(),
+        }
+    }
+
+    /// The city area option in words: "limits building" or "building anywhere in the borders".
+    pub fn city_area_text(&self) -> &'static str {
+        match self.city_area {
+            CityArea::LimitsBuilding => "limits building",
+            CityArea::Free => "building anywhere in the borders",
         }
     }
 
@@ -414,9 +425,10 @@ impl MatchReport {
         let _ = writeln!(out, "match report at {}", self.clock(self.tick));
         let _ = writeln!(
             out,
-            "map style {} · seed {} · length {} · end: {}",
+            "map style {} · seed {} · city area: {} · length {} · end: {}",
             self.map_style_name(),
             self.seed,
+            self.city_area_text(),
             self.clock(self.length()),
             self.end_text()
         );

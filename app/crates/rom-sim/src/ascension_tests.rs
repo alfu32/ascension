@@ -242,6 +242,7 @@ fn a_player_defeated_before_the_project_completes_is_defeated() {
         let (mut w, library, tech) = ready_world(Some(MatchOptions {
             elimination: Elimination::Conquest,
             victories: [VictoryRule::Conquest].into(),
+            ..Default::default()
         }));
         research(&mut w, library, tech).unwrap();
         for _ in 0..5 {
@@ -291,6 +292,7 @@ fn the_last_material_player_is_told_and_the_match_goes_on() {
     let (mut w, library, tech) = ready_world(Some(MatchOptions {
         elimination: Elimination::Conquest,
         victories: [VictoryRule::Conquest].into(),
+        ..Default::default()
     }));
     assert_eq!(w.last_standing(), None);
     research(&mut w, library, tech).unwrap();

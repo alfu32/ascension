@@ -400,6 +400,7 @@ fn a_player_near_a_victory_timer() {
     .with_match_options(MatchOptions {
         elimination: Elimination::Conquest,
         victories: [VictoryRule::Territory].into(),
+        ..Default::default()
     })
     .unwrap();
     w.place_for_setup(id(&w, "bld.city"), P1, Pos::flat(50_500, 50_500))
@@ -884,6 +885,7 @@ fn a_match_that_has_ended_with_its_history() {
     .with_match_options(MatchOptions {
         elimination: Elimination::Conquest,
         victories: [VictoryRule::Conquest].into(),
+        ..Default::default()
     })
     .unwrap();
     w.set_humans(&[P1]).unwrap();

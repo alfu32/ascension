@@ -7,9 +7,9 @@ use rom_mapgen::{
     MapRequest, StartPlacement, Universe, UniverseRequest, generate_fair, generate_universe_placed,
 };
 use rom_rules::{DefId, ResourceKind, Rules};
-use rom_sim::{BodyId, MatchOptions, Player, PlayerId, Pos, World};
+use rom_sim::{BodyId, CityArea, MatchOptions, Player, PlayerId, Pos, World};
 
-const USAGE: &str = "usage: rom ai-match --db <rules.db> --seed <n> --players <profile[:difficulty],...> --ticks <n> [--universe] [--trace <ticks>]";
+const USAGE: &str = "usage: rom ai-match --db <rules.db> --seed <n> --players <profile[:difficulty],...> --ticks <n> [--universe] [--trace <ticks>] [--city-area <on|off>]";
 /// Builders each player starts with, as in the application.
 const BUILDERS: usize = 5;
 /// Amount of every base resource each player starts with, as in the application.
@@ -40,6 +40,8 @@ pub struct Request {
     pub universe_style: Option<String>,
     /// Where the players start in the universe; `None` takes the rules' default.
     pub start_placement: Option<StartPlacement>,
+    /// Whether the city area limits building (task 158); it overrides the options' own.
+    pub city_area: CityArea,
 }
 
 /// One player's line of the result table.
@@ -311,6 +313,10 @@ pub fn build_world_with(
 ) -> Result<(World, Option<Universe>), String> {
     let factions = factions.to_vec();
     let players = make_players(rules, &factions, request);
+    let options = MatchOptions {
+        city_area: request.city_area,
+        ..options
+    };
     if request.universe {
         let style = match &request.universe_style {
             Some(key) => rules
@@ -609,11 +615,17 @@ pub fn check_players(rules: &Rules, players: &[(String, String)]) -> Result<(), 
     Ok(())
 }
 
+/// Reads `--city-area on|off` (task 158).
+pub fn parse_city_area(text: &str) -> Result<CityArea, String> {
+    CityArea::parse(text).ok_or_else(|| format!("--city-area expects on or off, got {text:?}"))
+}
+
 /// Runs the subcommand with the arguments after `ai-match`.
 pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::error::Error>> {
     let (mut db, mut seed, mut players, mut ticks) = (None, None, None, None);
     let mut trace = 0;
     let mut universe = false;
+    let mut city_area = CityArea::default();
     while let Some(flag) = args.next() {
         if flag == "--universe" {
             universe = true;
@@ -628,6 +640,7 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
             "--players" => players = Some(parse_players(&value)?),
             "--ticks" => ticks = Some(value.parse::<u64>()?),
             "--trace" => trace = value.parse::<u64>()?,
+            "--city-area" => city_area = parse_city_area(&value)?,
             _ => return Err(format!("unknown argument: {flag}").into()),
         }
     }
@@ -641,6 +654,7 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
         map_seed: None,
         universe_style: None,
         start_placement: None,
+        city_area,
     };
     let conn = rusqlite::Connection::open_with_flags(
         db.ok_or(USAGE)?,
@@ -763,6 +777,7 @@ mod tests {
             map_seed: None,
             universe_style: None,
             start_placement: None,
+            city_area: CityArea::default(),
         };
         let (world, _) = build_world(&rules, &request).unwrap();
         for player in [PlayerId(1), PlayerId(2)] {

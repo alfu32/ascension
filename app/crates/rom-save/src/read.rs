@@ -3,7 +3,7 @@
 use crate::{AiState, AiStates, Controller, FORMAT, MatchInfo, SaveError, SaveHeader, Seat, codec};
 use rom_rules::{BodyKind, DefId, Rules};
 use rom_sim::{
-    BodyId, BodyInfo, DormantSurface, Elimination, EmitterSnapshot, EndReason, EntityId,
+    BodyId, BodyInfo, CityArea, DormantSurface, Elimination, EmitterSnapshot, EndReason, EntityId,
     EntitySnapshot, HistorySample, HitSnapshot, Living, MatchEnd, MatchOptions, MoveSnapshot,
     OrbitSnapshot, OrderId, OrderSnapshot, OrderStatus, Outcome, PathRequestSnapshot, PathSnapshot,
     Player, PlayerId, PlayerSnapshot, PlayerStatus, PlayerTally, PlayerVisionSnapshot, Pos, Rally,
@@ -1110,6 +1110,13 @@ fn snapshot(conn: &Connection, rules: &Rules) -> Result<Snapshot, SaveError> {
     let format: i64 = conn.query_row("SELECT format FROM match", [], |r| r.get(0))?;
     // Saves before format 20 (task 144) name no city: the world names them on restore.
     let name_column = if format >= 20 { "name" } else { "NULL" };
+    // Saves before format 22 (task 158) had no city area option: the area limited building.
+    let city_area = if format >= 22 {
+        let key: String = conn.query_row("SELECT city_area FROM match", [], |r| r.get(0))?;
+        CityArea::parse(&key).ok_or(bad("city area"))?
+    } else {
+        CityArea::LimitsBuilding
+    };
     let radii_rows = query_vec(
         conn,
         &format!("SELECT entity_id, economic_radius, {name_column} FROM city ORDER BY entity_id"),
@@ -1249,6 +1256,7 @@ fn snapshot(conn: &Connection, rules: &Rules) -> Result<Snapshot, SaveError> {
             options: MatchOptions {
                 elimination,
                 victories: victories.into_iter().collect(),
+                city_area,
             },
             timers,
             outcome,

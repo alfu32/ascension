@@ -328,7 +328,8 @@ rom serve --state-dir /var/lib/ascension --humans 2 --ai balanced:moderate --see
 Options: `--bind` (127.0.0.1), `--port` (7400), `--path` (`/`), `--state-dir` (`./rom-server`),
 `--resume`, `--keys N` (default one per human seat; none on `--resume`), and the match:
 `--seed`, `--style` (Planet, Solar, Cluster, Sector, Quadrant, Galaxy or a style key; Cluster by
-default), `--home-size`, `--start-placement separate|together`, `--age`, `--humans N`,
+default), `--home-size`, `--start-placement separate|together`, `--city-area on|off` (task 158;
+on by default), `--age`, `--humans N`,
 `--ai profile:difficulty,…|none`, `--factions key,…`, `--speed P`, `--on-disconnect
 pause-then-computer|idle|computer`, `--wait-seconds` (120), `--takeover profile:difficulty`,
 `--autosave-minutes` (5; 0 for none), `--countdown-seconds` (5). It prints one line per event

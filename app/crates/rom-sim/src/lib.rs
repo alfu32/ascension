@@ -96,7 +96,9 @@ pub use stains::{BUILDING_STAIN_PERMILLE, STAIN_FLOOR, Stain, UNIT_STAIN_PERMILL
 pub use surface::Surface;
 pub use tally::{HistorySample, PlayerTally};
 pub use universe::{BodyId, BodyInfo, PlanetSurface, RouteInfo, SystemInfo, UniverseSetup};
-pub use victory::{Elimination, EndReason, MatchEnd, MatchOptions, Outcome, PlayerStatus};
+pub use victory::{
+    CityArea, Elimination, EndReason, MatchEnd, MatchOptions, Outcome, PlayerStatus,
+};
 pub use vision::{RememberedBuilding, Sighting};
 pub use wealth::TradeRoute;
 pub use world::{Stats, World};

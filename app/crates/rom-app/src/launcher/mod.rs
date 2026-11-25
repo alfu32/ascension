@@ -227,6 +227,7 @@ impl Catalog {
                         })
                         .unwrap_or_default(),
                 ),
+                ("city-area", choices(&["on", "off"])),
                 ("age", age_choices),
                 ("gallery", gallery),
                 ("model", models),

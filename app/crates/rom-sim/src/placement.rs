@@ -197,6 +197,8 @@ impl World {
         // inside another player's (as free colonisation allows everywhere).
         let free_colonisation = self.rules.ages[&self.players[&player].age].free_colonisation
             || (is_city && !first_city && !self.has_city_on(player, pos.body));
+        // The setup may let buildings of the city area stand anywhere in the borders (task 158).
+        let city_area_free = self.match_options().city_area == crate::CityArea::Free;
         let surface = self.surf(pos.body);
         let geo = &surface.geo;
         let within = |other: Pos, distance: i64| geo.within(pos, other, distance);
@@ -235,7 +237,13 @@ impl World {
                         })
                 }
                 PlacementKind::InCityRadius => {
-                    first_city || self.footprint_in_city_radius(player, pos, bounds)
+                    first_city
+                        || self.footprint_in_city_radius(player, pos, bounds)
+                        || (city_area_free
+                            && geo.footprint_tiles(pos.face, bounds).all(|t| {
+                                self.territory_owner_on_body(pos.body, t.face, t.x, t.y)
+                                    == Some(player)
+                            }))
                 }
                 PlacementKind::OnTerrain => {
                     footprint_terrain().all(|terrain| terrain == rule.ref_def_id)
@@ -275,6 +283,8 @@ impl World {
                         SimError::InForeignTerritory
                     }
                     PlacementKind::InOwnTerritory => SimError::NotInOwnTerritory,
+                    // With the city area free (task 158) the rule asks for the own borders.
+                    PlacementKind::InCityRadius if city_area_free => SimError::NotInOwnTerritory,
                     PlacementKind::InCityRadius => SimError::NotInCityRadius,
                     PlacementKind::OnTerrain => SimError::NotOnTerrain,
                     PlacementKind::AdjacentTerrain => SimError::NotAdjacentTerrain,

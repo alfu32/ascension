@@ -89,7 +89,7 @@ fn write_all(
     };
     let st = &s.stats;
     tx.execute(
-        &format!("INSERT INTO match VALUES (1,{})", marks(26)),
+        &format!("INSERT INTO match VALUES (1,{})", marks(27)),
         params![
             FORMAT,
             crate::rules_version(rules),
@@ -117,6 +117,7 @@ fn write_all(
             w(st.orders_unsupported),
             w(st.orders_no_slot),
             w(st.orders_target_gone),
+            s.victory.options.city_area.key(),
         ],
     )?;
     for (key, value) in &info.settings {

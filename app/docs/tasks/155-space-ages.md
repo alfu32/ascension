@@ -15,6 +15,10 @@ its space manager depends on the old ages (by data it should follow), docs, the 
 text (`site/`), and the music docs' age names (`app/docs/music.md`; track **files and published
 titles stay** unless the owner says otherwise). Implementer: Claude (Opus).
 
+Also (owner, issue #160, 2026-11-25), verbatim: "Please rename the gunpowder age to the age of
+discovery". `age.gunpowder` is shown as **Age of Discovery** (key unchanged), everywhere a
+player reads an age name, as item 1 below.
+
 ## What changes
 
 1. **Names.** `age.starfaring` is shown as **Spacefaring Age**; `age.expansion` as
