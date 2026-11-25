@@ -39,6 +39,12 @@ nothing per frame that allocates), sounds (interception zap, dome hum and hit;
 scores; nothing special unless a duel shows a need). Implementer: Claude (Opus). Starts after
 154 (rom-sim) and 145 (rom-render) merge.
 
+Since this card was written (2026-11-25): task 158 has merged (the setup option `city_area`;
+the city area still grows with it off; read `World::footprint_in_city_radius` and the economic
+radius code for coverage), and task 155 has merged (age names: Age of Discovery, Spacefaring,
+Starfaring; keys unchanged). The owner, 2026-11-25: "please dont struggle to maintain
+compatibility too much": a save-format bump may refuse older saves; write no compatibility code.
+
 ## Done when (every card)
 
 - Gate green from `app/`: fmt, clippy `-D warnings`, workspace tests (≥ the count on main when you
