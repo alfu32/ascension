@@ -104,6 +104,8 @@ pub fn report_json(report: &MatchReport) -> Value {
         "map_style": report.map_style,
         "seed": report.seed,
         "city_area": report.city_area.key(),
+        "gather_rate": report.pace.gather_rate,
+        "research_time": report.pace.research_time,
         "length_ticks": report.length(),
         "end": report.end.map(|end| json!({
             "tick": end.tick,

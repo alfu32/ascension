@@ -89,6 +89,8 @@ pub struct World {
     pub(crate) next_order_id: u64,
     pub(crate) stats: Stats,
     pub(crate) income_remainders: BTreeMap<(PlayerId, DefId), i64>,
+    /// Gathered income below one unit at a gathering rate under 100 % (task 159), in hundredths.
+    pub(crate) gather_remainders: BTreeMap<(PlayerId, DefId), i64>,
     pub(crate) avoid: Avoidance,
     pub(crate) economy: EconomyIndex,
     /// Positions by entity id as they stood when the order phase began; empty
@@ -361,6 +363,7 @@ impl World {
             next_order_id: 1,
             stats: Stats::default(),
             income_remainders: BTreeMap::new(),
+            gather_remainders: BTreeMap::new(),
             territory: Territory::default(),
             vision: Vision::default(),
             rallies: BTreeMap::new(),

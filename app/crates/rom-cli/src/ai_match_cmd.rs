@@ -7,9 +7,9 @@ use rom_mapgen::{
     MapRequest, StartPlacement, Universe, UniverseRequest, generate_fair, generate_universe_placed,
 };
 use rom_rules::{DefId, ResourceKind, Rules};
-use rom_sim::{BodyId, CityArea, MatchOptions, Player, PlayerId, Pos, World};
+use rom_sim::{BodyId, CityArea, EconomyPace, MatchOptions, Player, PlayerId, Pos, World};
 
-const USAGE: &str = "usage: rom ai-match --db <rules.db> --seed <n> --players <profile[:difficulty],...> --ticks <n> [--universe] [--trace <ticks>] [--city-area <on|off>]";
+const USAGE: &str = "usage: rom ai-match --db <rules.db> --seed <n> --players <profile[:difficulty],...> --ticks <n> [--universe] [--trace <ticks>] [--city-area <on|off>] [--gather-rate <100|50|25|10|5|2>] [--research-time <100|200|400|1000|2000>]";
 /// Builders each player starts with, as in the application.
 const BUILDERS: usize = 5;
 /// Amount of every base resource each player starts with, as in the application.
@@ -42,6 +42,8 @@ pub struct Request {
     pub start_placement: Option<StartPlacement>,
     /// Whether the city area limits building (task 158); it overrides the options' own.
     pub city_area: CityArea,
+    /// The economy's pace (task 159); it overrides the options' own.
+    pub pace: EconomyPace,
 }
 
 /// One player's line of the result table.
@@ -315,6 +317,7 @@ pub fn build_world_with(
     let players = make_players(rules, &factions, request);
     let options = MatchOptions {
         city_area: request.city_area,
+        pace: request.pace,
         ..options
     };
     if request.universe {
@@ -620,12 +623,29 @@ pub fn parse_city_area(text: &str) -> Result<CityArea, String> {
     CityArea::parse(text).ok_or_else(|| format!("--city-area expects on or off, got {text:?}"))
 }
 
+/// Reads `--gather-rate <pct>` (task 159): one of 100, 50, 25, 10, 5 or 2.
+pub fn parse_gather_rate(text: &str) -> Result<u32, String> {
+    EconomyPace::parse_gather_rate(text).ok_or_else(|| {
+        format!("--gather-rate expects one of 100, 50, 25, 10, 5 or 2 (percent), got {text:?}")
+    })
+}
+
+/// Reads `--research-time <pct>` (task 159): one of 100, 200, 400, 1000 or 2000.
+pub fn parse_research_time(text: &str) -> Result<u32, String> {
+    EconomyPace::parse_research_time(text).ok_or_else(|| {
+        format!(
+            "--research-time expects one of 100, 200, 400, 1000 or 2000 (percent), got {text:?}"
+        )
+    })
+}
+
 /// Runs the subcommand with the arguments after `ai-match`.
 pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::error::Error>> {
     let (mut db, mut seed, mut players, mut ticks) = (None, None, None, None);
     let mut trace = 0;
     let mut universe = false;
     let mut city_area = CityArea::default();
+    let mut pace = EconomyPace::default();
     while let Some(flag) = args.next() {
         if flag == "--universe" {
             universe = true;
@@ -641,6 +661,8 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
             "--ticks" => ticks = Some(value.parse::<u64>()?),
             "--trace" => trace = value.parse::<u64>()?,
             "--city-area" => city_area = parse_city_area(&value)?,
+            "--gather-rate" => pace.gather_rate = parse_gather_rate(&value)?,
+            "--research-time" => pace.research_time = parse_research_time(&value)?,
             _ => return Err(format!("unknown argument: {flag}").into()),
         }
     }
@@ -655,6 +677,7 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
         universe_style: None,
         start_placement: None,
         city_area,
+        pace,
     };
     let conn = rusqlite::Connection::open_with_flags(
         db.ok_or(USAGE)?,
@@ -778,6 +801,7 @@ mod tests {
             universe_style: None,
             start_placement: None,
             city_area: CityArea::default(),
+            pace: EconomyPace::default(),
         };
         let (world, _) = build_world(&rules, &request).unwrap();
         for player in [PlayerId(1), PlayerId(2)] {

@@ -71,6 +71,9 @@ pub(super) const FIELDS: &[(&str, &str)] = &[
     ("placement", ""),
     // Whether the city area limits building (task 158): on or off.
     ("city_area", "on"),
+    // The economy's pace (task 159): gathering rate and research time, in percent.
+    ("gather_rate", "100"),
+    ("research_time", "100"),
     // Starting age (an ordinal), a setup script (a file) and, in Play, watching the computers
     // (task 112's presets and the forms' script choice); blank or "false" leave them off.
     ("age", ""),
@@ -291,6 +294,20 @@ impl Simple {
             "on" => {}
             "off" => form.set("city-area", "off"),
             _ => return Err("City area: on or off".into()),
+        }
+        match self.get("gather_rate").trim() {
+            "100" => {}
+            pct if rom_sim::EconomyPace::parse_gather_rate(pct).is_some() => {
+                form.set("gather-rate", pct)
+            }
+            _ => return Err("Gathering rate: 100, 50, 25, 10, 5 or 2 %".into()),
+        }
+        match self.get("research_time").trim() {
+            "100" => {}
+            pct if rom_sim::EconomyPace::parse_research_time(pct).is_some() => {
+                form.set("research-time", pct)
+            }
+            _ => return Err("Research time: 100, 200, 400, 1000 or 2000 %".into()),
         }
         form.set("ai", self.computers(computers));
         if watch {
@@ -685,6 +702,30 @@ mod tests {
             simple.set("city_area", "off");
             let options = simple.options(mode, &mix(), 1).unwrap();
             assert_eq!(options.city_area, rom_sim::CityArea::Free, "{mode:?}");
+        }
+        // Task 159: the economy pace is 100 % unless the form slows it, in every such mode.
+        assert_eq!(
+            Simple::default()
+                .options(Mode::Play, &mix(), 1)
+                .unwrap()
+                .pace,
+            rom_sim::EconomyPace::default()
+        );
+        for mode in [Mode::Play, Mode::Host, Mode::Serve] {
+            let mut simple = Simple::default();
+            simple.set("gather_rate", "5");
+            simple.set("research_time", "1000");
+            let options = simple.options(mode, &mix(), 1).unwrap();
+            assert_eq!(
+                options.pace,
+                rom_sim::EconomyPace {
+                    gather_rate: 5,
+                    research_time: 1000
+                },
+                "{mode:?}"
+            );
+            simple.set("gather_rate", "7");
+            assert!(simple.options(mode, &mix(), 1).is_err(), "{mode:?}");
         }
     }
 

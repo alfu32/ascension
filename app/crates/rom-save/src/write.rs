@@ -89,7 +89,7 @@ fn write_all(
     };
     let st = &s.stats;
     tx.execute(
-        &format!("INSERT INTO match VALUES (1,{})", marks(27)),
+        &format!("INSERT INTO match VALUES (1,{})", marks(29)),
         params![
             FORMAT,
             crate::rules_version(rules),
@@ -118,6 +118,8 @@ fn write_all(
             w(st.orders_no_slot),
             w(st.orders_target_gone),
             s.victory.options.city_area.key(),
+            s.victory.options.pace.gather_rate,
+            s.victory.options.pace.research_time,
         ],
     )?;
     for (key, value) in &info.settings {
@@ -181,6 +183,12 @@ fn write_all(
     for ((player, resource), remainder) in &s.income_remainders {
         tx.execute(
             "INSERT INTO income_remainder VALUES (?,?,?)",
+            params![player.0, resource.0, remainder],
+        )?;
+    }
+    for ((player, resource), remainder) in &s.gather_remainders {
+        tx.execute(
+            "INSERT INTO gather_remainder VALUES (?,?,?)",
             params![player.0, resource.0, remainder],
         )?;
     }

@@ -2203,6 +2203,40 @@ off; saved in `match.city_area` (format 22). No seed row: the option is not in `
 Pictures: `img/158-setup-city-area.png` (the Play form), `img/158-farm-outside-city-area.png`
 (a farm built outside the dashed ring, `docs/tasks/158-farm-script.txt`).
 
+**The economy's pace as setup options (task 159, owner 2026-11-25).**
+`rom_sim::MatchOptions::pace` (`EconomyPace { gather_rate, research_time }`, percent; set with
+`World::set_pace` before the first tick). **Gathering rate** 100 (default), 50, 25, 10, 5 or 2;
+**research time** 100 (default), 200, 400, 1000 or 2000. Values outside the lists are refused
+(`SimError::InvalidOptions`, and at every parser). `--gather-rate <pct>` and
+`--research-time <pct>` on the game, `rom duel`, `rom ai-match`, `rom replay-hash` and `rom
+serve`; the setup screen's **Gathering rate** and **Research time**; the advanced Game group's
+fields of the same names; presets' `gather_rate` and `research_time`; the network setup's
+`MatchSetup.gather_rate` and `research_time` (the lobby shows them when not 100 %); the match
+report's options line, `report.json`'s `gather_rate` and `research_time`.
+
+- *Scaled by the gathering rate* (everything a player draws from the world), all through
+  `World::credit_gathered`: the income of `pay_income` (workers in gather slots, a site's
+  `self_income`, an automated colony's own income and its share of its sites, relics kept in a
+  temple, claimed presence resource bodies), trade deliveries (runner and partner alike), and
+  `completion_bonus` rows (a building's first yield). The commerce cap applies before the
+  scaling, so the economy is the same game at a smaller scale.
+- *Not scaled*: starting resources and grants, refunds (cancel, delete, a defeated player's
+  queue), plunder (`plunder_pct` of what a destroyed or captured entity cost: a share of what the
+  enemy paid),
+  market trades, ascension descent resources, costs, unit speed, combat, build and training
+  times, deposits.
+- *Remainders.* What falls below one unit stays, in hundredths, in `gather_remainders` per
+  player and resource (removed at zero; hashed and saved), so 2 % of a trickle still adds up.
+  At 100 % nothing is scaled and no remainder is kept.
+- *Research time* multiplies `production_duration` of every research after its
+  `research_time` modifiers, age advances included, and the ascension's duration. Prices are
+  unchanged.
+- *Shown rates.* `World::income` gives `effective` and `trade` at the gathering rate (the HUD's
+  +N, the computer players' view), as do `trade_routes`, `trade_offer` and `body_yield`; the
+  HUD scales the commerce cap it shows beside the rate alike.
+- Hashed only off the defaults (the options and the remainders), so default matches keep their
+  hashes; the rules fingerprint is unchanged. No seed row.
+
 `resource.first_age_id` is a discovery gate. Terrain-to-resource associations
 come from existing `et_gather_site.resource_id`, `needs_node_terrain_id` and
 `on_terrain` placement rows. A terrain with several yields is known from the
@@ -2243,6 +2277,9 @@ back. No SQL runs in `rom-sim`.
 - **Rally points.** `entity_rally(entity_id, target_entity_id | x, y, face, body)`
   (task 64). Not part of the state hash while no producer has one, so worlds
   without rally points keep their hashes.
+- **Economy pace of task 159 (format 24).** `match.gather_rate`, `match.research_time` and
+  `gather_remainder(player_id, resource_id, remainder)` (hundredths, 1 to 99). Files written
+  before format 24 have none of them and are refused (owner: no conversion).
 - **City area option of task 158 (format 22).** `match.city_area` (`on` or `off`). Formats 13
   to 21 load with `on`, the rule they were played under.
 - **City names of task 144 (format 20).** `city.name` (see "City names"). Formats 13 to 19

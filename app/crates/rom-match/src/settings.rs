@@ -2,7 +2,7 @@
 //! every follower build the same world from the same settings.
 
 use rom_mapgen::{GeneratedMap, SpherePlanet, Universe};
-use rom_sim::{CityArea, PlayerId};
+use rom_sim::{CityArea, EconomyPace, PlayerId};
 
 use crate::computer::{ComputerPlayers, Spec};
 use crate::content::{
@@ -41,6 +41,8 @@ pub struct MatchSettings {
     pub humans: Vec<PlayerId>,
     /// Whether the city area limits building (task 158); on by default.
     pub city_area: CityArea,
+    /// The economy's pace (task 159): gathering rate and research time, 100 % by default.
+    pub pace: EconomyPace,
 }
 
 /// The map, planet or universe a match was built on.
@@ -123,6 +125,10 @@ impl MatchSettings {
         game.world
             .set_city_area(self.city_area)
             .map_err(|error| format!("the city area option: {error}"))?;
+        // The economy's pace (task 159), likewise.
+        game.world
+            .set_pace(self.pace)
+            .map_err(|error| format!("the economy pace: {error}"))?;
         // The match ends when no human is left in it (task 117).
         game.world
             .set_humans(&self.humans)

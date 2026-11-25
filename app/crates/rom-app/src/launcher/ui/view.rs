@@ -242,6 +242,54 @@ impl Launcher {
         .into_any_element()
     }
 
+    /// The economy's pace (task 159): gathering rate and research time, side by side.
+    fn pace_fields(&self, cx: &mut Context<Self>) -> AnyElement {
+        let segmented = |this: &Self,
+                         field: &'static str,
+                         values: &[u32],
+                         cx: &mut Context<Self>|
+         -> AnyElement {
+            let current = match this.config.simple.get(field).trim() {
+                "" => "100".to_owned(),
+                chosen => chosen.to_owned(),
+            };
+            let items = values
+                .iter()
+                .map(|pct| (pct.to_string(), format!("{pct} %")))
+                .collect();
+            this.segmented(
+                field,
+                items,
+                &current,
+                Rc::new(move |this, key, _, cx| this.simple_change(field, key.to_owned(), cx)),
+                cx,
+            )
+        };
+        div()
+            .flex()
+            .flex_wrap()
+            .gap(px(16.))
+            .child(style::field(
+                "Gathering rate",
+                Some(
+                    "The share of every income from the world: gatherers, farms, claimed bodies, trade. Units and building stay as fast."
+                        .into(),
+                ),
+                segmented(self, "gather_rate", &rom_sim::EconomyPace::GATHER_RATES, cx),
+            ))
+            .child(style::field(
+                "Research time",
+                Some("How long every research takes, age advances included. Prices stay.".into()),
+                segmented(
+                    self,
+                    "research_time",
+                    &rom_sim::EconomyPace::RESEARCH_TIMES,
+                    cx,
+                ),
+            ))
+            .into_any_element()
+    }
+
     fn drop_field(&self, cx: &mut Context<Self>) -> AnyElement {
         let current = self.config.simple.get("drop").to_owned();
         let items = simple::drop_choices()
@@ -382,6 +430,7 @@ impl Launcher {
                     }),
             )
             .child(self.city_area_field(cx))
+            .child(self.pace_fields(cx))
             .child(style::heading("Setup"))
             .child(self.setup_fields(cx))
             .into_any_element()

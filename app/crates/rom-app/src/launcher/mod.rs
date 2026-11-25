@@ -228,6 +228,11 @@ impl Catalog {
                         .unwrap_or_default(),
                 ),
                 ("city-area", choices(&["on", "off"])),
+                ("gather-rate", choices(&["100", "50", "25", "10", "5", "2"])),
+                (
+                    "research-time",
+                    choices(&["100", "200", "400", "1000", "2000"]),
+                ),
                 ("age", age_choices),
                 ("gallery", gallery),
                 ("model", models),

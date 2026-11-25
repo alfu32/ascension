@@ -74,6 +74,8 @@ pub struct MatchPlan {
     pub start_placement: Option<String>,
     /// `on` (the city area limits building, the default) or `off` (task 158).
     pub city_area: Option<String>,
+    /// The economy's pace (task 159).
+    pub pace: rom_sim::EconomyPace,
     /// Every player starts in the age of this ordinal.
     pub age: Option<i64>,
     /// Script setup lines (tests).
@@ -95,6 +97,7 @@ impl Default for MatchPlan {
             home_size: None,
             start_placement: None,
             city_area: None,
+            pace: rom_sim::EconomyPace::default(),
             age: None,
             script: String::new(),
             humans: 2,

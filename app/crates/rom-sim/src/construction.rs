@@ -441,15 +441,14 @@ impl World {
                 t.buildings_completed += 1;
                 t.cities_founded += u64::from(et.territory.as_ref().is_some_and(|t| t.is_city));
             }
-            for bonus in &et.completion_bonus {
-                let balance = self
-                    .players
-                    .get_mut(&order.player)
-                    .expect("owner")
-                    .resources
-                    .entry(bonus.resource_id)
-                    .or_default();
-                *balance = balance.saturating_add(bonus.amount);
+            // A first yield, drawn from the world: at the setup's gathering rate (task 159).
+            let bonuses: Vec<_> = et
+                .completion_bonus
+                .iter()
+                .map(|bonus| (bonus.resource_id, bonus.amount))
+                .collect();
+            for (resource, amount) in bonuses {
+                self.credit_gathered(order.player, resource, amount);
             }
             order.status = OrderStatus::Done;
         } else {
