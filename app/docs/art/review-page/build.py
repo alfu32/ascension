@@ -14,6 +14,7 @@ VERSION = sys.argv[3] if len(sys.argv) > 3 else ""
 SOUND_DIR = Path(sys.argv[4]) if len(sys.argv) > 4 else None
 
 LEADS = {
+    "20": "Buildings and units built from parts inside the game. Round 20 brings the <strong>gates redrawn three tiles wide</strong> (task 147b, release 0.0.140), as you asked: the palisade gate, the wall gate (the classical and medieval arches now three bays) and the defensive line's checkpoint, in every age they stand in. In a match they turn along the wall like its segments (pictures above). The walls, lines, minefields and the space probe you approved in round 19 are locked. Set each gate's status and write directions; name a part as <code>model id/part</code>.",
     "19": "Buildings and units built from parts inside the game. Round 19 brings the <strong>fortifications</strong> (task 147a, release 0.0.135): the <strong>palisade</strong> (Ancient), <strong>stone walls</strong> (Classical to Enlightenment) and <strong>defensive lines</strong> (trench, tank traps, barbed wire; Industrial to Fusion), each with its gate, and the <strong>minefield</strong> (Industrial on). Each sheet shows one segment; the pictures above show whole lines in a match. A wall standing in a later age wears that age's look. The <strong>gates will be rebuilt three tiles wide and turned along the wall</strong> (your request; task 147b), so judge their style, not their size. Also the <strong>space probe</strong> (<code>unit.space_probe@information</code>), never reviewed before. Set each model's status and write directions; name a part as <code>model id/part</code>.",
     "18": "Buildings and units built from parts inside the game. Round 18 brings the <strong>militia</strong> (task 141, release 0.0.131): citizens called up for free inside your own borders and stood down again, one step per age, from the ancient <strong>Levies</strong> with a spear to the <strong>Planetary Guard</strong> (<code>unit.militia_&lt;age&gt;@&lt;age&gt;</code>). Each wears the citizen's clothes with the weapon and headgear of its age (picture above, enlarged). Also the <strong>Nuclear Reactor</strong> (task 146, <code>bld.nuclear_reactor@automation</code>), which becomes the fusion plant. Each card plays the unit's own sounds. Set each model's status and write directions; name a part as <code>model id/part</code>.",
     "17": "Buildings and units built from parts inside the game. Round 17 brings the <strong>Drone Operator</strong> (task 120, issue #3; <code>unit.drone_operator@information</code>): a soldier with a helmet and visor holding a tablet controller, a radio mast and a spare drone on the pack. Updated after your round 17 verdict (task 128, release 0.0.123): the drones now fly in a visible 4×4 grid hovering above the operator, the model sheet shows the grid, and in play the grid deploys forward over the target and each drone dives at its own enemy (picture above). Sounds were approved. Its card plays its own sounds (a calm soldier's voice, the swarm, a drone strike). Set the model's status and write directions; name a part as <code>model id/part</code>.",
@@ -51,6 +52,11 @@ ROUND19 = {"unit.space_probe@information"} | {f"{k}@{a}" for k, ages in (
     ("bld.defensive_line", ("industrial", "modern", "information", "automation", "fusion")),
     ("bld.checkpoint", ("industrial", "modern", "information", "automation", "fusion")),
     ("bld.minefield", ("industrial", "modern", "information", "automation", "fusion"))) for a in ages}
+# Task 147b: the gates redrawn three tiles wide.
+ROUND20 = {f"{k}@{a}" for k, ages in (
+    ("bld.palisade_gate", ("ancient", "medieval", "gunpowder", "industrial", "modern", "automation")),
+    ("bld.wall_gate", ("classical", "medieval", "gunpowder", "enlightenment", "industrial", "modern", "automation")),
+    ("bld.checkpoint", ("industrial", "modern", "information", "automation", "fusion"))) for a in ages}
 # Task 141: the militia line; task 146: the nuclear reactor.
 ROUND18 = {"bld.nuclear_reactor@automation"} | {f"unit.militia_{a}@{a}" for a in (
     "ancient", "classical", "medieval", "gunpowder", "enlightenment", "industrial", "modern",
@@ -202,7 +208,12 @@ OVERVIEW19 = [
     ("147-wall", "A stone wall with its gatehouse in a match; pikemen have marched out through the gate"),
     ("147-line", "A modern defensive line with its checkpoint and a minefield its owner can see"),
 ]
-OVERVIEW = OVERVIEW19 if ROUND == "19" else OVERVIEW18 if ROUND == "18" else OVERVIEW17 if ROUND == "17" else OVERVIEW16 if ROUND == "16" else OVERVIEW15 if ROUND == "15" else OVERVIEW14 if ROUND == "14" else OVERVIEW13 if ROUND == "13" else OVERVIEW12 if ROUND == "12" else OVERVIEW11 if ROUND == "11" else OVERVIEW10 if ROUND == "10" else OVERVIEW9 if ROUND == "9" else OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
+OVERVIEW20 = [
+    ("147-diagonal", "A diagonal stone wall with its three-bay gatehouse, every piece turned along the line"),
+    ("147-wall", "Own pikemen passing through the three-tile gatehouse"),
+    ("147-line", "A defensive line with its three-tile checkpoint and a minefield"),
+]
+OVERVIEW = OVERVIEW20 if ROUND == "20" else OVERVIEW19 if ROUND == "19" else OVERVIEW18 if ROUND == "18" else OVERVIEW17 if ROUND == "17" else OVERVIEW16 if ROUND == "16" else OVERVIEW15 if ROUND == "15" else OVERVIEW14 if ROUND == "14" else OVERVIEW13 if ROUND == "13" else OVERVIEW12 if ROUND == "12" else OVERVIEW11 if ROUND == "11" else OVERVIEW10 if ROUND == "10" else OVERVIEW9 if ROUND == "9" else OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
     ("gallery_ancient", "Ancient age, game camera: <code>--gallery ancient</code>"),
     ("gallery_classical", "Classical age, game camera: <code>--gallery classical</code>"),
     ("gallery_classical_close_team2", "Classical age, close, in player 2's blue to show where team colour sits"),
@@ -227,9 +238,12 @@ def round_of(m):
     alternative lab look (approved: now the Auto Lab, bld.auto_lab@automation), 13 the relic
     site (task 82), 14 the higher-definition spaceships and the two line ships of task 92
     (task 93), 15 the Deep Space Tracking Station (task 118), 16 the rotorcraft (task 119), 17 the drone operator (task 120), 18 the militia (task 141) and the nuclear reactor
-    (task 146), 19 the fortifications (task 147a) and the space probe."""
+    (task 146), 19 the fortifications (task 147a) and the space probe, 20 the gates three tiles
+    wide (task 147b)."""
     if m["id"] in ROUND1:
         return 1
+    if m["id"] in ROUND20:
+        return 20
     if m["id"] in ROUND19:
         return 19
     if m["id"] in ROUND18:
