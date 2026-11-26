@@ -53,13 +53,18 @@ def package_version(version, config=None):
 
 
 def msi_version(version):
-    """MSI ProductVersion: X.Y.Z (major and minor <= 255, build <= 65535)."""
+    """MSI ProductVersion for app version X.Y.Z: X.(Y // 256).(Y % 256 * 256 + Z).
+
+    Windows Installer allows major and minor <= 255 and build <= 65535; the app's minor
+    counts feature releases and outgrows 255, so it spills into the build field. The mapping
+    keeps the order of app versions (patch Z < 256) and leaves 0.0.Z as it was.
+    """
     if not re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", version):
         raise ValueError("MSI needs a numeric X.Y.Z version")
-    major, minor, build = map(int, version.split("."))
-    if major > 255 or minor > 255 or build > 65535:
+    major, minor, patch = map(int, version.split("."))
+    if major > 255 or minor > 255 * 256 + 255 or patch > 255:
         raise ValueError("MSI version outside Windows Installer bounds")
-    return version
+    return f"{major}.{minor // 256}.{minor % 256 * 256 + patch}"
 
 
 def manifest(version, arch, config=None):

@@ -125,8 +125,20 @@ not suppress them or relax the gate.
 ## Versioning and commits
 
 - The application version is `version` in `app/Cargo.toml`
-  (`[workspace.package]`). Tags have no `v` prefix (`0.0.2`) and equal the
-  version once the workspace exists.
+  (`[workspace.package]`). Tags have no `v` prefix (`0.149.0`) and equal the
+  version.
+- Semantic versioning (owner, 2026-11-26), major 0 while the game is in active
+  development:
+  - **minor** for a release with new features or changed rules, or one that
+    breaks saves or play with the previous release (almost every task):
+    `0.149.0` → `0.150.0`;
+  - **patch** for fixes only, with saves and multiplayer still working with
+    the previous release: `0.150.0` → `0.150.1`;
+  - **major** (`1.0.0`) only when the owner decides to promise save and
+    multiplayer compatibility.
+
+  Releases up to `0.0.148` bumped only the patch; `0.149.0` continues their
+  count in the minor.
 - Commit messages: a short imperative subject, then what changed and why.
 - Work on a branch or worktree per task; never commit build output.
 
