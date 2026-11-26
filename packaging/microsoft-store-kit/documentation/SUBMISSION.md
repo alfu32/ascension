@@ -6,7 +6,7 @@ Store ID `9PHHR2KQKVJ2`, package identity `K3D0.ascension-rts-platform`, publish
 1. **Packages.** Download `ascension-X.Y.Z-windows-x64.msix` and
    `ascension-X.Y.Z-windows-arm64.msix` from the GitHub release and upload both in the
    submission's Packages section. The Store re-signs them. The package version is the app
-   version with 1 added to the major number (app 0.0.113 is package 1.0.113.0).
+   version with 1 added to the major number (app 0.0.113 is package 1.0.113.0; app 0.149.0 is package 1.149.0.0).
 2. **Store listings.** In Store listings choose *Import listings* and select the folder
    `packaging/microsoft-store/` (one CSV, ten screenshots, four logos). Before the first
    import, export the listing once from Partner Center and compare its field rows and

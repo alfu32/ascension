@@ -38,7 +38,13 @@ class MsixTests(unittest.TestCase):
 
     def test_msi_version_bounds(self):
         self.assertEqual(msix.msi_version("0.0.112"), "0.0.112")
-        for bad in ("256.0.0", "0.256.0", "0.0.65536", "1.2"):
+        self.assertEqual(msix.msi_version("0.149.0"), "0.0.38144")
+        self.assertEqual(msix.msi_version("0.300.2"), "0.1.11266")
+        order = ["0.0.148", "0.149.0", "0.149.1", "0.150.0", "0.255.255", "0.256.0", "1.0.0"]
+        keys = [tuple(map(int, msix.msi_version(v).split("."))) for v in order]
+        self.assertEqual(keys, sorted(keys))
+        self.assertEqual(len(set(keys)), len(keys))
+        for bad in ("256.0.0", "0.0.256", "0.65536.0", "1.2"):
             with self.assertRaises(ValueError):
                 msix.msi_version(bad)
 

@@ -128,7 +128,8 @@ Release gate green, database loads with empty lint views, name scan clean:
 grep -rniE "<reference game names>" . --include='*.md' --include='*.sql' --include='*.rs' --include='*.toml'
 ```
 
-Bump `version`, commit, tag without a `v` prefix, push branch and tag.
+Bump `version` by the semantic-versioning rule in `AGENTS.md` (minor for features, patch for
+fixes only), commit, tag without a `v` prefix, push branch and tag.
 
 Release notes (owner, issue #153, 2026-11-24): once the Release workflow has published
 the release, put a short changelog of what players will notice and one or two screenshots
