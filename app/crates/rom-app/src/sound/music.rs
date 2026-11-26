@@ -379,7 +379,8 @@ enum Launch {
 /// The launcher's music (owner, 2026-11-23: "the main score on the launcher: i would continue
 /// it by simply concatenating all the tunes and interludes in age order and roll back to the
 /// beginning when they end"): the main title, then each age's main theme and its whole
-/// interlude, Ancient to Galactic Empires, then the title again, without end.
+/// interlude, Ancient to the last age, then the title again, without end. A piece an age
+/// borrows from an earlier one (task 164) plays once.
 #[derive(Clone, Debug)]
 pub struct LauncherMusic {
     playlist: Vec<MusicId>,
@@ -388,16 +389,23 @@ pub struct LauncherMusic {
 }
 
 impl LauncherMusic {
-    /// The title, then each age of `ages.toml` in order: its theme, then its interlude.
+    /// The title, then each age of `ages.toml` in order: its theme, then its interlude; a
+    /// piece already listed is not listed again.
     pub fn new() -> Self {
-        let playlist = MusicId::from_name("title")
-            .into_iter()
-            .chain(crate::ages::ages().iter().flat_map(|age| {
-                [&age.theme, &age.interlude]
-                    .into_iter()
-                    .filter_map(|name| MusicId::from_name(name))
-            }))
-            .collect();
+        let mut playlist: Vec<MusicId> = Vec::new();
+        let pieces =
+            MusicId::from_name("title")
+                .into_iter()
+                .chain(crate::ages::ages().iter().flat_map(|age| {
+                    [&age.theme, &age.interlude]
+                        .into_iter()
+                        .filter_map(|name| MusicId::from_name(name))
+                }));
+        for piece in pieces {
+            if !playlist.contains(&piece) {
+                playlist.push(piece);
+            }
+        }
         Self::with(playlist)
     }
 
@@ -515,10 +523,38 @@ mod tests {
         age_music().remove(&ordinal).expect("music for the age")
     }
 
+    /// Task 164: the Galactic Federation plays the Age of Galactic War's music until it has its
+    /// own; the launcher still plays each piece once.
+    #[test]
+    fn the_federation_borrows_the_galactic_war_music() {
+        let ordinal = |name: &str| {
+            crate::ages::ages()
+                .iter()
+                .find(|a| a.name == name)
+                .expect(name)
+                .ordinal
+        };
+        let (war, federation) = (
+            music_of(ordinal("Galactic War")),
+            music_of(ordinal("Galactic Federation")),
+        );
+        assert_eq!(war.theme.name(), "galactic.theme");
+        assert_eq!(federation.theme, war.theme);
+        assert_eq!(federation.interlude, war.interlude);
+        assert_eq!(federation.fragments, war.fragments);
+        let launcher = LauncherMusic::new();
+        let theme = launcher
+            .playlist
+            .iter()
+            .filter(|id| **id == war.theme)
+            .count();
+        assert_eq!(theme, 1);
+    }
+
     #[test]
     fn every_age_has_a_theme_and_fragments() {
         let music = age_music();
-        assert_eq!(music.len(), 14);
+        assert_eq!(music.len(), crate::ages::ages().len());
         for (ordinal, m) in &music {
             assert!(m.theme_seconds > 30.0, "{ordinal}");
             assert!(m.fragments.len() >= 6, "{ordinal}");

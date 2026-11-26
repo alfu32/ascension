@@ -1,0 +1,15 @@
+# Task 164, shot as img/164-galactic-war-dialog.png: the Age of Galactic War (age 13, no longer
+# the last) reached in a universe match (seed 1, --sun fixed, 1280 x 800, --players 2 --ai none).
+# Player one starts in the Age of Abundance with its research done; the library researches the
+# advance at ten times the speed, and the new-age dialog reads "AGE 14 OF 15". Run with
+#   --universe --seed 1 --players 2 --ai none --sun fixed --size 1280x800
+#   --script docs/tasks/164-galactic-war-script.txt --screenshot <file> --after 18
+0 grant-age age.abundance
+0 research-all 1
+0 place 1 bld.library @9,0
+1 speed 100
+5 researchers
+6 hud tab 3
+7 hud slot 0
+8 speed 1000
+1430 speed 100

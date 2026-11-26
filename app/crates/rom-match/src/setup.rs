@@ -947,6 +947,7 @@ mod tests {
             "10-starfaring",
             "11-expansion",
             "12-abundance",
+            "13-galactic",
         ] {
             let path = format!(
                 "{}/../../docs/tasks/rich-start-{age}-script.txt",
@@ -957,7 +958,7 @@ mod tests {
             assert_eq!(setup.research_all, vec![1], "{path}");
         }
         let setup = ScriptSetup::scan(include_str!(
-            "../../../docs/tasks/rich-start-13-galactic-script.txt"
+            "../../../docs/tasks/rich-start-14-federation-script.txt"
         ))
         .expect("scan");
         let content = generate_universe_content(&universe(None, None)).expect("universe");
@@ -978,7 +979,14 @@ mod tests {
             .players()
             .find(|p| p.id == me)
             .expect("player one");
-        assert_eq!(Some(p.age), content.rules.id_of("age.galactic"));
+        // The last age by the rules (task 164: no age count in the code).
+        let last = content
+            .rules
+            .ages
+            .values()
+            .max_by_key(|a| a.ordinal)
+            .map(|a| a.id);
+        assert_eq!(Some(p.age), last);
         let food = content.rules.id_of("res.food").unwrap();
         assert!(p.resources[&food] >= 100_000);
     }

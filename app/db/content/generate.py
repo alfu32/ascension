@@ -11,17 +11,22 @@ from stars import curation_summary, star_sql  # noqa: E402
 SEED = Path(__file__).resolve().parents[1] / 'seed.sql'
 BEGIN = '-- BEGIN GENERATED CONTENT'
 END = '-- END GENERATED CONTENT'
-AGES = 'ancient classical medieval gunpowder enlightenment industrial modern information automation fusion starfaring expansion abundance galactic'.split()
+AGES = 'ancient classical medieval gunpowder enlightenment industrial modern information automation fusion starfaring expansion abundance galactic federation'.split()
 # Ages whose name is not their key (task 146, owner 2026-11-23: "the information age should be
 # called the freedom age"; task 155, owner 2026-11-25: "i'd rename it spacefaring age and the
 # expansion age i'd make into starfaring age", and issue #160: "Please rename the gunpowder age to
-# the age of discovery"); the keys stay.
+# the age of discovery"; task 164, owner 2026-11-26: "rename 13 to age of galactic war", and age 14,
+# the galactic federation); the keys stay.
 AGE_NAMES = {'gunpowder': 'Discovery', 'information': 'Freedom', 'starfaring': 'Spacefaring',
-             'expansion': 'Starfaring'}
+             'expansion': 'Starfaring', 'galactic': 'Galactic War', 'federation': 'Galactic Federation'}
 # Task 155: the advance into an age costs this share (percent) of the usual price and research
 # time. The owner found the spacefaring age (key `starfaring`) came too soon; the fusion age
 # before it now opens the own star system.
 AGE_ADVANCE_PCT = {'starfaring': 150}
+# Ages the generator adds after the seed's own (task 164, owner 2026-11-26: "add age 14 the
+# galactic federation"), each like the age it names in era, map scale, view and colonisation.
+# Defined just before the track levels, so the ids of the seed and of earlier content stay.
+LATER_AGES = {'federation': 'galactic'}
 
 
 def age_name(age):
@@ -30,10 +35,10 @@ def age_name(age):
 
 
 TRACKS = {
-    'military': 'Militia|Drill|Standing Army|Conscription|Professional Army|Combined Arms|Mechanised Warfare|Network Warfare|Autonomous Command|Orbital Doctrine|Fleet Doctrine|Grand Strategy|Total Defence',
-    'civic': 'Chiefdom|City State|Kingdom|Charter|Constitution|Nation State|Federation|Information Society|Planned Society|Continental Union|Interplanetary Law|Commonwealth|Galactic Charter',
-    'commerce': 'Barter|Coinage|Trade Routes|Banking|Joint Stock|Industry|Mass Production|Globalisation|Automated Logistics|Fusion Economy|Trade Lanes|Post-scarcity Markets|Galactic Exchange',
-    'science': 'Writing|Mathematics|Astronomy|Optics|Natural Philosophy|Electricity|Electronics|Computing|Machine Learning|Fusion Power|Spacetime Theory|Matter Synthesis|Unified Theory',
+    'military': 'Militia|Drill|Standing Army|Conscription|Professional Army|Combined Arms|Mechanised Warfare|Network Warfare|Autonomous Command|Orbital Doctrine|Fleet Doctrine|Grand Strategy|Total Defence|Collective Security',
+    'civic': 'Chiefdom|City State|Kingdom|Charter|Constitution|Nation State|Federation|Information Society|Planned Society|Continental Union|Interplanetary Law|Commonwealth|Galactic Charter|Federal Compact',
+    'commerce': 'Barter|Coinage|Trade Routes|Banking|Joint Stock|Industry|Mass Production|Globalisation|Automated Logistics|Fusion Economy|Trade Lanes|Post-scarcity Markets|Galactic Exchange|Common Market',
+    'science': 'Writing|Mathematics|Astronomy|Optics|Natural Philosophy|Electricity|Electronics|Computing|Machine Learning|Fusion Power|Spacetime Theory|Matter Synthesis|Unified Theory|Cosmic Engineering',
 }
 # key, name, page, age, track level, HP, timber, footprint, per-city limit
 BUILDINGS = [
@@ -630,6 +635,11 @@ def generate():
                 upgrade(old, full, name, age, building, ticks, prices)
             last[series] = full
             out.pop()
+    for key, like in LATER_AGES.items():
+        full, ordinal = 'age.' + key, AGES.index(key)
+        sql.append(f"INSERT INTO def(kind,key,name,sort) VALUES ('age',{val(full)},{val(age_name(ordinal))},{ordinal});")
+        sql.append(f"INSERT INTO age(id,ordinal,era,map_scale,view_range,free_colonisation) SELECT {val(Ref(full))},"
+                   f"{ordinal},era,map_scale,view_range,free_colonisation FROM age WHERE id={val(Ref('age.' + like))};")
     for track, names in TRACKS.items():
         for level, name in enumerate(names.split('|'), 1):
             key = f'tech.{track}.{level}'
@@ -652,7 +662,7 @@ def generate():
     # Sight upgrades (docs/database.md "Sight"): technology, stat, value, op, tag.
     for key, stat, value, op, target in SIGHT_TECHS:
         modifier(key, stat, value, op, target)
-    for age in range(1, 14):
+    for age in range(1, len(AGES)):
         key = 'tech.age.' + AGES[age]
         pct = AGE_ADVANCE_PCT.get(AGES[age], 100)
         prices = {'food': 250 * age * pct // 100}
@@ -1129,7 +1139,8 @@ def ascension(row, tech):
     """Task 76: the ascension project at the library, the descent order, the bodies of the
     celestial home and their rule values."""
     import math
-    tech('tech.ascension', 'Ascension', 13, 'library', ASCENSION_NOMINAL_TICKS, ASCENSION_COST, 'project')
+    # Researched in the last age (task 164: the Galactic Federation since it was added).
+    tech('tech.ascension', 'Ascension', len(AGES) - 1, 'library', ASCENSION_NOMINAL_TICKS, ASCENSION_COST, 'project')
     row('tech_effect', tech_id=Ref('tech.ascension'), effect='ascend')
     row('order_kind', key='descend', needs='', target='point',
         note='an ascended player takes a city on open land of a habitable planet; no executor')

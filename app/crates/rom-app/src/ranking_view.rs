@@ -87,7 +87,7 @@ pub fn rankings(world: &World, me: PlayerId) -> Vec<HudRanking> {
         .collect()
 }
 
-/// The person's age as the top bar names it: "AGE 10 OF 14 · FUSION AGE", counted from one
+/// The person's age as the top bar names it: "AGE 10 OF 15 · FUSION AGE", counted from one
 /// as the new-age dialog counts.
 pub fn age_label(world: &World, me: PlayerId) -> String {
     let rules = world.rules();
@@ -210,9 +210,10 @@ mod tests {
             .def(w.rules().id_of("age.ancient").unwrap())
             .name
             .to_uppercase();
+        let count = w.rules().ages.len();
         assert_eq!(
             age_label(&w, PlayerId(1)),
-            format!("AGE 1 OF 14  ·  {ancient}")
+            format!("AGE 1 OF {count}  ·  {ancient}")
         );
         assert_eq!(age_label(&w, PlayerId(9)), "");
     }

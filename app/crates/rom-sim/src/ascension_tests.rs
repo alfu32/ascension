@@ -5,7 +5,7 @@ use crate::{
     Command, Elimination, EntityId, MapGrid, MatchOptions, Outcome, Player, PlayerId, PlayerStatus,
     Pos, SimError, World,
 };
-use rom_rules::{DefId, Rules, VictoryRule, build_rules_db};
+use rom_rules::{DefId, Rules, TechEffectKind, TechKind, VictoryRule, build_rules_db};
 use std::{collections::BTreeMap, sync::Arc};
 
 const P1: PlayerId = PlayerId(1);
@@ -30,15 +30,34 @@ fn id(w: &World, key: &str) -> DefId {
     w.rules.id_of(key).unwrap()
 }
 
+/// The last age of `rules` (task 164: by ordinal, never by key).
+fn last_age(rules: &Rules) -> DefId {
+    rules.ages.values().max_by_key(|a| a.ordinal).unwrap().id
+}
+
+/// The age advance that leads to `age`.
+fn advance_to(rules: &Rules, age: DefId) -> DefId {
+    *rules
+        .tech_effects
+        .iter()
+        .find(|(_, effects)| {
+            effects
+                .iter()
+                .any(|e| e.effect == TechEffectKind::SetAge && e.target_def_id == Some(age))
+        })
+        .unwrap()
+        .0
+}
+
 /// Gives `player` every technology the library offers, the last age and the project's price.
 fn finish_library(w: &mut World, player: PlayerId) {
     let rules = w.rules.clone();
-    let galactic = id(w, "age.galactic");
+    let last = last_age(&rules);
     let p = w.players.get_mut(&player).unwrap();
     for tech in rules.ascension_requirements() {
         p.techs.insert(tech, 1);
     }
-    p.age = galactic;
+    p.age = last;
     for resource in rules.resources.keys() {
         p.resources.insert(*resource, 100_000);
     }
@@ -163,6 +182,59 @@ fn a_match_started_in_the_last_age_may_ascend_without_recorded_age_advances() {
     assert_eq!(research(&mut w, library, tech), Err(SimError::Locked));
 }
 
+/// Task 164: from the age before the last, the library researches the last age's four track
+/// levels and its advance through orders; in the last age the player ascends. Run twice with
+/// equal hashes.
+#[test]
+fn a_player_advances_into_the_last_age_and_ascends() {
+    let run = || {
+        let (mut w, library, tech) = ready_world(None);
+        let rules = w.rules.clone();
+        let last = last_age(&rules);
+        let ordinal = rules.ages[&last].ordinal;
+        let before = rules
+            .ages
+            .values()
+            .find(|a| a.ordinal == ordinal - 1)
+            .unwrap()
+            .id;
+        let advance = advance_to(&rules, last);
+        let mut levels: Vec<DefId> = rules
+            .techs
+            .values()
+            .filter(|t| t.kind == TechKind::Track && t.level == ordinal)
+            .map(|t| t.id)
+            .collect();
+        assert_eq!(levels.len(), 4, "a level of each track for the last age");
+        let p = w.players.get_mut(&P1).unwrap();
+        p.age = before;
+        p.techs.remove(&advance);
+        for level in &levels {
+            p.techs.remove(level);
+        }
+        assert!(!w.ascension_ready(P1));
+        assert_eq!(research(&mut w, library, tech), Err(SimError::Locked));
+        // The advance needs the four levels first.
+        assert_eq!(research(&mut w, library, advance), Err(SimError::Locked));
+        levels.push(advance);
+        for step in levels {
+            research(&mut w, library, step).unwrap();
+            let end = w.tick() + 5_000;
+            while !w.players[&P1].techs.contains_key(&step) {
+                assert!(w.tick() < end, "{} not researched", rules.key(step));
+                w.step();
+            }
+        }
+        assert_eq!(w.players[&P1].age, last);
+        assert!(w.ascension_ready(P1));
+        research(&mut w, library, tech).unwrap();
+        until_ascended(&mut w, P1, 2_000);
+        assert_eq!(w.player_status(P1), Some(PlayerStatus::Ascended));
+        (w.tick(), w.hash())
+    };
+    assert_eq!(run(), run());
+}
+
 #[test]
 fn the_library_offers_the_ascension_only_once_everything_else_is_researched() {
     let (mut w, library, tech) = ready_world(None);
@@ -182,7 +254,7 @@ fn the_library_offers_the_ascension_only_once_everything_else_is_researched() {
 #[test]
 fn the_ascension_lasts_two_and_a_half_age_advances() {
     let (w, _, tech) = ready_world(None);
-    let advance = id(&w, "tech.age.galactic");
+    let advance = advance_to(&w.rules, last_age(&w.rules));
     let base = w.rules.techs[&advance].research_ticks;
     let expected = w
         .rules
@@ -386,7 +458,8 @@ fn the_descent_resources_follow_the_library_research_costs() {
             None => assert_eq!(amount, total * 15 / 100),
         }
     }
-    // The seed: food and knowledge from the age advances and tracks, timber from a few.
+    // The seed: food and knowledge from the age advances and tracks, timber from a few. Task 164
+    // added the four track levels of age 14 (1 500 food each, 90 %: 5 400 more).
     let food = id(&w, "res.food");
     assert_eq!(
         w.descent_resources()
@@ -394,7 +467,7 @@ fn the_descent_resources_follow_the_library_research_costs() {
             .find(|(r, _)| *r == food)
             .unwrap()
             .1,
-        53_415
+        58_815
     );
 }
 

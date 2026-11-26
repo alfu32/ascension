@@ -33,6 +33,7 @@ encoding (−1 dBTP after). Each has its score beside it in `app/assets/music/sc
 | `expansion.theme` / `.interlude` | march over rolling lanes; folk dance in 7/8, work song, lament; layered return | 1:08 / 2:17 |
 | `abundance.theme` / `.interlude` | a pastoral; the theme always resolving, then once without its E♭ | 1:24 / 2:37 |
 | `galactic.theme` / `.interlude` | the answer, a vast tutti, every age in review, the grandest tutti, ascension | 1:28 / 2:16 |
+| (age 14, Galactic Federation) | borrows `galactic.theme` and `.interlude` until it has its own (task 164; where its pieces would go: `docs/ages-story.md`, section 14) | |
 
 Lengths include the hall's tail. Total size: see the end of this document.
 
@@ -185,8 +186,9 @@ and the exact frame from the page's granule position (`rom-audio/src/music.rs`).
 - **The launcher** (`LauncherMusic`), the owner's choice (2026-11-23): "the main score on the
   launcher: i would continue it by simply concatenating all the tunes and interludes in age
   order and roll back to the beginning when they end." So the launcher plays the main title,
-  then for each age, Ancient to Galactic Empires, its main theme followed by its whole
-  interlude (29 pieces, about 49 minutes), then the title again, without end, at 0.6 of their
+  then for each age, Ancient to the last age, its main theme followed by its whole
+  interlude, each piece once (the Galactic Federation borrows the Galactic War's two, task 164)
+  (29 pieces, about 49 minutes), then the title again, without end, at 0.6 of their
   level. There are no gaps beyond the files' own tails: each piece begins 1 s before the one
   playing ends and the two cross-fade over that second. It is held (faded out) while a game the
   launcher started runs, and begins again from the title afterwards. The home screen's

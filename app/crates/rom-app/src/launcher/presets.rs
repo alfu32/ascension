@@ -243,9 +243,9 @@ mod tests {
                 "--ai",
                 "none",
                 "--age",
-                "13",
+                "14",
                 "--script",
-                "/cfg/rise-of-man/scripts/rich-start-13-galactic.txt",
+                "/cfg/rise-of-man/scripts/rich-start-14-federation.txt",
             ])
         );
         assert_eq!(

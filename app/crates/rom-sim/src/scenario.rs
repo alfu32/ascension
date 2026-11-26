@@ -1133,10 +1133,11 @@ mod content_tests {
     }
 
     #[test]
-    #[ignore = "full fourteen-age content audit; also run by the release CLI gate"]
-    fn playthrough_reaches_galactic() {
+    #[ignore = "full content audit through every age; also run by the release CLI gate"]
+    fn playthrough_reaches_the_last_age() {
         let mut audit = audit();
-        reach(&mut audit, 13);
+        let last = audit.world.rules.ages.values().map(|a| a.ordinal).max();
+        reach(&mut audit, last.unwrap());
         assert!(audit.world.tick() < 400_000);
     }
 

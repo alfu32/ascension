@@ -468,8 +468,15 @@ mod tests {
             ..crate::args::Options::default()
         };
         let content = crate::terrain::generate_universe_content(&options).expect("universe");
+        // The last age by ordinal (task 164), where the ascension is researched.
+        let last = content
+            .rules
+            .ages
+            .values()
+            .max_by_key(|a| a.ordinal)
+            .unwrap();
         let setup = ScriptSetup {
-            age: Some("age.galactic".into()),
+            age: Some(content.rules.key(last.id).to_owned()),
             ascension_ready: vec![1, 2],
             ..ScriptSetup::default()
         };

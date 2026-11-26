@@ -559,11 +559,12 @@ fn late_game(rules: &std::sync::Arc<rom_rules::Rules>) -> Playthrough {
 }
 
 #[test]
-fn a_late_game_state_in_the_galactic_age() {
+fn a_late_game_state_in_the_last_age() {
     let rules = rules();
     let audit = late_game(&rules);
     let player = audit.world().players().find(|p| p.id == P1).unwrap();
-    assert_eq!(rules.key(player.age), "age.galactic");
+    let last = rules.ages.values().map(|a| a.ordinal).max();
+    assert_eq!(Some(rules.ages[&player.age].ordinal), last);
     let mut world = World::restore(rules.clone(), audit.world().snapshot()).unwrap();
     assert_eq!(world.hash(), audit.world().hash());
     let _ = &mut world;
@@ -649,14 +650,15 @@ fn an_automated_colony_with_its_governor_paused() {
 fn an_ascension_under_way_then_an_ascended_player_descending() {
     let rules = rules();
     let plain = rules.id_of("ter.plain").unwrap();
-    let galactic = rules.id_of("age.galactic").unwrap();
+    // The last age by ordinal, where the ascension is researched (task 164).
+    let last = rules.ages.values().max_by_key(|a| a.ordinal).unwrap().id;
     let ancient = rules.id_of("age.ancient").unwrap();
     let players = (1..=2)
         .map(|n| Player {
             id: PlayerId(n),
             team: n,
             faction: rules.id_of("nation.romans").unwrap(),
-            age: if n == 1 { galactic } else { ancient },
+            age: if n == 1 { last } else { ancient },
             resources: rules.resources.keys().map(|r| (*r, 100_000)).collect(),
             techs: if n == 1 {
                 rules
@@ -729,7 +731,8 @@ fn a_moon_brought_to_life_saved_in_the_middle_of_its_painting() {
     const MOON: BodyId = BodyId(3);
     let rules = rules_with("UPDATE tech SET research_ticks=20 WHERE kind='age';");
     let plain = rules.id_of("ter.plain").unwrap();
-    let galactic = rules.id_of("age.galactic").unwrap();
+    // The last age by ordinal, where the ascension is researched (task 164).
+    let last = rules.ages.values().max_by_key(|a| a.ordinal).unwrap().id;
     let body = |id: u32, kind: BodyKind| BodyInfo {
         id: BodyId(id),
         system: 1,
@@ -778,7 +781,7 @@ fn a_moon_brought_to_life_saved_in_the_middle_of_its_painting() {
             id: PlayerId(n),
             team: n,
             faction: rules.id_of("nation.romans").unwrap(),
-            age: galactic,
+            age: last,
             resources: rules.resources.keys().map(|r| (*r, 100_000)).collect(),
             techs: if n == 1 {
                 rules

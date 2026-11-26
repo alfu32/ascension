@@ -1,0 +1,16 @@
+# Task 164, shot as img/164-federation-dialog.png: the Galactic Federation reached in a universe
+# match (seed 1, --sun fixed, 1280 x 800, --players 2 --ai none). Player one starts in the Age of
+# Galactic War with its research done (the four track levels of age 14 among it); the library
+# researches the advance to the Galactic Federation at ten times the speed, and the new-age dialog
+# reads "AGE 15 OF 15 · THE GALACTIC ERA". Run with
+#   --universe --seed 1 --players 2 --ai none --sun fixed --size 1280x800
+#   --script docs/tasks/164-federation-script.txt --screenshot <file> --after 14
+0 grant-age age.galactic
+0 research-all 1
+0 place 1 bld.library @9,0
+1 speed 100
+5 researchers
+6 hud tab 3
+7 hud slot 5
+8 speed 1000
+1300 speed 100

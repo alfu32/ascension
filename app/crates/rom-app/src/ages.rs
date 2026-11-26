@@ -99,7 +99,7 @@ pub fn dialog(rules: &Rules, ordinal: i64) -> Option<rom_render::HudAgeDialog> {
         subtitle = first.to_uppercase() + &subtitle[1..];
     }
     Some(rom_render::HudAgeDialog {
-        // Counted from one for the player: the Ancient age is age 1 of 14.
+        // Counted from one for the player, out of the rules' ages: the Ancient age is age 1.
         heading: format!(
             "AGE {} OF {}  ·  {}",
             ordinal + 1,
@@ -144,7 +144,9 @@ mod tests {
     #[test]
     fn the_file_keeps_in_step_with_the_document() {
         let doc = from_document();
-        assert_eq!(doc.len(), 14);
+        // One section and one entry for every age of the rules (task 164: no count in the code).
+        let rules = crate::terrain::load_rules().unwrap();
+        assert_eq!(doc.len(), rules.ages.len());
         let ages = ages();
         assert_eq!(ages.len(), doc.len());
         for (age, (ordinal, name, subtitle, story)) in ages.iter().zip(&doc) {
@@ -160,6 +162,7 @@ mod tests {
     #[test]
     fn every_age_of_the_rules_has_its_dialog() {
         let rules = crate::terrain::load_rules().unwrap();
+        let count = rules.ages.len();
         for age in rules.ages.values() {
             let dialog = dialog(&rules, age.ordinal).expect("a dialog");
             assert_eq!(dialog.name, rules.def(age.id).name);
@@ -167,7 +170,7 @@ mod tests {
             assert!(
                 dialog
                     .heading
-                    .starts_with(&format!("AGE {} OF 14", age.ordinal + 1))
+                    .starts_with(&format!("AGE {} OF {count}", age.ordinal + 1))
             );
         }
         let first = dialog(&rules, 0).unwrap();
@@ -175,5 +178,33 @@ mod tests {
         assert!(first.heading.ends_with("HISTORY"));
         assert!(dialog(&rules, 99).is_none());
         assert!(parse("[[age]]\nordinal = 1").is_err());
+    }
+
+    /// Task 164: age 13 is the Age of Galactic War; the Galactic Federation after it is the last
+    /// age, counted from one as "AGE 15 OF 15", and borrows age 13's music.
+    #[test]
+    fn the_galactic_federation_closes_the_ladder_with_age_13s_music() {
+        let rules = crate::terrain::load_rules().unwrap();
+        let ordinal = |key: &str| rules.ages[&rules.id_of(key).unwrap()].ordinal;
+        let (war, federation) = (ordinal("age.galactic"), ordinal("age.federation"));
+        assert_eq!(federation, war + 1);
+        assert_eq!(
+            Some(federation),
+            rules.ages.values().map(|a| a.ordinal).max()
+        );
+        let last = dialog(&rules, federation).unwrap();
+        assert_eq!(last.name, "Galactic Federation");
+        assert_eq!(
+            last.heading,
+            format!("AGE {0} OF {0}  ·  THE GALACTIC ERA", rules.ages.len())
+        );
+        assert_eq!(dialog(&rules, war).unwrap().name, "Age of Galactic War");
+        let (war, federation) = (age(war).unwrap(), age(federation).unwrap());
+        assert_eq!(war.name, "Galactic War");
+        assert_eq!(federation.name, "Galactic Federation");
+        assert_eq!(
+            (&federation.theme, &federation.interlude),
+            (&war.theme, &war.interlude)
+        );
     }
 }

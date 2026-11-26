@@ -1619,13 +1619,21 @@ fn research_overview_marks_done_next_and_locked() {
     let hud = fx.hud_snapshot();
     assert_eq!(hud.data_tab, 4);
     assert_eq!(hud.overview.tracks.len(), 4);
-    assert!(hud.overview.tracks.iter().all(|t| t.levels.len() == 13));
+    // A level of each track for every age after the first, and every age (task 164: from the
+    // rules, not a count).
+    let ages = fx.rules.ages.len();
+    assert!(
+        hud.overview
+            .tracks
+            .iter()
+            .all(|t| t.levels.len() == ages - 1)
+    );
     assert_eq!(
         &hud.overview.tracks[0].levels[..3],
         &[ResearchCell::Done, ResearchCell::Next, ResearchCell::Locked]
     );
     assert_eq!(hud.overview.tracks[1].levels[0], ResearchCell::InProgress);
-    assert_eq!(hud.overview.ages.len(), 14);
+    assert_eq!(hud.overview.ages.len(), ages);
     assert_eq!(
         &hud.overview.ages[..3],
         &[ResearchCell::Done, ResearchCell::Next, ResearchCell::Locked]

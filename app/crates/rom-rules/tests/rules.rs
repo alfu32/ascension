@@ -1,6 +1,6 @@
 use rom_rules::{
     ActiveSources, ClaimMode, Condition, Context, DefId, Layer, ModifierOp, Owned, RegionKind,
-    Rules, RulesError, StarRegion, TechKind, build_rules_db,
+    Rules, RulesError, StarRegion, TechEffectKind, TechKind, build_rules_db,
 };
 use rusqlite::Connection;
 
@@ -1024,7 +1024,7 @@ fn obsolete_when_successor_unlocked() {
 #[test]
 fn ship_classes_coexist() {
     let r = seed();
-    let mut active = sources(&r, &["age.galactic"]);
+    let mut active = sources(&r, &["age.federation"]);
     active.extend(
         r.techs
             .keys()
@@ -1237,6 +1237,7 @@ fn age_view_range_loads() {
     assert_eq!(range("age.automation"), 110_000);
     assert_eq!(range("age.fusion"), 0);
     assert_eq!(range("age.galactic"), 0);
+    assert_eq!(range("age.federation"), 0);
     // The range widens with every age until the whole globe is allowed.
     let mut by_ordinal: Vec<_> = rules.ages.values().collect();
     by_ordinal.sort_by_key(|a| a.ordinal);
@@ -1570,4 +1571,79 @@ fn star_catalogue_is_curated() {
             assert!(rules.stars.contains_key(&star), "{line:?}");
         }
     }
+}
+
+/// Task 164: the Galactic Federation (age 14) follows the Age of Galactic War (13) as the last
+/// age, like it in era, map scale, view and colonisation. Its advance at the library needs age 13
+/// and the four track levels of age 14, which exist, each after the level before it; the
+/// ascension needs the last age.
+#[test]
+fn the_galactic_federation_follows_the_galactic_war() {
+    let r = seed();
+    let id = |key: &str| r.id_of(key).unwrap();
+    let (war, federation) = (id("age.galactic"), id("age.federation"));
+    assert_eq!(r.def(war).name, "Age of Galactic War");
+    assert_eq!(r.def(federation).name, "Galactic Federation");
+    let (a13, a14) = (&r.ages[&war], &r.ages[&federation]);
+    assert_eq!((a13.ordinal, a14.ordinal), (13, 14));
+    assert_eq!(r.ages.values().map(|a| a.ordinal).max(), Some(a14.ordinal));
+    assert_eq!(
+        (
+            a14.era,
+            &a14.map_scale,
+            a14.view_range,
+            a14.free_colonisation
+        ),
+        (
+            a13.era,
+            &a13.map_scale,
+            a13.view_range,
+            a13.free_colonisation
+        )
+    );
+    let needs = |tech: DefId| -> Vec<(DefId, i64)> {
+        r.prerequisites[&tech]
+            .iter()
+            .map(|p| (p.requires_def_id, p.alt_group))
+            .collect()
+    };
+    let advance = id("tech.age.federation");
+    assert_eq!(r.def(advance).name, "Advance to Galactic Federation");
+    assert_eq!(
+        r.def(id("tech.age.galactic")).name,
+        "Advance to Galactic War"
+    );
+    assert_eq!(r.techs[&advance].kind, TechKind::Age);
+    assert!(
+        r.tech_effects[&advance]
+            .iter()
+            .any(|e| e.effect == TechEffectKind::SetAge && e.target_def_id == Some(federation))
+    );
+    let mut expected = vec![(war, 0)];
+    for (group, (track, name)) in [
+        ("military", "Collective Security"),
+        ("civic", "Federal Compact"),
+        ("commerce", "Common Market"),
+        ("science", "Cosmic Engineering"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let level = id(&format!("tech.{track}.14"));
+        assert_eq!(r.def(level).name, name);
+        let tech = &r.techs[&level];
+        assert_eq!(
+            (tech.kind, tech.track.as_str(), tech.level),
+            (TechKind::Track, track, 14)
+        );
+        assert_eq!(
+            needs(level),
+            [(war, 0), (id(&format!("tech.{track}.13")), 1)]
+        );
+        assert!(!r.modifiers[&level].is_empty(), "{track} 14 has its bonus");
+        expected.push((level, group as i64 + 1));
+    }
+    assert_eq!(needs(advance), expected);
+    assert_eq!(needs(id("tech.ascension")), [(federation, 0)]);
+    assert!(r.ascension_requirements().contains(&advance));
 }
