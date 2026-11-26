@@ -911,7 +911,20 @@ planets per star system when te number of planets in a cluster is low )".
   routes) in any style: the generator still does not fit eight separate homes fairly.
 - **Computer players** (`rom-ai` `fleet.rs`) count as reachable only the systems joined to their
   home by routes they may jump, so the navy, the claims and the colonies stay in the home
-  cluster until the Age of Abundance and spread over the others after it.
+  cluster until the Age of Abundance and spread over the others after it. `rom ai-match --seed 3
+  --universe --style map.sector --start-age age.expansion --research-time 1000 --players
+  balanced,balanced,balanced --ticks 40000` (every player starts in the Starfaring Age with its
+  research done and a rich stock): the three reach the Age of Abundance at ticks 14 681 to
+  14 683; before it their cities and ships stand in 3, 7 and 3 systems, all of their home
+  clusters, and no voyage is refused for crossing to another cluster; after it they leave the
+  home cluster at ticks 15 361, 16 281 and 16 461 and stand in 10, 13 and 12 clusters by tick
+  40 000 (hash ffef264c7021259c, twice). The test
+  `computer_players_keep_to_their_cluster_before_the_galactic_tier` checks the first part.
+- **Screenshots** (release build, scripts `tasks/163-*-script.txt`): `img/163-refused-jump.png`
+  (a fleet in the Starfaring Age sent to the nearest system of another cluster: "Other clusters
+  open in the Age of Abundance"), `img/163-galaxy-8-players.png` (an eight-player Galaxy match,
+  `--view galaxy`: the three home clusters named in their players' colours) and
+  `img/163-abundance-dialog.png` (the Age of Abundance's dialog and its story).
 
 ### Moving between levels (task 53)
 
