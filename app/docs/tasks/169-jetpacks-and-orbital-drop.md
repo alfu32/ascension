@@ -26,6 +26,9 @@ Swimming is task 168.
      other unit commands (task 142).
    - **Walls:** fortifications (task 147) do not stop a jump. Shield fields (task 156) do,
      because the field blocks the air above the line too. Say so in the docs.
+     Task 156 (merged in 0.150.0) blocks only walkers at standing field tiles; flyers pass
+     (`rom-sim/src/fields.rs`). A jump must therefore check its flight path against the
+     standing field stretches and be refused when it would cross one. Aircraft are unchanged.
 2. **Orbital drop** (research, from the Starfaring age). Infantry aboard a starship in orbit
    above a planet can be dropped directly onto the surface:
    - **Order:** "Drop" on the carrying ship.
