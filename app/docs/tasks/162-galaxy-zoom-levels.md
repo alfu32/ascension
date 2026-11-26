@@ -94,8 +94,9 @@ similarity transform, as now (`rom-render/src/zoom.rs`, "Rendering notes" in
 
 ## Out of scope
 
-Gameplay tied to clusters (jumps between clusters, cluster ownership): presentation and data
-only. Galaxy-to-galaxy travel stays parked.
+Gameplay tied to clusters is task 163, which runs after this one: jumps between clusters only
+from the Age of Abundance, home clusters with a fair share of planets, and the view tiers. This
+task is presentation and data only. Galaxy-to-galaxy travel stays parked.
 
 ## Files
 
