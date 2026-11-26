@@ -83,6 +83,8 @@ pub struct StarSystem {
     pub star: Option<u32>,
     /// The star's constellation, for labels.
     pub constellation: String,
+    /// The star's cluster (`star_cluster.id`, task 162); `None` for the celestial home.
+    pub cluster: Option<u32>,
 }
 
 /// A star, habitable planet or resource body (`body` row).
@@ -845,6 +847,7 @@ fn layout(
                 .get(&s.constellation_id)
                 .map(|c| c.name.clone())
                 .unwrap_or_default(),
+            cluster: Some(s.cluster_id),
         })
         .collect();
     let system_of: BTreeMap<u32, u32> = systems
@@ -942,6 +945,7 @@ fn solar_layout(
             .get(&star.constellation_id)
             .map(|c| c.name.clone())
             .unwrap_or_default(),
+        cluster: Some(star.cluster_id),
     };
     let others = (pick(
         rng,
@@ -1328,6 +1332,7 @@ fn add_celestial_home(universe: &mut Universe, rules: &Rules) {
         z: at(centre.2, dz),
         star: None,
         constellation: CELESTIAL_CONSTELLATION.to_owned(),
+        cluster: None,
     });
     for (kind, name, orbit_radius, angle) in [
         (BodyKind::BlackHole, BLACK_HOLE_NAME, 0, 0),
@@ -1612,7 +1617,8 @@ impl Universe {
         problems
     }
 
-    /// FNV-1a 64 over systems, bodies, routes, recipes, generated planets and starts.
+    /// FNV-1a 64 over systems (their clusters included, task 162), bodies, routes, recipes,
+    /// generated planets and starts.
     pub fn hash(&self) -> u64 {
         let mut h = 0xcbf29ce484222325_u64;
         let mut feed = |bytes: &[u8]| {
@@ -1638,6 +1644,7 @@ impl Universe {
             feed(&opt(s.star));
             feed(&(s.constellation.len() as u64).to_le_bytes());
             feed(s.constellation.as_bytes());
+            feed(&opt(s.cluster));
         }
         feed(&(self.bodies.len() as u64).to_le_bytes());
         for b in &self.bodies {

@@ -54,6 +54,7 @@ fn world() -> World {
             y: 0,
             z: 0,
             constellation: String::new(),
+            cluster: None,
         }],
         bodies: vec![
             body(1, BodyKind::Star),

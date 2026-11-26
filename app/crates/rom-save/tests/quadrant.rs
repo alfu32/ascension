@@ -39,6 +39,7 @@ fn universe(rules: &Arc<Rules>, style: &str) -> World {
                 y: s.y,
                 z: s.z,
                 constellation: s.constellation.clone(),
+                cluster: s.cluster,
             })
             .collect(),
         bodies: universe
@@ -178,4 +179,20 @@ fn save_sizes_of_the_universe_styles() {
             w.systems().len()
         );
     }
+}
+
+/// Task 162: every catalogue system keeps its star's cluster through a save and a load; the
+/// celestial home has none.
+#[test]
+fn systems_keep_their_clusters_through_a_save() {
+    let rules = common::rules();
+    let w = universe(&rules, "map.many_worlds");
+    let clustered = w.systems().iter().filter(|s| s.cluster.is_some()).count();
+    assert!(clustered >= 10, "{clustered} systems with a cluster");
+    let path = common::temp_path("clusters");
+    rom_save::save(&path, &w, &common::info(&w), &common::ai()).unwrap();
+    let (loaded, _, _) = rom_save::load(&path, &rules).unwrap();
+    std::fs::remove_file(&path).unwrap();
+    assert_eq!(loaded.systems(), w.systems());
+    assert_eq!(loaded.hash(), w.hash());
 }

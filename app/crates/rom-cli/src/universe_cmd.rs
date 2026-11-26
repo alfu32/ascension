@@ -145,6 +145,7 @@ pub fn universe_setup(universe: &Universe) -> UniverseSetup {
                 y: s.y,
                 z: s.z,
                 constellation: s.constellation.clone(),
+                cluster: s.cluster,
             })
             .collect(),
         bodies: universe

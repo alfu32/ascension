@@ -752,6 +752,7 @@ fn a_moon_brought_to_life_saved_in_the_middle_of_its_painting() {
             y: 0,
             z: 0,
             constellation: String::new(),
+            cluster: None,
         }],
         bodies: vec![
             body(1, BodyKind::Star),

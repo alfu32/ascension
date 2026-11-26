@@ -1041,6 +1041,7 @@ mod tests {
             y: 0,
             z: 0,
             constellation: String::new(),
+            cluster: None,
         });
         w
     }

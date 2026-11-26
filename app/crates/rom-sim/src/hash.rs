@@ -756,6 +756,12 @@ impl StateHash {
             self.bytes(&s.y.to_le_bytes());
             self.bytes(&s.z.to_le_bytes());
             self.text(&s.constellation);
+            // Task 162: only a system with a cluster adds to the hash, so worlds without
+            // clusters hash as before.
+            if let Some(cluster) = s.cluster {
+                self.u32(1);
+                self.u32(cluster);
+            }
         }
         self.u64(universe.figure.len() as u64);
         for (a, b) in &universe.figure {

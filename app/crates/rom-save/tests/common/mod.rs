@@ -284,6 +284,7 @@ pub fn universe(rules: &Arc<Rules>) -> World {
             .map(|(id, x, y)| SystemInfo {
                 z: 40 * id as i32 - 60,
                 constellation: "Lyra".to_owned(),
+                cluster: None,
                 id,
                 x,
                 y,

@@ -92,6 +92,7 @@ fn world_of(rules: &Arc<Rules>, more: &[BodyId], keep: &dyn Fn(DefId) -> bool) -
             .map(|(id, x, y)| SystemInfo {
                 z: 0,
                 constellation: String::new(),
+                cluster: None,
                 id,
                 x,
                 y,

@@ -45,6 +45,7 @@ fn world_at(sql: &str, age_key: &str) -> World {
             .map(|(id, x, y)| SystemInfo {
                 z: 0,
                 constellation: String::new(),
+                cluster: None,
                 id,
                 x,
                 y,

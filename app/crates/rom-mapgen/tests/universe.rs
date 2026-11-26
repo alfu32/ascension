@@ -948,3 +948,28 @@ fn together_puts_players_of_different_races_on_one_planet() {
     assert!(u.starts.iter().all(|s| s.0 == u.starts[0].0));
     assert_eq!(u.fairness(&full), Vec::<String>::new());
 }
+
+/// Task 162: each system carries the cluster of its catalogue star, in every style; the
+/// celestial home has none. The routes and positions read the stars as before.
+#[test]
+fn every_system_carries_its_stars_cluster() {
+    let r = rules();
+    for style in [
+        "map.one_world",
+        "map.solar",
+        "map.many_worlds",
+        "map.sector",
+    ] {
+        let u = plan(&r, style, 3, &FOUR);
+        for system in &u.systems {
+            let star = system.star.map(|id| &r.stars[&id]);
+            assert_eq!(
+                system.cluster,
+                star.map(|s| s.cluster_id),
+                "{style}: {}",
+                system.name
+            );
+        }
+        assert!(u.systems.iter().any(|s| s.cluster.is_some()), "{style}");
+    }
+}

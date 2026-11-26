@@ -78,6 +78,7 @@ fn world(rules: &Arc<Rules>) -> World {
             .map(|(id, x, y)| SystemInfo {
                 z: 0,
                 constellation: String::new(),
+                cluster: None,
                 id,
                 x,
                 y,

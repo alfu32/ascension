@@ -136,14 +136,15 @@ fn write_all(
     }
     for system in &s.systems {
         tx.execute(
-            "INSERT INTO star_system(id,name,x,y,z,constellation) VALUES (?,?,?,?,?,?)",
+            "INSERT INTO star_system(id,name,x,y,z,constellation,cluster_id) VALUES (?,?,?,?,?,?,?)",
             params![
                 system.id,
                 system.name,
                 system.x,
                 system.y,
                 system.z,
-                system.constellation
+                system.constellation,
+                system.cluster
             ],
         )?;
     }
