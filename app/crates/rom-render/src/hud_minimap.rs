@@ -608,7 +608,7 @@ pub fn space_marks(
     layout: &crate::hud_layout::HudLayout,
     area: Rect,
 ) -> Vec<MapMark> {
-    use crate::universe::{BodyViewKind, MAP_RADIUS, SYSTEM_RADIUS};
+    use crate::universe::{BodyViewKind, SYSTEM_RADIUS};
     use crate::zoom::Level;
     let side = area.w.min(area.h);
     let (cx, cy) = area.centre();
@@ -626,9 +626,19 @@ pub fn space_marks(
     };
     let mut marks = Vec::new();
     let scene = zoom.scene();
-    let map = zoom.level() >= Level::StarMap;
-    let scale = half / if map { MAP_RADIUS } else { SYSTEM_RADIUS };
-    let to_area = |p: [f32; 3]| (cx + p[0] * scale, cy + p[2] * scale);
+    let map = zoom.level() >= Level::Cluster;
+    let (middle, reach) = if map {
+        zoom.minimap_frame()
+    } else {
+        ([0.0; 3], SYSTEM_RADIUS)
+    };
+    let scale = half / reach.max(1.0);
+    let to_area = |p: [f32; 3]| {
+        (
+            cx + (p[0] - middle[0]) * scale,
+            cy + (p[2] - middle[2]) * scale,
+        )
+    };
     if !map {
         for placed in zoom.placed() {
             let body = &scene.bodies[placed.body];
@@ -695,7 +705,7 @@ pub fn space_marks(
             for transit in &space.transits {
                 if let Some((at, _)) = crate::space::transit_at_rim(
                     scene,
-                    zoom.map_positions(),
+                    &zoom.map_positions(),
                     zoom.system(),
                     transit,
                 ) {
@@ -706,11 +716,17 @@ pub fn space_marks(
         }
     } else {
         let positions = zoom.map_positions();
+        let shown = zoom.map_shown();
+        let on_disk = zoom.on_disk();
         // Charted routes whole; an uncharted one as a stub leaving each end the player has seen.
+        // In the cluster view the routes of the cluster, those leaving it to their exits.
         for &(id_a, id_b) in &scene.routes {
             let (Some(a), Some(b)) = (scene.system_index(id_a), scene.system_index(id_b)) else {
                 continue;
             };
+            if shown[a].reach.min(shown[b].reach) < 0.5 {
+                continue;
+            }
             let (pa, pb) = (positions[a], positions[b]);
             let stub = |from: [f32; 3], to: [f32; 3]| {
                 [0, 1, 2].map(|i| from[i] + (to[i] - from[i]) * crate::space::ROUTE_STUB_SHARE)
@@ -737,22 +753,48 @@ pub fn space_marks(
                 crate::space::RouteSight::Hidden => {}
             }
         }
-        for (i, system) in scene.systems.iter().enumerate() {
-            let tint = scene
+        let tint_of = |system: u32| {
+            scene
                 .bodies
                 .iter()
-                .find(|b| b.system == system.id && b.home_race_colour.is_some())
-                .and_then(|b| b.home_race_colour);
-            let rgb = tint.unwrap_or(system.star_colour);
-            let size = if tint.is_some() { 5.0 } else { 3.0 };
-            let (x, y) = to_area(positions[i]);
-            // Seen from above; a system's height shows as its brightness: lower is dimmer.
-            let height = (positions[i][1] / MAP_RADIUS).clamp(-1.0, 1.0);
-            let alpha = (255.0 * (0.72 + 0.28 * height)) as u8;
-            marks.push(dot(x, y, size, [rgb[0], rgb[1], rgb[2], alpha]));
+                .find(|b| b.system == system && b.home_race_colour.is_some())
+                .and_then(|b| b.home_race_colour)
+        };
+        if on_disk {
+            // On the disk each cluster is a dot, larger with more systems, in the colour of a
+            // race at home there.
+            for group in &zoom.layout().groups {
+                let tint = group
+                    .members
+                    .iter()
+                    .find_map(|&i| tint_of(scene.systems[i].id));
+                let rgb = tint.unwrap_or(if group.celestial {
+                    crate::universe::ACCRETION_RGB[1]
+                } else {
+                    [200, 215, 235]
+                });
+                let size =
+                    2.5 + 0.6 * group.members.len() as f32 + if tint.is_some() { 1.5 } else { 0.0 };
+                let (x, y) = to_area(group.centre);
+                marks.push(dot(x, y, size, [rgb[0], rgb[1], rgb[2], 255]));
+            }
+        } else {
+            for (i, system) in scene.systems.iter().enumerate() {
+                if shown[i].opacity < 0.5 {
+                    continue;
+                }
+                let tint = tint_of(system.id);
+                let rgb = tint.unwrap_or(system.star_colour);
+                let size = if tint.is_some() { 5.0 } else { 3.0 };
+                let (x, y) = to_area(positions[i]);
+                // Seen from above; a system's height shows as its brightness: lower is dimmer.
+                let height = ((positions[i][1] - middle[1]) / reach.max(1.0)).clamp(-1.0, 1.0);
+                let alpha = (255.0 * (0.72 + 0.28 * height)) as u8;
+                marks.push(dot(x, y, size, [rgb[0], rgb[1], rgb[2], alpha]));
+            }
         }
         let beside = [half * 0.05 / scale, 0.0, 0.0];
-        for mark in crate::space::map_ship_marks(scene, positions, space, beside) {
+        for mark in crate::space::map_ship_marks(scene, &positions, &shown, space, beside) {
             let (x, y) = to_area(mark.at);
             marks.push(dot(x, y, 4.0, owner(mark.owner)));
         }
@@ -834,7 +876,7 @@ pub fn space_minimap_point(
     x: f32,
     y: f32,
 ) -> Option<([f32; 3], bool)> {
-    use crate::universe::{MAP_RADIUS, SYSTEM_RADIUS};
+    use crate::universe::SYSTEM_RADIUS;
     let area = layout.rect(crate::hud_layout::Region::MinimapView);
     let side = area.w.min(area.h);
     let (cx, cy) = area.centre();
@@ -842,9 +884,21 @@ pub fn space_minimap_point(
         return None;
     }
     let half = side / 2.0 * 0.92;
-    let map = zoom.level() >= crate::zoom::Level::StarMap;
-    let scale = half / if map { MAP_RADIUS } else { SYSTEM_RADIUS };
-    Some(([(x - cx) / scale, 0.0, (y - cy) / scale], map))
+    let map = zoom.level() >= crate::zoom::Level::Cluster;
+    let (middle, reach) = if map {
+        zoom.minimap_frame()
+    } else {
+        ([0.0; 3], SYSTEM_RADIUS)
+    };
+    let scale = half / reach.max(1.0);
+    Some((
+        [
+            middle[0] + (x - cx) / scale,
+            0.0,
+            middle[2] + (y - cy) / scale,
+        ],
+        map,
+    ))
 }
 
 /// Which labels fit: greedy by priority, a label that would overlap one already kept is dropped.

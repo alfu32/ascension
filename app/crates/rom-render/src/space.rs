@@ -449,20 +449,30 @@ pub struct MapLine {
 pub fn star_map_lines(
     scene: &UniverseScene,
     positions: &[[f32; 3]],
+    shown: &[crate::zoom::MapShown],
     snapshot: &SpaceSnapshot,
     figures: bool,
     from_sun: bool,
     dash: f32,
 ) -> Vec<MapLine> {
     let mut lines = Vec::new();
-    let place = |id: u32| {
-        scene
-            .system_index(id)
-            .and_then(|i| positions.get(i).copied())
+    // Task 162: a route is drawn where both its ends reach (in the cluster view, the cluster's
+    // routes and those leaving it, to their exits); a figure where both its stars show. An empty
+    // `shown` shows everything.
+    let place_if = |id: u32, least: &dyn Fn(&crate::zoom::MapShown) -> f32| {
+        scene.system_index(id).and_then(|i| {
+            shown
+                .get(i)
+                .is_none_or(|s| least(s) >= 0.5)
+                .then(|| positions.get(i).copied())
+                .flatten()
+        })
     };
+    let place = |id: u32| place_if(id, &|s| s.reach);
     if figures {
         for &(a, b) in &scene.figure {
-            let (Some(pa), Some(pb)) = (place(a), place(b)) else {
+            let star = |id: u32| place_if(id, &|s| s.opacity);
+            let (Some(pa), Some(pb)) = (star(a), star(b)) else {
                 continue;
             };
             let way = [0, 1, 2].map(|i| pb[i] - pa[i]);
@@ -627,6 +637,7 @@ pub fn space_hover_help(
     );
     let system = match hover {
         SpaceHover::Target(Target::System(i)) => scene.systems.get(i).map(|s| s.id),
+        SpaceHover::Target(Target::Cluster(_)) => None,
         SpaceHover::Target(Target::Body(i)) => scene
             .bodies
             .get(i)
@@ -729,9 +740,14 @@ pub const TOGETHER_PROGRESS: f32 = 0.01;
 pub fn map_ship_marks(
     scene: &UniverseScene,
     positions: &[[f32; 3]],
+    shown: &[crate::zoom::MapShown],
     snapshot: &SpaceSnapshot,
     beside: [f32; 3],
 ) -> Vec<MapShipMark> {
+    // A ship shows where its system, or both ends of its route, are drawn (task 162: the cluster
+    // view shows one cluster and the exits of its routes); an empty `shown` shows every ship.
+    let reach = |i: usize| shown.get(i).map_or(1.0, |s| s.reach);
+    let opacity = |i: usize| shown.get(i).map_or(1.0, |s| s.opacity);
     let mut marks: Vec<MapShipMark> = Vec::new();
     // Ships of one owner on one lane, side by side, are one mark that counts them (task 96).
     let mut lanes: Vec<(u8, u32, u32, bool, f32, usize)> = Vec::new();
@@ -742,6 +758,9 @@ pub fn map_ship_marks(
         ) else {
             continue;
         };
+        if reach(a).min(reach(b)) < 0.5 {
+            continue;
+        }
         if let Some(&(.., mark)) = lanes.iter().find(|l| {
             (l.0, l.1, l.2, l.3) == (transit.owner, transit.from, transit.to, transit.charting)
                 && (l.4 - transit.progress).abs() <= TOGETHER_PROGRESS
@@ -775,7 +794,10 @@ pub fn map_ship_marks(
     }
     let mut groups: std::collections::BTreeMap<(usize, u8), Vec<u32>> = Default::default();
     for ship in &snapshot.ships {
-        if let Some(system) = scene.system_index(ship.system) {
+        if let Some(system) = scene
+            .system_index(ship.system)
+            .filter(|&i| opacity(i) >= 0.5)
+        {
             groups
                 .entry((system, ship.owner))
                 .or_default()
@@ -1034,6 +1056,8 @@ pub fn hover_help(
             ),
             None => Default::default(),
         },
+        // Named by the caller, who has the clusters ([`cluster_help`]).
+        SpaceHover::Target(Target::Cluster(_)) => Default::default(),
         SpaceHover::Target(Target::Body(i)) => {
             let Some(body) = scene.bodies.get(i) else {
                 return Default::default();
@@ -1085,6 +1109,28 @@ pub fn hover_help(
     }
 }
 
+/// The tooltip of a cluster on the disk, or of a route's exit toward it in the cluster view
+/// (task 162): its name, its systems and what a double click does.
+pub fn cluster_help(layout: &crate::galaxy::GalaxyLayout, group: usize) -> (String, String) {
+    let Some(g) = layout.groups.get(group) else {
+        return Default::default();
+    };
+    if g.celestial {
+        return (
+            format!("{} (the celestial home)", g.name),
+            "Double-click to fly there".to_owned(),
+        );
+    }
+    let systems = match g.members.len() {
+        1 => "1 system".to_owned(),
+        n => format!("{n} systems"),
+    };
+    (
+        format!("{} ({systems})", g.name),
+        "Double-click or scroll in to see its systems".to_owned(),
+    )
+}
+
 /// The claim state in words for the tooltip.
 pub fn claim_text(claim: ClaimState) -> String {
     match claim {
@@ -1125,20 +1171,32 @@ pub fn level_help(
             "Star system: scroll zooms to the cursor; double-click a planet to land".to_owned(),
             format!(
                 "{turn} turns and tilts · {pan} pans · Home: your planet{}",
-                if cap >= Level::StarMap {
-                    " · scroll out: star map"
+                if cap >= Level::Cluster {
+                    " · scroll out: the cluster view"
                 } else {
                     ""
                 }
             ),
         )),
-        Level::StarMap => Some((
-            "Star map: scroll in on a system, or double-click it, to enter · short stubs are \
-             routes not yet charted: a first voyage charts them, slowly"
+        Level::Cluster => Some((
+            "Cluster view: scroll in on a system, or double-click it, to enter · a line leaving \
+             the cluster is a route to the cluster named at its end · short stubs are routes not \
+             yet charted: a first voyage charts them, slowly"
                 .to_owned(),
             format!(
                 "{turn} turns freely · {pan} pans · arrows fly, Shift + up/down rise and sink · \
-                 F4 levels the view · Home: your planet"
+                 F4 levels the view · scroll out: the clusters on the disk · Home: your planet"
+            ),
+        )),
+        Level::Quadrant | Level::Galaxy => Some((
+            format!(
+                "{}: the star clusters on the galactic disk · scroll in on a cluster, or \
+                 double-click it, to see its systems",
+                level.title()
+            ),
+            format!(
+                "{turn} turns freely · {pan} pans · arrows fly · F4 levels the view · Home: your \
+                 planet"
             ),
         )),
     }
@@ -1719,7 +1777,7 @@ mod tests {
                 for from_sun in [false, true] {
                     let dash = 300.0;
                     let lines =
-                        star_map_lines(&scene, &positions, snapshot, figures, from_sun, dash);
+                        star_map_lines(&scene, &positions, &[], snapshot, figures, from_sun, dash);
                     let mut seen_route = false;
                     for (i, line) in lines.iter().enumerate() {
                         match line.kind {
@@ -1912,14 +1970,14 @@ mod tests {
 
     #[test]
     fn a_ship_on_a_climbing_lane_heads_up_along_it() {
-        let mut scene = sample_scene();
-        scene.systems[1].z = 90_000;
-        let positions = scene.place_systems();
+        let scene = sample_scene();
+        let mut positions = scene.place_systems();
+        positions[1][1] += 90_000.0;
         let snapshot = SpaceSnapshot {
             transits: vec![transit(20, 1, 2, 0.5)],
             ..SpaceSnapshot::default()
         };
-        let marks = map_ship_marks(&scene, &positions, &snapshot, [0.0; 3]);
+        let marks = map_ship_marks(&scene, &positions, &[], &snapshot, [0.0; 3]);
         let heading = marks[0].heading.unwrap();
         let way: Vec<f32> = (0..3).map(|i| positions[1][i] - positions[0][i]).collect();
         let length = way.iter().map(|c| c * c).sum::<f32>().sqrt();
@@ -1949,7 +2007,7 @@ mod tests {
         enemy.owner = 2;
         enemy.system = 2;
         snapshot.ships.push(enemy);
-        let marks = map_ship_marks(&scene, &positions, &snapshot, [500.0, 0.0, 0.0]);
+        let marks = map_ship_marks(&scene, &positions, &[], &snapshot, [500.0, 0.0, 0.0]);
         assert_eq!(marks.len(), 3);
         // The ship in transit stands on its lane, a quarter of the way, heading for system 2.
         let lane = &marks[0];
@@ -1966,7 +2024,10 @@ mod tests {
         // The two ships of player one in system 1 are one mark beside it; the enemy another.
         let home = marks.iter().find(|m| m.system == Some(0)).unwrap();
         assert_eq!(home.ids, vec![10, 11]);
-        assert_eq!(home.at, [positions[0][0] + 500.0, 0.0, positions[0][2]]);
+        assert_eq!(
+            home.at,
+            [positions[0][0] + 500.0, positions[0][1], positions[0][2]]
+        );
         let far = marks.iter().find(|m| m.system == Some(1)).unwrap();
         assert_eq!((far.owner, far.ids.clone()), (2, vec![12]));
         // In the system plane the transit shows at the rim: outward from 1, inward to 2.
@@ -2092,39 +2153,44 @@ mod tests {
             !level_help(Level::System, Level::System, false)
                 .unwrap()
                 .1
-                .contains("star map")
+                .contains("cluster view")
         );
         assert!(
-            level_help(Level::System, Level::StarMap, false)
+            level_help(Level::System, Level::Cluster, false)
                 .unwrap()
                 .1
-                .contains("star map")
+                .contains("cluster view")
         );
+        // Task 162: the levels beyond a system name themselves.
+        for level in [Level::Quadrant, Level::Galaxy] {
+            let (first, _) = level_help(level, Level::Galaxy, false).unwrap();
+            assert!(first.starts_with(level.title()), "{first}");
+        }
         assert!(
-            level_help(Level::StarMap, Level::StarMap, false)
+            level_help(Level::Cluster, Level::Cluster, false)
                 .unwrap()
                 .0
                 .contains("enter")
         );
         // The help names the level and follows the middle-button setting.
-        for level in [Level::Globe, Level::System, Level::StarMap] {
-            let (first, _) = level_help(level, Level::StarMap, false).unwrap();
+        for level in [Level::Globe, Level::System, Level::Cluster] {
+            let (first, _) = level_help(level, Level::Cluster, false).unwrap();
             assert!(first.contains(':'), "{first}");
         }
         assert!(
-            level_help(Level::System, Level::StarMap, false)
+            level_help(Level::System, Level::Cluster, false)
                 .unwrap()
                 .1
                 .starts_with("Middle-drag turns")
         );
         assert!(
-            level_help(Level::StarMap, Level::StarMap, true)
+            level_help(Level::Cluster, Level::Cluster, true)
                 .unwrap()
                 .1
                 .starts_with("Shift + middle-drag turns")
         );
         // On the star map the help names the flying keys and the level key (task 79).
-        let (_, keys) = level_help(Level::StarMap, Level::StarMap, false).unwrap();
+        let (_, keys) = level_help(Level::Cluster, Level::Cluster, false).unwrap();
         for words in ["arrows fly", "Shift + up/down", "F4 levels the view"] {
             assert!(keys.contains(words), "{keys}");
         }
@@ -2432,7 +2498,7 @@ mod tests {
             }],
             ..SpaceSnapshot::default()
         };
-        let marks = map_ship_marks(&scene, &positions, &snapshot, [1.0, 0.0, 0.0]);
+        let marks = map_ship_marks(&scene, &positions, &[], &snapshot, [1.0, 0.0, 0.0]);
         let fleet = marks.iter().find(|m| m.system == Some(0)).unwrap();
         assert_eq!(fleet.charge, Some(0.25));
         let voyage = marks.iter().find(|m| m.bound_for.is_some()).unwrap();
@@ -2461,7 +2527,7 @@ mod tests {
             ],
             ..SpaceSnapshot::default()
         };
-        let marks = map_ship_marks(&scene, &positions, &snapshot, [1.0, 0.0, 0.0]);
+        let marks = map_ship_marks(&scene, &positions, &[], &snapshot, [1.0, 0.0, 0.0]);
         let ids: Vec<Vec<u32>> = marks.iter().map(|m| m.ids.clone()).collect();
         assert_eq!(ids, vec![vec![5, 7], vec![6], vec![8]]);
     }

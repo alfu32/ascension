@@ -79,6 +79,22 @@ pub struct SystemView {
     /// The celestial home (task 76): its star is a black hole with a glowing accretion disc,
     /// it is joined to nothing and lies outside the region the star map is framed on.
     pub celestial: bool,
+    /// The star cluster of its star (task 162, [`UniverseScene::clusters`]); systems without one
+    /// are shown together as one cluster.
+    pub cluster: Option<u32>,
+}
+
+/// A star cluster of the catalogue that the match's systems belong to (task 162).
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClusterView {
+    /// `star_cluster.id`.
+    pub id: u32,
+    /// Shown at the quadrant and galaxy levels.
+    pub name: String,
+    /// Place on the galactic disk in catalogue units, toward galactic longitude 0.
+    pub x: i32,
+    /// Place on the galactic disk in catalogue units, toward galactic longitude 90 degrees.
+    pub y: i32,
 }
 
 /// One body of a system.
@@ -113,6 +129,8 @@ pub struct UniverseScene {
     pub routes: Vec<(u32, u32)>,
     /// Constellation stick-figure lines as pairs of system ids.
     pub figure: Vec<(u32, u32)>,
+    /// The star clusters the systems belong to, by id.
+    pub clusters: Vec<ClusterView>,
 }
 
 /// One body placed in its system frame.
@@ -287,66 +305,16 @@ impl UniverseScene {
             .max(1) as f32
     }
 
-    /// Star-map positions of the systems, indexed like [`Self::systems`], centred on the middle of
-    /// the systems and scaled so the farthest lies at [`MAP_RADIUS`] (a single system sits at the
-    /// origin). The sky's axes keep their handedness: the frame's `x` is the sky's `x`, its up
-    /// (`y`) the sky's north (`z`) and its `z` the sky's `-y`, so seen from the Sun the
-    /// constellations are not mirrored.
+    /// Star-map positions of the systems in the cluster view, indexed like [`Self::systems`]
+    /// ([`crate::galaxy::GalaxyLayout`]: each cluster spread about its place on the disk).
     pub fn place_systems(&self) -> Vec<[f32; 3]> {
-        let (centre, scale) = self.map_frame();
-        self.systems
-            .iter()
-            .map(|s| sky_to_frame([s.x as f32, s.y as f32, s.z as f32], centre, scale))
-            .collect()
+        crate::galaxy::GalaxyLayout::new(self).cluster
     }
 
     /// Where the Sun (the origin of the sky's coordinates) lies in the star-map frame.
     pub fn sun_position(&self) -> [f32; 3] {
-        let (centre, scale) = self.map_frame();
-        sky_to_frame([0.0; 3], centre, scale)
+        crate::galaxy::GalaxyLayout::new(self).sun
     }
-
-    /// The sky position of the middle of the systems and the frame units per sky unit. The
-    /// celestial home is left out (task 76): it lies beyond the match's systems and is placed
-    /// by the same frame, farther out.
-    fn map_frame(&self) -> ([f32; 3], f32) {
-        let material: Vec<&SystemView> = self.systems.iter().filter(|s| !s.celestial).collect();
-        if material.len() < 2 {
-            let at = material
-                .first()
-                .map_or([0.0; 3], |s| [s.x as f32, s.y as f32, s.z as f32]);
-            return (at, 1.0);
-        }
-        let n = material.len() as f32;
-        let mid = |f: fn(&SystemView) -> i32| material.iter().map(|s| f(s) as f32).sum::<f32>() / n;
-        let centre = [mid(|s| s.x), mid(|s| s.y), mid(|s| s.z)];
-        let farthest = material
-            .iter()
-            .map(|s| {
-                let d = [
-                    s.x as f32 - centre[0],
-                    s.y as f32 - centre[1],
-                    s.z as f32 - centre[2],
-                ];
-                (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt()
-            })
-            .fold(0.0_f32, f32::max);
-        (
-            centre,
-            if farthest > 0.0 {
-                MAP_RADIUS / farthest
-            } else {
-                1.0
-            },
-        )
-    }
-}
-
-/// A sky position (x toward RA 0h, y toward 6h, z north) in the star-map frame (right-handed,
-/// y up), about `centre`, `scale` frame units per sky unit.
-fn sky_to_frame(p: [f32; 3], centre: [f32; 3], scale: f32) -> [f32; 3] {
-    let d = [p[0] - centre[0], p[1] - centre[1], p[2] - centre[2]];
-    [d[0] * scale, d[2] * scale, -d[1] * scale]
 }
 
 /// The distance from the star in the system frame of an orbit of radius `orbit` (the same units
@@ -597,6 +565,7 @@ pub(crate) fn sample_scene() -> UniverseScene {
         constellation: String::new(),
         star_colour: [255, 240, 200],
         celestial: false,
+        cluster: None,
     };
     let body = |id, system, kind, orbit_radius, orbit_angle, n_or_size| BodyView {
         id,
@@ -630,6 +599,7 @@ pub(crate) fn sample_scene() -> UniverseScene {
         ],
         routes: vec![(1, 2), (1, 3)],
         figure: vec![],
+        clusters: vec![],
     }
 }
 
@@ -653,6 +623,7 @@ mod tests {
             constellation: String::new(),
             star_colour: ACCRETION_RGB[1],
             celestial: true,
+            cluster: None,
         });
         with.bodies.push(BodyView {
             id: 20,
@@ -760,21 +731,19 @@ mod tests {
         scene.systems[2].z = 40_000;
         let positions = scene.place_systems();
         assert_eq!(positions.len(), scene.systems.len());
-        let from_middle = |p: &[f32; 3]| {
-            let mid: [f32; 3] =
-                [0, 1, 2].map(|i| positions.iter().map(|q| q[i]).sum::<f32>() / 3.0);
-            (0..3).map(|i| (p[i] - mid[i]).powi(2)).sum::<f32>().sqrt()
-        };
-        let farthest = positions.iter().map(from_middle).fold(0.0, f32::max);
-        assert!((farthest - MAP_RADIUS).abs() < 1.0, "{farthest}");
-        // Heights are kept: the system with sky z 40 000 stands above the plane of the others.
-        assert!(positions[2][1] > positions[0][1] + 1000.0);
-        // Handedness is kept: sky y runs toward the frame's -z.
-        assert!(positions[1][0] > positions[0][0] && positions[1][2] > positions[0][2]);
-        // The Sun is where the sky's origin is: the origin of this sample.
-        let sun = scene.sun_position();
-        let d = [0, 1, 2].map(|i| (sun[i] - positions[0][i]).abs());
-        assert!(d[0] < 1.0 && d[1] < 1.0 && d[2] < 1.0, "{sun:?}");
+        // Systems without a cluster are one cluster, spread about its centre (the frame's origin)
+        // to the common radius, the clearance apart.
+        let layout = crate::galaxy::GalaxyLayout::new(&scene);
+        let from_centre = |p: &[f32; 3]| (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt();
+        let farthest = positions.iter().map(from_centre).fold(0.0, f32::max);
+        assert!((farthest - layout.cluster_radius).abs() < 1.0, "{farthest}");
+        let clearance = crate::galaxy::system_view_clearance();
+        for (i, a) in positions.iter().enumerate() {
+            for b in &positions[i + 1..] {
+                let d = (0..3).map(|k| (a[k] - b[k]).powi(2)).sum::<f32>().sqrt();
+                assert!(d >= clearance * 0.999, "{d}");
+            }
+        }
         let single = UniverseScene {
             systems: vec![scene.systems[0].clone()],
             ..UniverseScene::default()
@@ -785,7 +754,8 @@ mod tests {
     #[test]
     fn seen_from_the_sun_the_directions_are_the_skys() {
         // Three stars at known sky positions: the angle between two, from the Sun, is the same in
-        // the star-map frame as in the sky coordinates.
+        // the star-map frame (seen from the Sun, task 162: `GalaxyLayout::sky`) as in the sky
+        // coordinates.
         let mut scene = sample_scene();
         for (system, (x, y, z)) in
             scene
@@ -795,7 +765,8 @@ mod tests {
         {
             (system.x, system.y, system.z) = (x, y, z);
         }
-        let (positions, sun) = (scene.place_systems(), scene.sun_position());
+        let layout = crate::galaxy::GalaxyLayout::new(&scene);
+        let (positions, sun) = (layout.sky, scene.sun_position());
         let from_sun = |i: usize| {
             let d = [0, 1, 2].map(|k| positions[i][k] - sun[k]);
             let l = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();

@@ -273,10 +273,14 @@ pub(crate) struct SpaceLabel {
 pub(super) struct SpaceGpu {
     universe: Arc<UniverseScene>,
     home_body: Option<usize>,
+    /// Where the systems are drawn on the star map this frame ([`ZoomCamera::map_positions`]).
     map_positions: Vec<[f32; 3]>,
-    /// The median distance from a system to its nearest neighbour, map units: halos never grow
-    /// past it, so a crowded map stays readable.
-    gap: f32,
+    /// How much each system shows this frame ([`ZoomCamera::map_shown`]).
+    map_shown: Vec<crate::zoom::MapShown>,
+    /// The median distance from a system to its nearest neighbour of its cluster, in the
+    /// cluster view and on the disk, map units: halos never grow past it, so a crowded map stays
+    /// readable.
+    gap: (f32, f32),
     /// The bodies of every system placed in its frame, indexed like the systems.
     placed: Vec<Vec<PlacedBody>>,
     tints: Vec<Option<[u8; 3]>>,
@@ -424,7 +428,14 @@ impl Scene {
             universe: Arc::clone(universe),
             home_body: home_body.and_then(|id| universe.body_index(id)),
             map_positions: universe.place_systems(),
-            gap: nearest_gap(&universe.place_systems()),
+            map_shown: Vec::new(),
+            gap: {
+                let layout = crate::galaxy::GalaxyLayout::new(universe);
+                (
+                    cluster_gap(&layout, &layout.cluster),
+                    cluster_gap(&layout, &layout.disk),
+                )
+            },
             placed: universe
                 .systems
                 .iter()
@@ -523,6 +534,8 @@ impl Scene {
         let one = zoom.one_view(orbit);
         if let Some(space) = &mut self.space {
             space.labels.clear();
+            space.map_positions = zoom.map_positions();
+            space.map_shown = zoom.map_shown();
         }
         self.screen_bars.clear();
         self.screen_emblems.clear();
@@ -614,6 +627,10 @@ impl Scene {
             .enumerate()
         {
             let anchored = index == zoom.system();
+            // Only the systems the star map shows have their own detail (task 162).
+            if !anchored && space.map_shown.get(index).is_some_and(|s| s.opacity < 0.5) {
+                continue;
+            }
             let view = if anchored {
                 one.system
             } else {
@@ -1648,6 +1665,7 @@ impl Scene {
             map_ship_marks(
                 &universe,
                 &space.map_positions,
+                &space.map_shown,
                 &self.space_state.snapshot,
                 beside,
             )
@@ -1655,7 +1673,17 @@ impl Scene {
             Vec::new()
         };
         let mut drawing = rl.begin_texture_mode(thread, target);
-        let far = view.distance_to([0.0; 3]) + MAP_RADIUS * 3.0;
+        let far = view.distance_to([0.0; 3]) + zoom.map_reach() * 2.0;
+        let disk = zoom.disk();
+        let gap = space.gap.0 + (space.gap.1 - space.gap.0) * disk;
+        // The depth over which far marks fade: the cluster's, then the disk's.
+        let span = {
+            let layout = zoom.layout();
+            let cluster = layout.cluster_radius * 2.0;
+            cluster + (layout.disk_extent().1 * 2.0 - cluster).max(0.0) * disk
+        };
+        let shown = space.map_shown.clone();
+        let opacity = |i: usize| shown.get(i).map_or(1.0, |s| s.opacity);
         let near = (view.distance() * 0.01).clamp(1e-4, far * 1e-3);
         set_clip_planes(f64::from(near), f64::from(far));
         {
@@ -1668,7 +1696,7 @@ impl Scene {
                 raylib::ffi::rlDisableDepthTest();
             }
             let from_sun = zoom.sky_active();
-            let depth = |p: [f32; 3]| map_depth(&view, p, from_sun);
+            let depth = |p: [f32; 3]| map_depth(&view, p, from_sun, span);
             let mut overlay = OverlayGeometry::default();
             // The camera's own axes: the map's marks face it, as there is no plane to lay them in.
             let ahead = unit_vector(sub3(view.target, view.eye));
@@ -1683,6 +1711,7 @@ impl Scene {
                 for line in star_map_lines(
                     &universe,
                     &space.map_positions,
+                    &space.map_shown,
                     &self.space_state.snapshot,
                     zoom.constellations(),
                     from_sun,
@@ -1725,6 +1754,10 @@ impl Scene {
             for i in order {
                 let system = &universe.systems[i];
                 let pos = space.map_positions[i];
+                let shown = opacity(i);
+                if shown <= 0.004 {
+                    continue;
+                }
                 // While a system's own detail shows, its star stands for it; as the detail
                 // fades the star's glow swells into the map's halo.
                 let own = system_detail(SYSTEM_RADIUS * k / view.distance_to(pos).max(1e-6));
@@ -1745,11 +1778,14 @@ impl Scene {
                 // Perspective makes far systems smaller; a system the camera flies close by
                 // stops growing at a size that still leaves the picture readable.
                 let widest = view.per_pixel(pos, height) * MAP_HALO_MAX_PIXELS;
-                let halo_size = halo_size.min(space.gap * 0.8).min(widest);
+                // Never under a few pixels: on the disk a cluster's stars stay points of light.
+                let least = view.per_pixel(pos, height) * MAP_STAR_LEAST_PIXELS;
+                let halo_size = halo_size.min(gap * 0.8).min(widest).max(least * 2.0);
                 let core_size = CORE_SIZE
                     .max(grow * 0.3)
-                    .min(space.gap * 0.25)
-                    .min(widest * 0.3);
+                    .min(gap * 0.25)
+                    .min(widest * 0.3)
+                    .max(least);
                 // From inside a system the others are points of light in the sky, as bright
                 // as the sky lets them be; out on the map they are halos.
                 let point = view.per_pixel(pos, height) * SKY_STAR_PIXELS;
@@ -1768,8 +1804,8 @@ impl Scene {
                     )
                 };
                 let near = depth(pos);
-                let halo_alpha = halo_alpha * seen * swell * near;
-                let core_alpha = 255.0 * seen * swell * (0.5 + 0.5 * near);
+                let halo_alpha = halo_alpha * seen * swell * near * shown;
+                let core_alpha = 255.0 * seen * swell * (0.5 + 0.5 * near) * shown;
                 if halo_alpha < 1.0 {
                     continue;
                 }
@@ -1875,6 +1911,9 @@ impl Scene {
                 for (index, owner, rank) in
                     map_colony_rings(&universe, &self.space_state.snapshot.colonies)
                 {
+                    if opacity(index) < 0.5 {
+                        continue;
+                    }
                     let [r, g, b] = owner_rgb(owner);
                     let at = space.map_positions[index];
                     let radius = icon * (3.3 + 0.6 * f32::from(rank));
@@ -1886,7 +1925,10 @@ impl Scene {
                 // Jump inhibitors: a six-sided ring round the system they hold, red for an
                 // enemy's, the owner's colour for one's own.
                 for hold in &self.space_state.snapshot.holds {
-                    let Some(index) = universe.system_index(hold.system) else {
+                    let Some(index) = universe
+                        .system_index(hold.system)
+                        .filter(|&i| opacity(i) >= 0.5)
+                    else {
                         continue;
                     };
                     let [r, g, b] = if hold.enemy {
@@ -1908,7 +1950,10 @@ impl Scene {
                 // attack or foreign ships jumped in.
                 let pulse = crate::space::alert_pulse();
                 for alert in &self.space_state.snapshot.alerts {
-                    let Some(index) = universe.system_index(alert.system) else {
+                    let Some(index) = universe
+                        .system_index(alert.system)
+                        .filter(|&i| opacity(i) >= 0.5)
+                    else {
                         continue;
                     };
                     let [r, g, b, _] = alert.kind.colour();
@@ -1932,7 +1977,7 @@ impl Scene {
                 }
                 // The celestial home: its disc as a tilted orange ring about the point of light.
                 for (index, system) in universe.systems.iter().enumerate() {
-                    if !system.celestial {
+                    if !system.celestial || opacity(index) < 0.5 {
                         continue;
                     }
                     let at = space.map_positions[index];
@@ -1953,6 +1998,44 @@ impl Scene {
                         at,
                     ));
                 }
+                // A cluster under the pointer: a ring about its footprint on the disk, or about
+                // the exit of the routes toward it in the cluster view.
+                if let Some(SpaceHover::Target(Target::Cluster(group))) = self.space_state.hover
+                    && let Some(g) = zoom.layout().groups.get(group)
+                {
+                    let at = if zoom.on_disk() {
+                        Some((g.centre, g.room.max(icon * 4.0)))
+                    } else {
+                        zoom.layout()
+                            .exits(&universe, zoom.anchored_group())
+                            .iter()
+                            .find(|e| zoom.layout().group[e.0] == group)
+                            .map(|e| (space.map_positions[e.0], icon * 4.0))
+                    };
+                    if let Some((at, radius)) = at {
+                        overlay.tris.extend(face(
+                            annulus(at, radius, icon * 0.4, [255, 230, 160, 230], 48),
+                            at,
+                        ));
+                    }
+                }
+                // The galaxy view marks the four galactic quadrants: faint lines from the Sun
+                // along longitudes 0, 90, 180 and 270 degrees.
+                let sectors = zoom.scale().sectors(zoom.l()) * f32::from(!from_sun);
+                if sectors > 0.004 {
+                    let (middle, reach) = zoom.layout().disk_extent();
+                    let sun = zoom.layout().sun;
+                    let length = length3(sub3(middle, sun)) + reach * 1.1;
+                    for quarter in 0..4 {
+                        let angle = std::f32::consts::FRAC_PI_2 * quarter as f32;
+                        let way = [angle.cos(), 0.0, -angle.sin()];
+                        overlay.lines.push(crate::overlay::Line3 {
+                            a: sun,
+                            b: [0, 1, 2].map(|k| sun[k] + way[k] * length),
+                            colour: [120, 150, 200, (110.0 * sectors) as u8],
+                        });
+                    }
+                }
             }
             fade_overlay(&mut overlay, detail);
             super::draw_overlay(&mut world, &overlay);
@@ -1971,6 +2054,12 @@ impl Scene {
         let centre_y = self.projection_centre_y;
         let look = view.view((width, height), centre_y);
         for (i, system) in universe.systems.iter().enumerate() {
+            // System names in the cluster view; on the disk the clusters are named instead.
+            let named = opacity(i) * (1.0 - disk);
+            if named < 0.05 {
+                continue;
+            }
+            let detail = detail * named;
             let Some((x, y, depth)) = look.project(space.map_positions[i]) else {
                 continue;
             };
@@ -1990,7 +2079,8 @@ impl Scene {
                 let per_pixel = view.per_pixel(space.map_positions[i], height).max(1e-9);
                 let rings = icon * 3.9 / per_pixel;
                 let clear = (halo_pixels * 0.5).max(rings) + 3.0 * scale;
-                let opacity = detail * map_depth(&view, space.map_positions[i], zoom.sky_active());
+                let opacity =
+                    detail * map_depth(&view, space.map_positions[i], zoom.sky_active(), span);
                 self.screen_emblems.extend(crate::capitals::row_leftward(
                     &owners,
                     (x - clear, y),
@@ -2038,7 +2128,9 @@ impl Scene {
                     rgb[0],
                     rgb[1],
                     rgb[2],
-                    (235.0 * detail * map_depth(&view, space.map_positions[i], zoom.sky_active()))
+                    (235.0
+                        * detail
+                        * map_depth(&view, space.map_positions[i], zoom.sky_active(), span))
                         as u8,
                 ],
                 priority: if home.is_some() {
@@ -2048,10 +2140,92 @@ impl Scene {
                 },
             });
         }
-        // Each constellation once, faintly, over the middle of its member systems.
+        // Each cluster on the disk, named over its stars (task 162); in the cluster view each
+        // cluster a route leaves for, named at the route's exit.
+        let layout = zoom.layout();
+        if disk > 0.05 {
+            for group in &layout.groups {
+                let Some((x, y, depth)) = look.project(group.centre) else {
+                    continue;
+                };
+                if x < 0.0 || y < 0.0 || x > width || y > height {
+                    continue;
+                }
+                let room = group.room / depth * height / (2.0 * look.tan());
+                let home = group.members.iter().find_map(|&i| space.tints[i]);
+                let rgb = home.unwrap_or(if group.celestial {
+                    CELESTIAL_RGB
+                } else {
+                    [200, 215, 235]
+                });
+                space.labels.push(SpaceLabel {
+                    icon: None,
+                    text: group.name.clone(),
+                    x: x + room.max(6.0) * 0.7,
+                    y: y + room.max(6.0) * 0.5,
+                    colour: [rgb[0], rgb[1], rgb[2], (235.0 * detail * disk) as u8],
+                    // Homes first, then the larger clusters.
+                    priority: if home.is_some() {
+                        -1.0
+                    } else {
+                        1.0 - group.members.len() as f32 * 0.1
+                    },
+                });
+            }
+        }
+        if disk < 0.95 && !zoom.sky_active() {
+            let mut named = Vec::new();
+            for (i, _) in layout.exits(&universe, zoom.anchored_group()) {
+                let group = layout.group[i];
+                if named.contains(&group) {
+                    continue;
+                }
+                named.push(group);
+                let Some((x, y, _)) = look.project(space.map_positions[i]) else {
+                    continue;
+                };
+                if x < 0.0 || y < 0.0 || x > width || y > height {
+                    continue;
+                }
+                space.labels.push(SpaceLabel {
+                    icon: None,
+                    text: format!("to {}", layout.groups[group].name),
+                    x: x + 8.0,
+                    y: y - 6.0,
+                    colour: [170, 190, 225, (220.0 * detail * (1.0 - disk)) as u8],
+                    priority: 0.5,
+                });
+            }
+        }
+        let sectors = zoom.scale().sectors(zoom.l()) * f32::from(!zoom.sky_active());
+        if sectors > 0.05 {
+            let (middle, reach) = layout.disk_extent();
+            let sun = layout.sun;
+            let length = length3(sub3(middle, sun)) + reach * 1.1;
+            for (quarter, name) in ["I", "II", "III", "IV"].into_iter().enumerate() {
+                let angle = std::f32::consts::FRAC_PI_4 * (2 * quarter + 1) as f32;
+                let way = [angle.cos(), 0.0, -angle.sin()];
+                let at = [0, 1, 2].map(|k| sun[k] + way[k] * length * 0.55);
+                let Some((x, y, _)) = look.project(at) else {
+                    continue;
+                };
+                if x < 0.0 || y < 0.0 || x > width || y > height {
+                    continue;
+                }
+                space.labels.push(SpaceLabel {
+                    icon: None,
+                    text: format!("QUADRANT {name}"),
+                    x: x - 30.0,
+                    y,
+                    colour: [140, 170, 220, (170.0 * sectors) as u8],
+                    priority: 2.0,
+                });
+            }
+        }
+        // From the Sun, each constellation once, faintly, over the middle of its member systems.
         let mut members: std::collections::BTreeMap<&str, Vec<[f32; 3]>> = Default::default();
         for (i, system) in universe.systems.iter().enumerate() {
-            if !system.constellation.is_empty() {
+            if !system.constellation.is_empty() && zoom.sky_active() {
                 members
                     .entry(system.constellation.as_str())
                     .or_default()
@@ -2125,8 +2299,8 @@ impl Scene {
 /// Share of a star-map mark's brightness that its depth leaves it, seen through `view`: 1 at
 /// the near side of the map, down to `FAR_FADE` at the far side, so near systems read as near
 /// (1 everywhere from the Sun).
-fn map_depth(view: &FrameView, p: [f32; 3], from_sun: bool) -> f32 {
-    let t = ((view.distance_to(p) - view.distance()) / (2.0 * MAP_RADIUS) + 0.5).clamp(0.0, 1.0);
+fn map_depth(view: &FrameView, p: [f32; 3], from_sun: bool, span: f32) -> f32 {
+    let t = ((view.distance_to(p) - view.distance()) / span.max(1.0) + 0.5).clamp(0.0, 1.0);
     if from_sun {
         1.0
     } else {
@@ -2168,27 +2342,36 @@ fn unit_vector(v: [f32; 3]) -> [f32; 3] {
     v.map(|c| c / length)
 }
 
-/// The median distance from a point to its nearest neighbour; the whole map's size for fewer
-/// than two points.
-fn nearest_gap(points: &[[f32; 3]]) -> f32 {
-    if points.len() < 2 {
-        return MAP_RADIUS * 2.0;
-    }
-    let mut nearest: Vec<f32> = points
+/// The median distance from a system at `points` to its nearest neighbour of its own cluster;
+/// the whole map's size when no cluster has two systems.
+fn cluster_gap(layout: &crate::galaxy::GalaxyLayout, points: &[[f32; 3]]) -> f32 {
+    let mut nearest: Vec<f32> = layout
+        .groups
         .iter()
-        .enumerate()
-        .map(|(i, p)| {
-            points
-                .iter()
-                .enumerate()
-                .filter(|&(j, _)| j != i)
-                .map(|(_, q)| (0..3).map(|k| (p[k] - q[k]).powi(2)).sum::<f32>().sqrt())
-                .fold(f32::MAX, f32::min)
+        .flat_map(|g| {
+            g.members.iter().filter_map(|&i| {
+                g.members
+                    .iter()
+                    .filter(|&&j| j != i)
+                    .map(|&j| length3(sub3(points[i], points[j])))
+                    .reduce(f32::min)
+            })
         })
         .collect();
+    if nearest.is_empty() {
+        return MAP_RADIUS * 2.0;
+    }
     nearest.sort_by(f32::total_cmp);
     nearest[nearest.len() / 2]
 }
+
+fn length3(v: [f32; 3]) -> f32 {
+    (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt()
+}
+
+/// Least size of a star on the star map, in pixels (its core; its halo twice that): on the disk
+/// a cluster's stars stay points of light.
+const MAP_STAR_LEAST_PIXELS: f32 = 1.6;
 
 /// Least detail at which another system gets a pass of its own: below it every layer of the
 /// pass is barely visible, and the star map's halo stands for the system.

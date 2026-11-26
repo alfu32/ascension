@@ -1,4 +1,5 @@
-//! Continuous zoom across four presentation levels: surface, globe, star system and star map.
+//! Continuous zoom across the presentation levels: surface and globe (the planet), star system,
+//! and beyond a system the cluster, quadrant and galaxy views (task 162, [`crate::galaxy`]).
 //!
 //! The camera keeps one log-distance value `l` and is one perspective camera at every distance
 //! ([`ZoomCamera::one_view`]): near the planet the planet camera, farther out the space camera
@@ -15,14 +16,18 @@
 //! frame), then eases to the plane's own pose as it moves out. The star map has no plane (task
 //! 79): it starts from the system camera's pose, and from there the camera flies free through
 //! the stars, its focus a free point in space and its turns about its own axes; entering a
-//! system eases it back to that system's plane. The wheel glides step by step; every change of
-//! place is a flight of short legs, interrupted by input.
+//! system eases it back to that system's plane. Beyond a system the star map shows one cluster
+//! in 3D (the cluster view), then the anchored cluster flattens onto the galactic disk where the
+//! others join it (the quadrant and galaxy views); a level that would show a single item is
+//! skipped ([`crate::galaxy::Ladder`]). The wheel glides step by step; every change of place is
+//! a flight of short legs, interrupted by input.
 
 use std::sync::Arc;
 
 use std::collections::VecDeque;
 
 use crate::camera::TurnSettings;
+use crate::galaxy::{DISK_ELEVATION, GalaxyLayout, LEVEL_GAP, Ladder, MORPH_SPAN};
 pub use crate::layers::Fades;
 use crate::layers::{FrameView, OneView, PlanetPlace, SystemPlace};
 use crate::orbit::{MIN_DISTANCE, OrbitCamera};
@@ -40,8 +45,6 @@ pub const SURFACE_DISTANCE: f32 = 24.0;
 pub const SYSTEM_MAX_DISTANCE: f32 = 48_000.0;
 /// Star-map camera distance at the hand-over from the system frame, in map units.
 pub const MAP_MIN_DISTANCE: f32 = 5000.0;
-/// Star-map camera distance at which the whole map fits the view, in map units.
-pub const MAP_MAX_DISTANCE: f32 = 230_000.0;
 /// Elevation of the space camera above the plane, in degrees, until the player sets another:
 /// the first hand-over from the planet eases to it, and the system view and the star map keep
 /// whatever elevation the player sets after that (task 74: a low, spectacular angle).
@@ -55,6 +58,9 @@ const WHEEL_LOG: f32 = 0.182_321_56;
 /// Log-distance change per wheel step in space (a factor of 1.4), where the distances are
 /// larger; the step grows smoothly from the ground's as the planet camera nears its limit.
 const SPACE_WHEEL_LOG: f32 = 0.336_472_24;
+/// Log-distance change per wheel step beyond a system (a factor of about 1.65), where the levels
+/// span far more: reached over one log unit past the system's hand-over.
+const MAP_WHEEL_LOG: f32 = 0.5;
 /// Seconds a wheel step takes to ease the camera distance most of the way (95 percent) to its
 /// goal; a new step during the glide retargets it.
 pub const WHEEL_GLIDE_SECONDS: f32 = 0.2;
@@ -114,27 +120,53 @@ pub enum Level {
     Globe,
     /// A star with its planets and resource bodies.
     System,
-    /// The systems and the routes between them.
-    StarMap,
+    /// The cluster view: the few systems of one star cluster, as stars, and the routes between
+    /// them (task 162).
+    Cluster,
+    /// The quadrant view: the clusters of a galactic quadrant on the disk.
+    Quadrant,
+    /// The galaxy view: every cluster of the match on the disk, the quadrants marked.
+    Galaxy,
 }
 
 impl Level {
     /// All levels from the closest to the farthest.
-    pub const ALL: [Level; 4] = [Level::Surface, Level::Globe, Level::System, Level::StarMap];
+    pub const ALL: [Level; 6] = [
+        Level::Surface,
+        Level::Globe,
+        Level::System,
+        Level::Cluster,
+        Level::Quadrant,
+        Level::Galaxy,
+    ];
 
     /// Position in [`Level::ALL`].
     pub fn index(self) -> usize {
         self as usize
     }
 
-    /// Parses the name used on the command line: `surface`, `globe`, `system` or `starmap`.
+    /// Parses the name used on the command line: `surface`, `globe`, `system`, `cluster`,
+    /// `quadrant` or `galaxy`; `starmap` is the widest view, as it was before the clusters.
     pub fn from_name(name: &str) -> Option<Self> {
         match name.to_ascii_lowercase().as_str() {
             "surface" => Some(Self::Surface),
             "globe" => Some(Self::Globe),
             "system" => Some(Self::System),
-            "starmap" | "star-map" | "map" => Some(Self::StarMap),
+            "cluster" => Some(Self::Cluster),
+            "quadrant" => Some(Self::Quadrant),
+            "galaxy" | "starmap" | "star-map" | "map" => Some(Self::Galaxy),
             _ => None,
+        }
+    }
+
+    /// The level's name on screen: "Cluster view" and so on.
+    pub fn title(self) -> &'static str {
+        match self {
+            Self::Surface | Self::Globe => "Planet",
+            Self::System => "Star system",
+            Self::Cluster => "Cluster view",
+            Self::Quadrant => "Quadrant view",
+            Self::Galaxy => "Galaxy view",
         }
     }
 }
@@ -166,13 +198,19 @@ pub struct ZoomScale {
     pub globe_max: f32,
     /// `l` of the globe-to-system hand-over.
     pub l_globe_system: f32,
-    /// `l` of the system-to-map hand-over.
+    /// `l` of the system-to-map hand-over: the cluster view begins.
     pub l_system_map: f32,
-    /// `l` at which the whole star map fits.
+    /// `l` at which the whole cluster fits: the quadrant view (or the galaxy view) begins and
+    /// the cluster starts to flatten onto the disk.
+    pub l_cluster: f32,
+    /// `l` at which the widest quadrant fits: the galaxy view begins (`l_cluster` when the
+    /// match has no quadrant level).
+    pub l_quadrant: f32,
+    /// `l` of the widest zoom: the whole galaxy, or the whole cluster for a match of one, or
+    /// the whole system for a match of one system.
     pub l_end: f32,
-    /// Star-map camera distance at `l_end`, in map units: [`MAP_MAX_DISTANCE`] or, for a wider
-    /// universe, the distance that fits it.
-    pub map_max: f32,
+    /// The widest zoom of each level beyond a system, in map units.
+    pub ladder: Ladder,
     /// System camera distance at the globe-to-system hand-over.
     pub system_min: f32,
 }
@@ -185,35 +223,60 @@ impl ZoomScale {
         let l_globe_system = globe_max.max(MIN_DISTANCE).ln() + FADE_HALF;
         let system_min = HOME_PLANET_RADIUS / planet_radius.max(1.0) * l_globe_system.exp();
         let l_system_map = l_globe_system + (SYSTEM_MAX_DISTANCE / system_min).ln();
-        let l_end = l_system_map + (MAP_MAX_DISTANCE / MAP_MIN_DISTANCE).ln();
         Self {
             planet_radius,
             globe_max,
             l_globe_system,
             l_system_map,
-            l_end,
-            map_max: MAP_MAX_DISTANCE,
+            l_cluster: l_system_map,
+            l_quadrant: l_system_map,
+            l_end: l_system_map,
+            ladder: Ladder::default(),
             system_min,
+        }
+        .with_ladder(Ladder::default())
+    }
+
+    /// The scale with the levels beyond a system at `ladder`'s widest zooms.
+    pub fn with_ladder(mut self, ladder: Ladder) -> Self {
+        let at = |distance: f32| self.l_system_map + (distance / MAP_MIN_DISTANCE).max(1.0).ln();
+        self.ladder = ladder;
+        self.l_cluster = ladder
+            .cluster
+            .map_or(self.l_system_map - FADE_HALF, |d| at(d));
+        self.l_quadrant = ladder.quadrant.map_or(self.l_cluster, |d| at(d));
+        self.l_end = ladder.galaxy.map_or(self.l_cluster, |d| at(d));
+        self
+    }
+
+    /// Whether the match has levels beyond its systems' (more than one system).
+    pub fn beyond_systems(&self) -> bool {
+        self.ladder.cluster.is_some()
+    }
+
+    /// Whether the match has the disk: the quadrant and galaxy views (more than one cluster).
+    pub fn has_disk(&self) -> bool {
+        self.ladder.galaxy.is_some()
+    }
+
+    /// How far the anchored cluster has flattened onto the disk at `l`: 0 up to the whole
+    /// cluster, 1 [`MORPH_SPAN`] past it; always 0 without a disk.
+    pub fn disk(&self, l: f32) -> f32 {
+        if self.has_disk() {
+            smoothstep((l - self.l_cluster) / MORPH_SPAN)
+        } else {
+            0.0
         }
     }
 
-    /// The scale with the star map's widest zoom following the universe: `reach` is the radius in
-    /// map units of the region the systems fill (margin included). The cap keeps the ratio
-    /// [`MAP_MAX_DISTANCE`] has to [`MAP_RADIUS`] and is never less than [`MAP_MAX_DISTANCE`].
-    pub fn fitted_to(self, reach: f32) -> Self {
-        let wanted = reach * (MAP_MAX_DISTANCE / MAP_RADIUS);
-        self.with_map_max(if wanted.is_finite() {
-            wanted.max(MAP_MAX_DISTANCE)
+    /// How much of the galaxy view's quadrant marks shows at `l`: they fade in over the last
+    /// [`LEVEL_GAP`] before the widest zoom.
+    pub fn sectors(&self, l: f32) -> f32 {
+        if self.has_disk() {
+            smoothstep((l - (self.l_end - LEVEL_GAP)) / LEVEL_GAP)
         } else {
-            MAP_MAX_DISTANCE
-        })
-    }
-
-    /// The scale with the star map's widest zoom at `map_max` map units.
-    pub fn with_map_max(mut self, map_max: f32) -> Self {
-        self.map_max = map_max.max(MAP_MAX_DISTANCE);
-        self.l_end = self.l_system_map + (self.map_max / MAP_MIN_DISTANCE).ln();
-        self
+            0.0
+        }
     }
 
     /// Smallest `l`: the closest planet camera.
@@ -226,7 +289,9 @@ impl ZoomScale {
         match level {
             Level::Surface | Level::Globe => self.globe_max.max(MIN_DISTANCE).ln(),
             Level::System => self.l_system_map - FADE_HALF,
-            Level::StarMap => self.l_end,
+            Level::Cluster => self.l_cluster,
+            Level::Quadrant => self.l_quadrant,
+            Level::Galaxy => self.l_end,
         }
     }
 
@@ -238,8 +303,12 @@ impl ZoomScale {
             Level::Globe
         } else if l < self.l_system_map {
             Level::System
+        } else if !self.has_disk() || l < self.l_cluster {
+            Level::Cluster
+        } else if l < self.l_quadrant {
+            Level::Quadrant
         } else {
-            Level::StarMap
+            Level::Galaxy
         }
     }
 
@@ -391,6 +460,11 @@ impl MapRegion {
     /// The sphere about the middle of `systems` (star-map positions) that holds them all, with
     /// [`REGION_MARGIN`] to spare; around the origin when there are none.
     pub fn around(systems: &[[f32; 3]]) -> Self {
+        Self::around_with(systems, REGION_MARGIN)
+    }
+
+    /// The sphere about the middle of `systems` that holds them all, with `margin` to spare.
+    pub fn around_with(systems: &[[f32; 3]], margin: f32) -> Self {
         let Some(first) = systems.first() else {
             return Self {
                 centre: [0.0; 3],
@@ -411,7 +485,7 @@ impl MapRegion {
             .fold(0.0, f32::max);
         Self {
             centre,
-            radius: reach + REGION_MARGIN,
+            radius: reach + margin,
         }
     }
 
@@ -545,6 +619,18 @@ pub enum Target {
     Body(usize),
     /// The system at this index of [`UniverseScene::systems`].
     System(usize),
+    /// The cluster at this index of [`GalaxyLayout::groups`]: on the disk, or a route's exit
+    /// toward it in the cluster view (task 162).
+    Cluster(usize),
+}
+
+/// How much a system shows on the star map ([`ZoomCamera::map_shown`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MapShown {
+    /// Its star, its name and its marks, 0 to 1.
+    pub opacity: f32,
+    /// Its routes and the ships on them, 0 to 1.
+    pub reach: f32,
 }
 
 /// A place the camera can be asked to fly to: where a ship is, at the level it is seen at.
@@ -673,7 +759,8 @@ struct SkyLook {
 pub struct ZoomCamera {
     scene: Arc<UniverseScene>,
     scale: ZoomScale,
-    map_positions: Vec<[f32; 3]>,
+    /// Where the systems stand beyond a system: the cluster view, the disk, the sky.
+    layout: Arc<GalaxyLayout>,
     /// The Sun in the star-map frame: the sky's origin, where "Sky from the Sun" puts the eye.
     sun: [f32; 3],
     /// The "Sky from the Sun" preset, when it is on.
@@ -754,19 +841,10 @@ impl ZoomCamera {
                 scale.globe_max,
             )
         });
-        let map_positions = scene.place_systems();
-        // The widest star-map zoom takes in every system of the match: the farthest from the middle
-        // of them. The celestial home lies beyond them by design and is left out.
-        let material: Vec<[f32; 3]> = scene
-            .systems
-            .iter()
-            .zip(&map_positions)
-            .filter(|(system, _)| !system.celestial)
-            .map(|(_, at)| *at)
-            .collect();
-        let region = MapRegion::around(&material);
-        let scale = scale.fitted_to(region.radius - REGION_MARGIN);
-        let sun = scene.sun_position();
+        // The levels beyond a system follow the universe: its clusters and their quadrants.
+        let layout = Arc::new(GalaxyLayout::new(&scene));
+        let scale = scale.with_ladder(layout.ladder);
+        let sun = layout.sun;
         let placed = scene
             .systems
             .get(system)
@@ -775,7 +853,7 @@ impl ZoomCamera {
         let mut camera = Self {
             scene,
             scale,
-            map_positions,
+            layout,
             sun,
             sky: None,
             constellations: false,
@@ -848,9 +926,91 @@ impl ZoomCamera {
         self.scene = Arc::new(scene);
     }
 
-    /// Star-map positions of the systems, indexed like the scene's systems.
-    pub fn map_positions(&self) -> &[[f32; 3]] {
-        &self.map_positions
+    /// Where the systems stand beyond a system (task 162).
+    pub fn layout(&self) -> &GalaxyLayout {
+        &self.layout
+    }
+
+    /// The cluster the view is anchored to: the group of the anchored system in
+    /// [`GalaxyLayout::groups`].
+    pub fn anchored_group(&self) -> usize {
+        self.layout.group.get(self.system).copied().unwrap_or(0)
+    }
+
+    /// How far the anchored cluster has flattened onto the disk now (0 in the cluster view, 1 on
+    /// the disk; 0 from the Sun).
+    pub fn disk(&self) -> f32 {
+        if self.sky.is_some() {
+            0.0
+        } else {
+            self.scale.disk(self.l)
+        }
+    }
+
+    /// Star-map positions of the systems where they are drawn now, indexed like the scene's
+    /// systems: in the cluster view the anchored cluster's systems in 3D and the routes' exits,
+    /// flattening onto the disk as the camera moves out ([`GalaxyLayout::positions`]); from the
+    /// Sun every system at its true place.
+    pub fn map_positions(&self) -> Vec<[f32; 3]> {
+        if self.sky.is_some() {
+            return self.layout.sky.clone();
+        }
+        self.layout
+            .positions(&self.scene, self.anchored_group(), self.disk())
+    }
+
+    /// How much each system shows on the star map now, indexed like the scene's systems: its
+    /// star and name (`opacity`, 0 to 1) and whether its routes and ships are drawn (`reach`):
+    /// the anchored cluster's systems fully, a route's exit only as the far end of its route,
+    /// the other clusters' systems as they join on the disk.
+    pub fn map_shown(&self) -> Vec<MapShown> {
+        let n = self.scene.systems.len();
+        if self.sky.is_some() {
+            return vec![
+                MapShown {
+                    opacity: 1.0,
+                    reach: 1.0
+                };
+                n
+            ];
+        }
+        let anchored = self.anchored_group();
+        let join = smoothstep((self.disk() - 0.35) / 0.65);
+        let exits = self.layout.exits(&self.scene, anchored);
+        (0..n)
+            .map(|i| {
+                if self.layout.group[i] == anchored {
+                    MapShown {
+                        opacity: 1.0,
+                        reach: 1.0,
+                    }
+                } else if exits.iter().any(|e| e.0 == i) {
+                    MapShown {
+                        opacity: join,
+                        reach: 1.0,
+                    }
+                } else {
+                    MapShown {
+                        opacity: join,
+                        reach: join,
+                    }
+                }
+            })
+            .collect()
+    }
+
+    /// How far the star map's drawing reaches from the frame's origin, map units: the far clip
+    /// of the map's camera.
+    pub fn map_reach(&self) -> f32 {
+        let (_, disk) = self.layout.disk_extent();
+        disk.max(self.layout.cluster_radius * 4.0)
+            + self
+                .layout
+                .sky
+                .iter()
+                .chain(&self.layout.cluster)
+                .map(|p| length3(*p))
+                .fold(0.0, f32::max)
     }
 
     /// The Sun in the star-map frame.
@@ -882,7 +1042,7 @@ impl ZoomCamera {
             self.l = sky.back_to.clamp(self.l_min(), self.l_cap());
             return true;
         }
-        if self.cap < Level::StarMap || self.scene.systems.is_empty() {
+        if self.cap < Level::Cluster || !self.scale.beyond_systems() {
             return false;
         }
         let toward = unit3(scale3(self.sun, -1.0)).unwrap_or([1.0, 0.0, 0.0]);
@@ -891,7 +1051,7 @@ impl ZoomCamera {
             pitch: toward[1].clamp(-1.0, 1.0).asin(),
             back_to: self.l,
         });
-        self.l = self.scale.l_cap(Level::StarMap).min(self.l_cap());
+        self.l = self.scale.l_cap(Level::Cluster).min(self.l_cap());
         self.constellations = true;
         true
     }
@@ -909,7 +1069,7 @@ impl ZoomCamera {
             target: add3(self.sun, scale3(dir, SKY_TARGET_DISTANCE)),
             up: UP,
             near: 100.0,
-            far: length3(self.sun) + MAP_RADIUS * 3.0,
+            far: self.map_reach() * 2.0,
         })
     }
 
@@ -1115,8 +1275,11 @@ impl ZoomCamera {
         self.scale.map_per_system()
     }
 
+    /// The anchored system's place in the cluster view: where the system frame sits on the
+    /// star map, whatever the zoom draws.
     fn here(&self) -> [f32; 3] {
-        self.map_positions
+        self.layout
+            .cluster
             .get(self.system)
             .copied()
             .unwrap_or([0.0; 3])
@@ -1154,7 +1317,7 @@ impl ZoomCamera {
             globe_radius * HOME_PLANET_RADIUS / drawn.max(1.0),
             max_distance,
         )
-        .with_map_max(self.scale.map_max);
+        .with_ladder(self.scale.ladder);
         self.surface_body = Some(index);
         if self.want_surface == Some(body) {
             self.want_surface = None;
@@ -1218,7 +1381,8 @@ impl ZoomCamera {
         let to = s.l_globe_system + FADE_HALF;
         let from = s.globe_max.max(MIN_DISTANCE).ln() - SPACE_WHEEL_RAMP;
         let t = smoothstep((l - from) / (to - from).max(1e-3));
-        WHEEL_LOG + (SPACE_WHEEL_LOG - WHEEL_LOG) * t
+        let out = smoothstep(l - s.l_system_map);
+        WHEEL_LOG + (SPACE_WHEEL_LOG - WHEEL_LOG) * t + (MAP_WHEEL_LOG - SPACE_WHEEL_LOG) * out
     }
 
     /// The log-distance `steps` wheel steps in (positive) or out from `l`, without limits; each
@@ -1246,7 +1410,7 @@ impl ZoomCamera {
 
     /// The view of the frame the level shows: the system or the star map.
     pub fn space_view_at(&self, orbit: &OrbitCamera, canvas: (f32, f32), centre_y: f32) -> View {
-        if self.level() >= Level::StarMap {
+        if self.level() >= Level::Cluster {
             self.map_view(orbit).view(canvas, centre_y)
         } else {
             self.system_view(orbit).view(canvas, centre_y)
@@ -1264,7 +1428,7 @@ impl ZoomCamera {
 
     /// What the point under the pointer is at the level shown now.
     fn grip(&self) -> Grip {
-        if self.level() >= Level::StarMap {
+        if self.level() >= Level::Cluster {
             Grip::Map {
                 free: self.l >= self.enter_l(),
             }
@@ -1322,7 +1486,7 @@ impl ZoomCamera {
     /// that reason too, and holding it would throw the focus far off at a low elevation).
     fn zooms_to_cursor(&self) -> bool {
         match self.level() {
-            Level::StarMap => true,
+            Level::Cluster | Level::Quadrant | Level::Galaxy => true,
             Level::System => {
                 !self.pans_planet() && self.pan_weight() > 0.2 && self.handover_weight() >= 1.0
             }
@@ -1446,19 +1610,20 @@ impl ZoomCamera {
         } else {
             None
         };
-        let map = level >= Level::StarMap;
-        // On the star map a system under the cursor is zoomed toward wherever it lies in depth:
-        // the picture scales about it, so it stays under the cursor.
+        let map = level >= Level::Cluster;
+        // On the star map a system (or a cluster on the disk) under the cursor is zoomed toward
+        // wherever it lies in depth: the picture scales about it, so it stays under the cursor.
         let toward = match (map, cursor) {
             (true, Some(c)) => {
                 let view = self.map_view(orbit).view(canvas, centre_y);
-                match self.target_at(&view, c.0, c.1) {
-                    Some(Target::System(i)) => Some(scale3(
-                        sub3(self.map_positions[i], self.here()),
-                        1.0 / self.k(),
-                    )),
+                let at = match self.target_at(&view, c.0, c.1) {
+                    Some(Target::System(i)) => self.map_positions().get(i).copied(),
+                    Some(Target::Cluster(g)) if self.disk() >= 0.5 => {
+                        self.layout.groups.get(g).map(|g| g.centre)
+                    }
                     _ => None,
-                }
+                };
+                at.map(|at| scale3(sub3(at, self.here()), 1.0 / self.k()))
             }
             _ => None,
         };
@@ -1474,6 +1639,7 @@ impl ZoomCamera {
             None
         };
         let threshold = self.enter_l();
+        let cluster_edge = self.scale.l_cluster;
         let before = self.l;
         let focus = self.system_target(orbit);
         self.l = (self.l + dl).clamp(self.l_min(), self.l_cap());
@@ -1508,6 +1674,9 @@ impl ZoomCamera {
                 self.pan = add3(self.pan, scale3(sub3(held, now), 1.0 / weight));
                 self.clamp_pan_in(map);
             }
+        }
+        if self.scale.has_disk() && before >= cluster_edge && self.l < cluster_edge {
+            self.enter_nearest_cluster(orbit);
         }
         if before >= threshold && self.l < threshold {
             self.enter_nearest_system(orbit);
@@ -1578,20 +1747,53 @@ impl ZoomCamera {
         }
     }
 
-    /// Re-anchors on the system nearest the star-map focus, keeping the picture.
+    /// Re-anchors on the cluster whose footprint on the disk lies nearest the star-map focus
+    /// (on its system nearest the focus), keeping the picture: zooming in from the disk enters
+    /// the cluster view of the cluster looked at.
+    fn enter_nearest_cluster(&mut self, orbit: &OrbitCamera) {
+        let focus = sub3(self.map_target(orbit), scale3(self.offset, self.k()));
+        let Some(group) = self.layout.nearest_group(focus) else {
+            return;
+        };
+        if group == self.anchored_group() {
+            return;
+        }
+        let Some(index) = self.layout.groups[group]
+            .members
+            .iter()
+            .copied()
+            .min_by(|&a, &b| {
+                let d = |i: usize| length3(sub3(self.layout.cluster[i], focus));
+                d(a).total_cmp(&d(b)).then(a.cmp(&b))
+            })
+        else {
+            return;
+        };
+        let wanted = scale3(sub3(focus, self.layout.cluster[index]), 1.0 / self.k());
+        let kept = self.offset;
+        self.set_system(index);
+        self.pan = wanted;
+        self.offset = kept;
+    }
+
+    /// Re-anchors on the system of the anchored cluster nearest the star-map focus, keeping the
+    /// picture.
     fn enter_nearest_system(&mut self, orbit: &OrbitCamera) {
         let focus = sub3(self.map_target(orbit), scale3(self.offset, self.k()));
+        let anchored = self.anchored_group();
         let nearest = self
-            .map_positions
+            .layout
+            .cluster
             .iter()
             .enumerate()
+            .filter(|(i, _)| self.layout.group[*i] == anchored)
             .map(|(i, p)| (i, length3(sub3(*p, focus))))
             .min_by(|a, b| a.1.total_cmp(&b.1))
             .map(|(i, _)| i);
         if let Some(index) = nearest
             && index != self.system
         {
-            let wanted = scale3(sub3(focus, self.map_positions[index]), 1.0 / self.k());
+            let wanted = scale3(sub3(focus, self.layout.cluster[index]), 1.0 / self.k());
             let kept = scale3(self.offset, 1.0);
             self.set_system(index);
             self.pan = clamp_disc(wanted, SYSTEM_RADIUS * 2.0);
@@ -1748,8 +1950,17 @@ impl ZoomCamera {
         self.elevation
     }
 
+    /// The plane's pose: the heading and the elevation, which eases up to [`DISK_ELEVATION`]
+    /// (or down to its negative, below the disk) as the cluster flattens onto the disk, unless
+    /// it is steeper already.
     fn plane_pose(&self) -> Pose {
-        let eye = eye_direction(self.yaw, self.elevation);
+        let most = DISK_ELEVATION.to_radians() * self.elevation.signum();
+        let elevation = if self.elevation.abs() < most.abs() {
+            self.elevation + (most - self.elevation) * self.disk()
+        } else {
+            self.elevation
+        };
+        let eye = eye_direction(self.yaw, elevation);
         Pose {
             eye,
             up: level_up(eye, self.yaw),
@@ -1902,7 +2113,7 @@ impl ZoomCamera {
             target,
             self.scale.map_distance(self.l),
             self.pose(orbit),
-            MAP_RADIUS * 3.0 + length3(target),
+            self.map_reach() * 2.0 + length3(target),
         )
     }
 
@@ -1948,13 +2159,24 @@ impl ZoomCamera {
     }
 
     fn clamp_pan(&mut self) {
-        self.clamp_pan_in(self.level() >= Level::StarMap);
+        self.clamp_pan_in(self.level() >= Level::Cluster);
     }
 
-    /// The region of the star map the focus stays in: one place for the bound, computed from
-    /// the systems shown, the celestial home beyond the match's stars included (task 76).
+    /// The region of the star map the focus stays in: one place for the bound. In the cluster
+    /// view the sphere about the anchored cluster with half its radius to spare; once it
+    /// flattens, the disk's systems, the celestial home beyond the match's stars included
+    /// (task 76), with a quarter of the disk's reach to spare.
     pub fn map_region(&self) -> MapRegion {
-        MapRegion::around(&self.map_positions)
+        if self.disk() > 0.0 {
+            let (_, reach) = self.layout.disk_extent();
+            return MapRegion::around_with(&self.map_positions(), reach * 0.25);
+        }
+        let anchored = self.anchored_group();
+        let members: Vec<[f32; 3]> = (0..self.layout.cluster.len())
+            .filter(|&i| self.layout.group[i] == anchored)
+            .map(|i| self.layout.cluster[i])
+            .collect();
+        MapRegion::around_with(&members, self.layout.cluster_radius * 0.5)
     }
 
     /// Puts the focus on the anchored system's plane, gliding there: in a system the focus never
@@ -2245,7 +2467,7 @@ impl ZoomCamera {
     /// enough that the crossing glides over a picture wider than the way.
     fn out_to_map(&self, index: usize, orbit: &OrbitCamera) -> Leg {
         let from = self.map_target(orbit);
-        let to = self.map_positions.get(index).copied().unwrap_or(from);
+        let to = self.layout.cluster.get(index).copied().unwrap_or(from);
         let way = length3(sub3(to, from));
         let fit = self.scale.l_system_map + (way * 1.5 / MAP_MIN_DISTANCE).max(1.0).ln();
         Leg::Zoom {
@@ -2261,6 +2483,29 @@ impl ZoomCamera {
     /// the system level until its globe is loaded.
     pub fn fly_to_target(&mut self, target: Target, orbit: &mut OrbitCamera) {
         match target {
+            Target::Cluster(group) => {
+                let Some(index) = self.lead_system(group) else {
+                    return;
+                };
+                // Across to the cluster, its centre in the middle of the view, and in (or out)
+                // to the whole cluster.
+                let centre = self.layout.groups[group].centre;
+                let at = scale3(sub3(centre, self.layout.cluster[index]), 1.0 / self.k());
+                let to = if self.scale.has_disk() {
+                    self.scale.l_cluster - 0.15
+                } else {
+                    self.scale.l_end
+                };
+                let legs = [
+                    self.out_to_map(index, orbit),
+                    Leg::System { index, at },
+                    Leg::Zoom {
+                        to,
+                        out_only: false,
+                    },
+                ];
+                self.fly(legs, orbit);
+            }
             Target::System(index) => {
                 let legs = [
                     Leg::System {
@@ -2318,6 +2563,23 @@ impl ZoomCamera {
         }
     }
 
+    /// The system a flight to cluster `group` anchors on: the home system when it is there, else
+    /// the one nearest the cluster's centre.
+    fn lead_system(&self, group: usize) -> Option<usize> {
+        let members = &self.layout.groups.get(group)?.members;
+        let home = self
+            .home_body
+            .and_then(|b| self.scene.system_index(self.scene.bodies[b].system));
+        if let Some(home) = home.filter(|h| members.contains(h)) {
+            return Some(home);
+        }
+        let centre = self.layout.groups[group].centre;
+        members.iter().copied().min_by(|&a, &b| {
+            let d = |i: usize| length3(sub3(self.layout.cluster[i], centre));
+            d(a).total_cmp(&d(b)).then(a.cmp(&b))
+        })
+    }
+
     /// Flies to `place`: out of the planet and across the star map when it lies in another
     /// system, then in to the level it is seen at. Refused when the place lies beyond the cap.
     pub fn focus(
@@ -2341,7 +2603,7 @@ impl ZoomCamera {
                     .ok_or(FocusRefused::Unknown)?;
                 let mut legs = Vec::new();
                 if system != self.system {
-                    if self.cap < Level::StarMap {
+                    if self.cap < Level::Cluster {
                         return Err(FocusRefused::BeyondReach);
                     }
                     let at = self
@@ -2384,7 +2646,7 @@ impl ZoomCamera {
                     ];
                     self.fly(legs, orbit);
                 } else {
-                    if self.cap < Level::StarMap {
+                    if self.cap < Level::Cluster {
                         return Err(FocusRefused::BeyondReach);
                     }
                     let legs = [
@@ -2411,7 +2673,7 @@ impl ZoomCamera {
                 if system == self.system {
                     self.fly_to_target(Target::Body(index), orbit);
                 } else {
-                    if self.cap < Level::StarMap {
+                    if self.cap < Level::Cluster {
                         return Err(FocusRefused::BeyondReach);
                     }
                     let at = self
@@ -2434,7 +2696,7 @@ impl ZoomCamera {
                 }
             }
             FocusPlace::Map(at) => {
-                if self.cap < Level::StarMap {
+                if self.cap < Level::Cluster {
                     return Err(FocusRefused::BeyondReach);
                 }
                 let point = scale3(sub3(at, self.here()), 1.0 / self.k());
@@ -2486,7 +2748,7 @@ impl ZoomCamera {
                 }
             }
             FocusPlace::Map(at) => {
-                if self.level() == Level::StarMap {
+                if self.level() >= Level::Cluster {
                     let point = scale3(sub3(at, self.here()), 1.0 / self.k());
                     let wanted = sub3(point, self.anchor_pos());
                     self.pan = lerp3(self.pan, wanted, settle);
@@ -2561,15 +2823,43 @@ impl ZoomCamera {
         self.offset = [0.0; 3];
         self.free = None;
         self.level_ease = None;
+        let s = &self.scale;
         let l = match level {
             Level::Surface => 12.0_f32.ln(),
-            Level::Globe => self.scale.l_cap(Level::Globe),
-            Level::System => self.scale.l_globe_system + (8000.0 / self.scale.system_min).ln(),
-            Level::StarMap => self.scale.l_end,
+            Level::Globe => s.l_cap(Level::Globe),
+            Level::System => s.l_globe_system + (8000.0 / s.system_min).ln(),
+            Level::Cluster if s.has_disk() => s.l_cluster - 0.15,
+            Level::Quadrant if s.has_disk() => (s.l_quadrant - 0.05).max(s.l_cluster + MORPH_SPAN),
+            Level::Cluster | Level::Quadrant | Level::Galaxy => s.l_end,
         };
         self.l = l.clamp(self.l_min(), self.l_cap());
         if let Some(yaw) = yaw_of(self.planet_to_system(orbit.dir)) {
             self.yaw = yaw;
+        }
+        // Beyond a system the view is centred on what the level shows: the home cluster, the
+        // middle of its quadrant's clusters, or the middle of the disk.
+        let anchored = self.anchored_group();
+        let centre = match self.level() {
+            Level::Cluster => self.layout.groups.get(anchored).map(|g| g.centre),
+            Level::Quadrant => self.layout.groups.get(anchored).map(|home| {
+                let quadrant = self
+                    .layout
+                    .material()
+                    .filter(|(_, g)| g.quadrant == home.quadrant)
+                    .map(|(_, g)| g.centre)
+                    .collect::<Vec<_>>();
+                let n = quadrant.len().max(1) as f32;
+                [0, 1, 2].map(|k| quadrant.iter().map(|c| c[k]).sum::<f32>() / n)
+            }),
+            Level::Galaxy if self.scale.has_disk() => Some(self.layout.disk_extent().0),
+            Level::Galaxy => self.layout.groups.get(anchored).map(|g| g.centre),
+            _ => None,
+        };
+        if let Some(centre) = centre {
+            self.pan = sub3(
+                scale3(sub3(centre, self.here()), 1.0 / self.k()),
+                self.anchor_pos(),
+            );
         }
         self.sync_orbit(orbit);
     }
@@ -2607,10 +2897,37 @@ impl ZoomCamera {
                     out.push((Target::Body(p.body), (*x, *y, on_screen)));
                 }
             }
-            Level::StarMap => {
-                for (i, pos) in self.map_positions.iter().enumerate() {
+            Level::Cluster | Level::Quadrant | Level::Galaxy if self.on_disk() => {
+                // Each cluster as large as its footprint on the disk.
+                for (g, group) in self.layout.groups.iter().enumerate() {
+                    if let Some((x, y, depth)) = view.project(group.centre) {
+                        let per_pixel = depth * 2.0 * view.tan() / canvas.1;
+                        let room = group.room / per_pixel.max(1e-9);
+                        out.push((Target::Cluster(g), (x, y, room.max(PICK_PIXELS))));
+                    }
+                }
+            }
+            Level::Cluster | Level::Quadrant | Level::Galaxy => {
+                // The anchored cluster's systems, and each route's exit toward another cluster.
+                let positions = self.map_positions();
+                let anchored = self.anchored_group();
+                for (i, pos) in positions.iter().enumerate() {
+                    if self.layout.group[i] != anchored {
+                        continue;
+                    }
                     if let Some((x, y, _)) = view.project(*pos) {
                         out.push((Target::System(i), (x, y, PICK_PIXELS)));
+                    }
+                }
+                let mut named = Vec::new();
+                for (i, _) in self.layout.exits(&self.scene, anchored) {
+                    let group = self.layout.group[i];
+                    if named.contains(&group) {
+                        continue;
+                    }
+                    named.push(group);
+                    if let Some((x, y, _)) = view.project(positions[i]) {
+                        out.push((Target::Cluster(group), (x, y, PICK_PIXELS)));
                     }
                 }
             }
@@ -2619,9 +2936,54 @@ impl ZoomCamera {
         out
     }
 
-    /// The target under the pixel `(x, y)` of `view`, at the current level.
+    /// The part of the star map the minimap shows now, seen from above, as its middle and
+    /// radius: the anchored cluster with its routes' exits in the cluster view, the disk once
+    /// the cluster has flattened onto it.
+    pub fn minimap_frame(&self) -> ([f32; 3], f32) {
+        if self.on_disk() {
+            let (middle, reach) = self.layout.disk_extent();
+            return (middle, reach.max(self.layout.cluster_radius));
+        }
+        let centre = self
+            .layout
+            .groups
+            .get(self.anchored_group())
+            .map_or([0.0; 3], |g| g.centre);
+        (
+            centre,
+            self.layout.cluster_radius * crate::galaxy::EXIT_REACH * 1.05,
+        )
+    }
+
+    /// Whether the star map picks clusters on the disk rather than systems: once the anchored
+    /// cluster is more than halfway flat.
+    pub fn on_disk(&self) -> bool {
+        self.sky.is_none() && self.disk() >= 0.5
+    }
+
+    /// The target under the pixel `(x, y)` of `view`, at the current level. On the disk the
+    /// cluster whose footprint lies nearest the point of the disk under the pointer (its distance
+    /// less its room, so a footprint never yields to its neighbour), within a pick radius of it.
     pub fn target_at(&self, view: &View, x: f32, y: f32) -> Option<Target> {
         let markers = self.markers(view);
+        if self.level() >= Level::Cluster && self.on_disk() {
+            // The celestial home stands off the disk: picked on screen.
+            let celestial: Vec<(Target, (f32, f32, f32))> = markers
+                .iter()
+                .copied()
+                .filter(|m| matches!(m.0, Target::Cluster(g) if self.layout.groups[g].celestial))
+                .collect();
+            let rects: Vec<(f32, f32, f32)> = celestial.iter().map(|m| m.1).collect();
+            if let Some(i) = nearest_marker(&rects, (x, y)) {
+                return Some(celestial[i].0);
+            }
+            let hit = plane_hit_at(view, x, y, 0.0)?;
+            let group = self.layout.nearest_group(hit)?;
+            let g = &self.layout.groups[group];
+            let off = length3([hit[0] - g.centre[0], 0.0, hit[2] - g.centre[2]]);
+            return (off - g.room <= PICK_PIXELS * view.per_pixel(hit))
+                .then_some(Target::Cluster(group));
+        }
         let rects: Vec<(f32, f32, f32)> = markers.iter().map(|m| m.1).collect();
         nearest_marker(&rects, (x, y)).map(|i| markers[i].0)
     }
@@ -2669,7 +3031,12 @@ mod tests {
     }
 
     fn camera(cap: Level) -> (ZoomCamera, OrbitCamera) {
-        let scene = Arc::new(sample_scene());
+        camera_in(sample_scene(), cap)
+    }
+
+    /// A camera over the home planet of `scene` (the sample's home, body 2 of system 1).
+    fn camera_in(scene: UniverseScene, cap: Level) -> (ZoomCamera, OrbitCamera) {
+        let scene = Arc::new(scene);
         let home = Home {
             system: 1,
             body: 2,
@@ -2703,7 +3070,7 @@ mod tests {
 
     #[test]
     fn sky_from_the_sun_puts_the_eye_at_the_sun_and_comes_back() {
-        let (mut zoom, mut orbit) = camera(Level::StarMap);
+        let (mut zoom, mut orbit) = camera(Level::Cluster);
         let l = zoom.l();
         assert!(!zoom.sky_active() && !zoom.constellations());
         assert!(zoom.toggle_sky());
@@ -2736,7 +3103,7 @@ mod tests {
 
     #[test]
     fn the_star_map_can_be_seen_from_below() {
-        let (mut zoom, orbit) = camera(Level::StarMap);
+        let (mut zoom, orbit) = camera(Level::Cluster);
         zoom.set_l(zoom.l_cap());
         // Task 79: no clamp on the star map, so a tilt of five radians would come round over
         // the top; a little less than one takes the eye below the focus.
@@ -2747,9 +3114,9 @@ mod tests {
 
     #[test]
     fn log_distance_maps_to_levels_monotonically() {
-        let s = scale();
+        let s = scale().with_ladder(full_ladder());
         let mut last = Level::Surface;
-        let mut seen = [false; 4];
+        let mut seen = [false; 6];
         let mut l = s.l_min();
         let mut last_distances = (0.0, 0.0, 0.0);
         while l <= s.l_end {
@@ -2762,7 +3129,7 @@ mod tests {
             last_distances = d;
             l += 0.01;
         }
-        assert_eq!(seen, [true; 4]);
+        assert_eq!(seen, [true; 6]);
         // The hand-overs lie in order and the frames meet: the planet looks equally large in
         // the planet frame and in the system frame at the same `l`.
         assert!(s.l_min() < s.l_globe_system && s.l_globe_system < s.l_system_map);
@@ -2773,33 +3140,66 @@ mod tests {
         assert!((in_planet - in_system).abs() < 1e-4);
         assert!((s.system_distance(s.l_system_map) - SYSTEM_MAX_DISTANCE).abs() < 1.0);
         assert!((s.map_distance(s.l_system_map) - MAP_MIN_DISTANCE).abs() < 1e-2);
-        assert!((s.map_distance(s.l_end) - MAP_MAX_DISTANCE).abs() < 1.0);
+        assert!((s.map_distance(s.l_cluster) - 400_000.0).abs() < 1.0);
+        assert!((s.map_distance(s.l_quadrant) - 4_000_000.0).abs() < 4.0);
+        assert!((s.map_distance(s.l_end) - 20_000_000.0).abs() < 20.0);
+    }
+
+    /// A ladder with every level beyond a system.
+    fn full_ladder() -> Ladder {
+        Ladder {
+            cluster: Some(400_000.0),
+            quadrant: Some(4_000_000.0),
+            galaxy: Some(20_000_000.0),
+        }
     }
 
     #[test]
-    fn the_widest_star_map_zoom_follows_the_universe() {
-        // A universe no wider than the default frame keeps today's cap.
-        let (zoom, _) = camera(Level::StarMap);
-        assert!(zoom.scale().map_max >= MAP_MAX_DISTANCE);
-        let region = zoom.map_region();
+    fn the_widest_zoom_follows_the_universe() {
+        // Task 162: the sample's systems are one cluster, so the cluster view is the end of the
+        // zoom; it frames the whole cluster.
+        let (zoom, _) = camera(Level::Galaxy);
+        let s = *zoom.scale();
+        assert!(s.beyond_systems() && !s.has_disk());
+        assert_eq!(s.l_end, s.l_cluster);
+        assert_eq!(s.level_of(s.l_end), Level::Cluster);
+        let fit = s.map_distance(s.l_end);
+        let radius = zoom.layout().cluster_radius;
         assert!(
-            zoom.scale().map_max
-                >= (region.radius - REGION_MARGIN) * MAP_MAX_DISTANCE / MAP_RADIUS - 1.0
+            (fit - radius * crate::galaxy::CLUSTER_FIT).abs() < 1.0,
+            "{fit}"
         );
-        // A wider one raises it so that the farthest system still fits, and never lowers it.
-        let reach = 3.0 * MAP_RADIUS;
-        let wide = scale().fitted_to(reach);
-        assert!(wide.map_max > MAP_MAX_DISTANCE);
-        assert!(wide.l_end > scale().l_end);
-        assert!((wide.map_distance(wide.l_end) - wide.map_max).abs() < 1.0);
-        assert!(wide.map_max / reach >= MAP_MAX_DISTANCE / MAP_RADIUS - 1e-3);
-        assert_eq!(scale().fitted_to(1.0).map_max, MAP_MAX_DISTANCE);
-        assert_eq!(wide.with_map_max(1.0).map_max, MAP_MAX_DISTANCE);
+        // A full ladder: the levels in order, a level gap apart, the disk flattening past the
+        // whole cluster and the quadrant marks fading in before the widest zoom.
+        let s = scale().with_ladder(full_ladder());
+        assert!(s.l_system_map < s.l_cluster && s.l_cluster < s.l_quadrant);
+        assert!(s.l_quadrant < s.l_end);
+        assert_eq!(s.disk(s.l_cluster), 0.0);
+        assert_eq!(s.disk(s.l_cluster + MORPH_SPAN), 1.0);
+        assert_eq!(s.sectors(s.l_end - LEVEL_GAP), 0.0);
+        assert_eq!(s.sectors(s.l_end), 1.0);
+        assert_eq!(s.level_of(s.l_cluster - 0.01), Level::Cluster);
+        assert_eq!(s.level_of(s.l_cluster + 0.01), Level::Quadrant);
+        assert_eq!(s.level_of(s.l_quadrant + 0.01), Level::Galaxy);
+        // No quadrant level: the galaxy view follows the cluster view.
+        let s = scale().with_ladder(Ladder {
+            quadrant: None,
+            ..full_ladder()
+        });
+        assert_eq!(s.level_of(s.l_cluster + 0.01), Level::Galaxy);
+        // One system: the planet and the system only.
+        let s = scale().with_ladder(Ladder {
+            cluster: None,
+            quadrant: None,
+            galaxy: None,
+        });
+        assert!(s.l_end < s.l_system_map);
+        assert_eq!(s.level_of(s.l_end), Level::System);
     }
 
     #[test]
     fn fades_change_smoothly_with_the_distance() {
-        let (mut zoom, mut orbit) = camera(Level::StarMap);
+        let (mut zoom, mut orbit) = camera(Level::Cluster);
         let s = *zoom.scale();
         let mut l = s.l_min();
         zoom.set_l(l);
@@ -2936,12 +3336,14 @@ mod tests {
     #[test]
     fn the_star_map_is_ready_for_a_third_coordinate() {
         let size = (1280.0, 720.0);
-        let (mut zoom, mut orbit) = camera(Level::StarMap);
-        zoom.set_view(Level::StarMap, &mut orbit);
         // A system lifted off the plane is drawn, hovered and picked where it shows.
-        zoom.map_positions[1][1] = 9_000.0;
+        let mut scene = sample_scene();
+        scene.systems[1].z = 12_000;
+        let (mut zoom, mut orbit) = camera_in(scene, Level::Cluster);
+        zoom.set_view(Level::Cluster, &mut orbit);
+        assert!(zoom.map_positions()[1][1] > zoom.map_positions()[0][1] + 5_000.0);
         let view = zoom.map_view(&orbit).view(size, 0.0);
-        let (x, y, _) = view.project(zoom.map_positions[1]).unwrap();
+        let (x, y, _) = view.project(zoom.map_positions()[1]).unwrap();
         assert_eq!(zoom.target_at(&view, x, y), Some(Target::System(1)));
         // A turning drag up and down tilts the camera about the focus, so the map can be seen
         // from a low angle or from above (since task 79 without a limit: see
@@ -2954,9 +3356,14 @@ mod tests {
         assert!(lower < before - 0.3, "{before} {lower}");
         // Zooming in past the map's threshold enters the system nearest the focus in space,
         // not on the plane.
-        let focus = zoom.map_target(&orbit);
-        zoom.map_positions[2] = add3(focus, [5.0, 5_000.0, 0.0]);
-        zoom.map_positions[1] = add3(focus, [30.0, 0.0, 0.0]);
+        // The focus put just above system 2 (index 1), nearer it than any other in space.
+        let goal = zoom.map_positions()[1];
+        zoom.body = None;
+        zoom.pan = scale3(
+            sub3(add3(goal, [0.0, 3_000.0, 0.0]), zoom.here()),
+            1.0 / zoom.k(),
+        );
+        zoom.offset = [0.0; 3];
         zoom.set_l(zoom.scale().l_system_map + FADE_HALF + 0.01);
         zoom.wheel_at(1.0, None, size, 0.0, &mut orbit);
         assert_eq!(zoom.system(), 1);
@@ -2964,7 +3371,7 @@ mod tests {
 
     #[test]
     fn the_star_stands_in_the_sky_where_the_light_comes_from() {
-        let (mut zoom, mut orbit) = camera(Level::StarMap);
+        let (mut zoom, mut orbit) = camera(Level::Cluster);
         orbit.look_at(unit3([0.2, 0.4, 0.9]).unwrap());
         zoom.set_l(zoom.scale().l_min());
         zoom.sync_orbit(&mut orbit);
@@ -2986,7 +3393,7 @@ mod tests {
 
     #[test]
     fn wheel_steps_from_the_street_to_the_star_map() {
-        let (mut zoom, _) = camera(Level::StarMap);
+        let (mut zoom, _) = camera(Level::Cluster);
         let s = *zoom.scale();
         let count = |zoom: &mut ZoomCamera, from: f32, to: f32| {
             zoom.set_l(from);
@@ -2997,7 +3404,8 @@ mod tests {
             }
             n
         };
-        // Where the whole system fits and where the whole star map does.
+        // Where the whole system fits and where the whole cluster does (task 162: the sample's
+        // systems are one cluster).
         let whole = s.l_system_map;
         let street_globe = count(&mut zoom, s.l_min(), s.l_cap(Level::Globe));
         let street_system = count(&mut zoom, s.l_min(), whole);
@@ -3013,7 +3421,7 @@ mod tests {
         assert!((18..=24).contains(&street_globe), "{street_globe}");
         assert!((26..=34).contains(&street_system), "{street_system}");
         assert!((10..=14).contains(&globe_system), "{globe_system}");
-        assert!((10..=14).contains(&system_map), "{system_map}");
+        assert!((6..=12).contains(&system_map), "{system_map}");
         // The step never changes abruptly.
         let mut last = zoom.wheel_log(s.l_min());
         let mut l = s.l_min();
@@ -3028,7 +3436,7 @@ mod tests {
     #[test]
     fn system_view_and_globe_agree_on_the_sun() {
         use crate::sun::{SunClock, SunSettings};
-        let (mut zoom, mut orbit) = camera(Level::StarMap);
+        let (mut zoom, mut orbit) = camera(Level::Cluster);
         let home = [0.3_f32, -0.2, 0.9];
         let length = home.iter().map(|c| c * c).sum::<f32>().sqrt();
         let surface = zoom.surface_body().expect("the home globe is loaded");
@@ -3087,7 +3495,7 @@ mod tests {
 
     #[test]
     fn frame_switch_keeps_the_view_centre() {
-        let (mut zoom, mut orbit) = camera(Level::StarMap);
+        let (mut zoom, mut orbit) = camera(Level::Cluster);
         orbit.look_at([0.3, 0.5, 0.8]);
         let s = *zoom.scale();
         let planet = zoom.placed().iter().find(|p| p.body == 1).unwrap().pos;
@@ -3108,7 +3516,7 @@ mod tests {
         }
         // System frame to star-map frame: the star-map centre is the system's place.
         zoom.set_l(s.l_system_map);
-        let here = zoom.map_positions[zoom.system()];
+        let here = zoom.map_positions()[zoom.system()];
         assert!(near(
             zoom.map_target(&orbit),
             system_to_map(&s, here, zoom.system_target(&orbit))
@@ -3135,13 +3543,13 @@ mod tests {
         assert!((zoom.l() - zoom.scale().l_cap(Level::Globe)).abs() < 1e-5);
         assert_eq!(zoom.fades().space, 0.0);
         // Flights and views stay under the cap too.
-        zoom.set_view(Level::StarMap, &mut orbit);
+        zoom.set_view(Level::Cluster, &mut orbit);
         assert_eq!(zoom.level(), Level::Globe);
-        zoom.set_cap(Level::StarMap);
+        zoom.set_cap(Level::Cluster);
         for _ in 0..500 {
             zoom.wheel(-1.0);
         }
-        assert_eq!(zoom.level(), Level::StarMap);
+        assert_eq!(zoom.level(), Level::Cluster);
         assert!((zoom.l() - zoom.scale().l_end).abs() < 1e-5);
         // Lowering the cap brings the camera back.
         zoom.set_cap(Level::System);
@@ -3159,7 +3567,7 @@ mod tests {
 
     #[test]
     fn double_click_targets_the_body_under_the_cursor() {
-        let (mut zoom, mut orbit) = camera(Level::StarMap);
+        let (mut zoom, mut orbit) = camera(Level::Cluster);
         zoom.set_view(Level::System, &mut orbit);
         assert_eq!(zoom.level(), Level::System);
         let size = (1280.0, 720.0);
@@ -3190,9 +3598,9 @@ mod tests {
         );
         assert_eq!(nearest_marker(&[(10.0, 10.0, 1.0)], (200.0, 10.0)), None);
         // On the star map a double click flies to a system and zooms in to its level.
-        zoom.set_view(Level::StarMap, &mut orbit);
+        zoom.set_view(Level::Cluster, &mut orbit);
         let view = zoom.map_view(&orbit).view(size, 0.0);
-        let (x, y, _) = view.project(zoom.map_positions[1]).unwrap();
+        let (x, y, _) = view.project(zoom.map_positions()[1]).unwrap();
         assert_eq!(zoom.target_at(&view, x, y), Some(Target::System(1)));
         zoom.press(5000, (x, y), &view, &mut orbit);
         assert!(zoom.press(5100, (x, y), &view, &mut orbit));
@@ -3203,8 +3611,8 @@ mod tests {
 
     #[test]
     fn home_returns_to_the_home_globe() {
-        let (mut zoom, mut orbit) = camera(Level::StarMap);
-        zoom.set_view(Level::StarMap, &mut orbit);
+        let (mut zoom, mut orbit) = camera(Level::Cluster);
+        zoom.set_view(Level::Cluster, &mut orbit);
         zoom.fly_to_target(Target::System(1), &mut orbit);
         run(&mut zoom, &mut orbit, 400);
         assert_eq!(zoom.system(), 1);
@@ -3247,7 +3655,7 @@ mod tests {
     }
 
     fn turned_camera() -> (ZoomCamera, OrbitCamera) {
-        let (mut zoom, _) = camera(Level::StarMap);
+        let (mut zoom, _) = camera(Level::Cluster);
         let mut orbit = OrbitCamera::at(40.0, -25.0, 3.0 * R, 70.0, R, 3.0 * R);
         zoom.follow_sun(unit3([0.3, 0.2, -0.9]).unwrap());
         zoom.set_l(orbit.max_distance.ln());
@@ -3370,7 +3778,7 @@ mod tests {
     #[test]
     fn zoom_follows_the_cursor_on_the_system_plane_and_the_star_map() {
         let size = (1280.0, 720.0);
-        let (mut zoom, mut orbit) = camera(Level::StarMap);
+        let (mut zoom, mut orbit) = camera(Level::Cluster);
         free_system_view(&mut zoom, &mut orbit);
         // At the low default elevation the upper part of the picture is sky beyond the plane's
         // horizon: the cursor rests on the plane.
@@ -3396,7 +3804,7 @@ mod tests {
     #[test]
     fn drag_pans_the_plane_and_shift_drag_turns_the_heading() {
         let size = (1280.0, 720.0);
-        let (mut zoom, mut orbit) = camera(Level::StarMap);
+        let (mut zoom, mut orbit) = camera(Level::Cluster);
         free_system_view(&mut zoom, &mut orbit);
         let view = zoom.system_view(&orbit).view(size, 0.0);
         let grabbed = plane_hit(&view, 500.0, 300.0).unwrap();
@@ -3429,7 +3837,7 @@ mod tests {
     #[test]
     fn zooming_in_on_a_body_lands_on_it() {
         let size = (1280.0, 720.0);
-        let (mut zoom, mut orbit) = camera(Level::StarMap);
+        let (mut zoom, mut orbit) = camera(Level::Cluster);
         free_system_view(&mut zoom, &mut orbit);
         // A resource body: the camera anchors on it and stops above it.
         // The cursor rests where the rock first shows, as a player's does.
@@ -3478,7 +3886,7 @@ mod tests {
     #[test]
     fn a_globe_that_loads_keeps_the_picture_and_flies_in() {
         let size = (1280.0, 720.0);
-        let (mut zoom, mut orbit) = camera(Level::StarMap);
+        let (mut zoom, mut orbit) = camera(Level::Cluster);
         zoom.fly_to_target(Target::System(1), &mut orbit);
         run(&mut zoom, &mut orbit, 300);
         let planet = *zoom.placed().iter().find(|p| p.body == 5).unwrap();
@@ -3509,8 +3917,8 @@ mod tests {
         // Small and large wheel steps alike: the step that crosses into the system frame may
         // land anywhere below the hand-over.
         for steps in [1.0, 3.0, 5.0] {
-            let (mut zoom, mut orbit) = camera(Level::StarMap);
-            zoom.set_view(Level::StarMap, &mut orbit);
+            let (mut zoom, mut orbit) = camera(Level::Cluster);
+            zoom.set_view(Level::Cluster, &mut orbit);
             let mut entered = false;
             let view = zoom.map_view(&orbit).view(size, 0.0);
             let (x, y, _) = view.project(zoom.map_positions()[1]).unwrap();
@@ -3597,7 +4005,7 @@ mod tests {
 
     #[test]
     fn focus_flies_to_a_ship_in_orbit_in_system_space_and_in_transit() {
-        let (mut zoom, mut orbit) = camera(Level::StarMap);
+        let (mut zoom, mut orbit) = camera(Level::Cluster);
         zoom.set_view(Level::Globe, &mut orbit);
         // A ship in another system's space: out to the star map, across, in to the system.
         let at = [1800.0, 0.0, -700.0];
@@ -3611,7 +4019,7 @@ mod tests {
         let lane = transit_like(&zoom, 0, 1, 0.4);
         zoom.focus(FocusPlace::Map(lane), &mut orbit).unwrap();
         fly_without_cuts(&mut zoom, &mut orbit, 400);
-        assert_eq!(zoom.level(), Level::StarMap);
+        assert_eq!(zoom.level(), Level::Cluster);
         assert!(close(zoom.map_target(&orbit), lane, 1.0));
         // A ship in orbit of the home planet: back across and down to the globe, looking at it.
         let dir = unit3([0.5, 0.4, 0.7]).unwrap();
@@ -3692,7 +4100,7 @@ mod tests {
         let size = (1280.0, 720.0);
         // Task 79: in a system only; the star map has no plane and no limit (see
         // `turning_the_star_map_keeps_the_focus_on_screen_all_the_way_over`).
-        let (mut zoom, mut orbit) = camera(Level::StarMap);
+        let (mut zoom, mut orbit) = camera(Level::Cluster);
         zoom.set_view(Level::System, &mut orbit);
         let view = zoom.space_view_at(&orbit, size, 0.0);
         // A turning drag far down raises the eye to the top; far up takes it under the plane.
@@ -3713,7 +4121,7 @@ mod tests {
     #[test]
     fn turning_orbits_the_camera_about_a_focus_that_stays_on_screen() {
         let size = (1280.0, 720.0);
-        let (mut zoom, mut orbit) = camera(Level::StarMap);
+        let (mut zoom, mut orbit) = camera(Level::Cluster);
         free_system_view(&mut zoom, &mut orbit);
         let focus = zoom.system_target(&orbit);
         let view = zoom.system_view(&orbit).view(size, 0.0);
@@ -3751,7 +4159,7 @@ mod tests {
     #[test]
     fn a_wheel_step_glides_to_its_goal_and_a_new_step_retargets_it() {
         let size = (1280.0, 720.0);
-        let (mut zoom, mut orbit) = camera(Level::StarMap);
+        let (mut zoom, mut orbit) = camera(Level::Cluster);
         free_system_view(&mut zoom, &mut orbit);
         let start = zoom.l();
         let goal = zoom.stepped(start, -1.0);
@@ -3805,12 +4213,12 @@ mod tests {
         let start_l = zoom.l();
         // Out to the star map by single steps, a tilt on the way, and back in step by step.
         let mut out = 0;
-        while zoom.level() < Level::StarMap && out < 200 {
+        while zoom.level() < Level::Cluster && out < 200 {
             zoom.wheel_glide(-1.0, None, size, 0.0);
             run(&mut zoom, &mut orbit, 6);
             out += 1;
         }
-        assert_eq!(zoom.level(), Level::StarMap);
+        assert_eq!(zoom.level(), Level::Cluster);
         zoom.tilt_by(0.4);
         for _ in 0..out {
             zoom.wheel_glide(1.0, None, size, 0.0);
@@ -3859,7 +4267,7 @@ mod tests {
     #[test]
     fn the_focus_stays_on_the_system_plane_and_pans_stop_short_of_the_horizon() {
         let size = (1280.0, 720.0);
-        let (mut zoom, mut orbit) = camera(Level::StarMap);
+        let (mut zoom, mut orbit) = camera(Level::Cluster);
         free_system_view(&mut zoom, &mut orbit);
         // From below the plane, panning and zooming to the cursor keep the focus on it.
         zoom.tilt_by(-1.0);
@@ -3876,7 +4284,7 @@ mod tests {
         zoom.wheel_at(1.0, Some((300.0, 200.0)), size, 0.0, &mut orbit);
         assert!(zoom.system_target(&orbit)[1].abs() < 1e-3);
         // Near the horizon a drag moves the focus a bounded distance, not toward infinity.
-        let (mut zoom, mut orbit) = camera(Level::StarMap);
+        let (mut zoom, mut orbit) = camera(Level::Cluster);
         free_system_view(&mut zoom, &mut orbit);
         zoom.tilt_by(-zoom.elevation() + 2_f32.to_radians());
         let view = zoom.system_view(&orbit).view(size, 0.0);
@@ -3896,10 +4304,11 @@ mod tests {
     /// The star map from far out, where the camera flies free, with the anchored system lifted
     /// far off the sky's equatorial plane (task 74's reference plane).
     fn free_star_map() -> (ZoomCamera, OrbitCamera) {
-        let (mut zoom, mut orbit) = camera(Level::StarMap);
-        zoom.set_view(Level::StarMap, &mut orbit);
-        let index = zoom.system();
-        zoom.map_positions[index][1] += 20_000.0;
+        // The home system lifted off the others' plane, toward the sky's north.
+        let mut scene = sample_scene();
+        scene.systems[0].z = 26_000;
+        let (mut zoom, mut orbit) = camera_in(scene, Level::Cluster);
+        zoom.set_view(Level::Cluster, &mut orbit);
         // Closer than the whole map, so the moves below stay well inside its region.
         zoom.set_l(zoom.scale().l_end - 1.5);
         run(&mut zoom, &mut orbit, 1);
@@ -3968,9 +4377,9 @@ mod tests {
         let flown = settled(&mut zoom, &mut orbit);
         let way = unit3(sub3(flown, turned)).unwrap();
         assert!(dot3(way, ahead) > 0.999, "{way:?} vs {ahead:?}");
-        // And it never went near the old reference plane, two map radii and more below.
+        // And it never went onto the old reference plane through the Sun.
         for p in [panned, zoomed, turned, flown] {
-            assert!((p[1] - zoom.sun()[1]).abs() > 10_000.0, "{p:?}");
+            assert!((p[1] - zoom.sun()[1]).abs() > 1_000.0, "{p:?}");
         }
     }
 
@@ -4051,19 +4460,19 @@ mod tests {
     #[test]
     fn wheel_toward_a_star_brings_the_focus_onto_it_and_enters_it() {
         let size = (1280.0, 720.0);
-        let (mut zoom, mut orbit) = camera(Level::StarMap);
-        zoom.set_view(Level::StarMap, &mut orbit);
+        let (mut zoom, mut orbit) = camera(Level::Cluster);
+        zoom.set_view(Level::Cluster, &mut orbit);
         let star = zoom.map_positions()[1];
         let view = zoom.map_view(&orbit).view(size, 0.0);
         let (x, y, _) = view.project(star).unwrap();
         let first = length(sub3(zoom.map_target(&orbit), star));
         let mut last = first;
         let mut steps = 0;
-        while zoom.level() == Level::StarMap && steps < 80 {
+        while zoom.level() == Level::Cluster && steps < 80 {
             zoom.wheel_at(1.0, Some((x, y)), size, 0.0, &mut orbit);
             run(&mut zoom, &mut orbit, 1);
             steps += 1;
-            if zoom.level() == Level::StarMap {
+            if zoom.level() == Level::Cluster {
                 // The focus closes on the star as the camera does.
                 let gap = length(sub3(zoom.map_target(&orbit), star));
                 assert!(gap < last, "step {steps}: {gap} >= {last}");
@@ -4087,7 +4496,7 @@ mod tests {
         let mut frames = 0;
         let mut entered_at = None;
         while frames < 400 {
-            if zoom.level() == Level::StarMap && frames % 4 == 0 {
+            if zoom.level() == Level::Cluster && frames % 4 == 0 {
                 zoom.wheel_glide(1.0, None, size, 0.0);
             }
             if zoom.turned_free() {
@@ -4112,6 +4521,9 @@ mod tests {
         let pose = zoom.pose(&orbit);
         assert!(upright_pose(pose, zoom.yaw), "{pose:?}");
         assert!(pose.eye[1].asin().to_degrees().abs() <= MAX_ELEVATION + 1e-3);
+        // The focus glides onto the plane (from farther above it since task 162 spread the
+        // cluster wider).
+        run(&mut zoom, &mut orbit, 60);
         assert!(zoom.system_target(&orbit)[1].abs() < 1.0);
         // The heading the free camera had is kept.
         let turn = (zoom.heading() - heading).rem_euclid(TAU_F);
@@ -4172,8 +4584,9 @@ mod tests {
         let size = (1280.0, 720.0);
         let (mut zoom, mut orbit) = free_star_map();
         let region = zoom.map_region();
+        let margin = zoom.layout().cluster_radius * 0.5;
         for p in zoom.map_positions() {
-            assert!(length(sub3(*p, region.centre)) <= region.radius - REGION_MARGIN + 1.0);
+            assert!(length(sub3(p, region.centre)) <= region.radius - margin + 1.0);
         }
         let inside = |zoom: &ZoomCamera, orbit: &OrbitCamera| {
             length(sub3(zoom.map_target(orbit), region.centre)) <= region.radius + 1.0

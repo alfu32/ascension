@@ -14,6 +14,7 @@ mod capitals;
 mod ear;
 mod entities;
 pub mod features;
+pub mod galaxy;
 mod globe;
 mod gpu_census;
 pub mod grass;
