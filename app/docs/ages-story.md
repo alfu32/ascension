@@ -392,7 +392,7 @@ others who got there first, are still beyond it. This is your second age of disc
 ## 11. Starfaring — jumps, colonies and trade lanes
 
 **Forces.** *Social:* colonists on new worlds, each with its own sky and its own customs;
-home becomes a memory. *Economic:* the jump drive opens the routes to other stars; trade
+home becomes a memory. *Economic:* the jump drive opens the routes to the other stars of the home cluster; trade
 lanes between them, the colony economy, fleets protecting the lanes. *Political:* frontier governance; distance makes every colony half
 independent.
 
@@ -417,8 +417,8 @@ to fight for, and Abundance begins in that calm.
 **Interlude.** The colony variations heard one at a time, far apart: a solo flute dance, a
 distant work song, the violins' lament.
 
-*Story:* "Your ships jump between the stars now, and colonies dot a dozen worlds, linked by
-trade lanes your fleets keep open. Each new settlement learns its own sky and sings its own songs, and some are starting to forget the
+*Story:* "Your ships jump between the stars of your own cluster now, and colonies dot a dozen
+worlds, linked by trade lanes your fleets keep open. Each new settlement learns its own sky and sings its own songs, and some are starting to forget the
 old home. Expand, connect and defend the lanes: an empire among the stars is made of
 distances."
 
@@ -449,9 +449,9 @@ with the whole of history.
 stops on the B♭ and waits.
 
 *Story:* "Nothing costs anything any more. Food, metal, energy: there is enough of everything
-for everyone. What is left to want? Time still passes, buildings still take time to raise, and
-rivals still have ambitions. Plenty has not ended history. It has only changed what history is
-about."
+for everyone, and your jump drives now cross to the other star clusters. What is left to want?
+Time still passes, buildings still take time to raise, and rivals still have ambitions. Plenty
+has not ended history. It has only changed what history is about."
 
 ## 13. Galactic War — humanity divided among the stars
 

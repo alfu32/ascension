@@ -44,7 +44,32 @@ pub enum RulesError {
     DefinitionCapacity(DefId),
 }
 
+/// Map-scale rank from which ships jump along routes between the systems of one star cluster
+/// (the interstellar tier).
+pub const JUMP_RANK: i64 = 2;
+/// Map-scale rank from which ships also jump along routes between star clusters (task 163: the
+/// galactic tier).
+pub const CLUSTER_JUMP_RANK: i64 = 3;
+
 impl Rules {
+    /// The map-scale rank of `age`; `None` for an unknown age or scale.
+    pub fn age_rank(&self, age: DefId) -> Option<i64> {
+        let age = self.ages.get(&age)?;
+        Some(self.map_scales.get(&age.map_scale)?.rank)
+    }
+
+    /// The first age (by ordinal, then id) whose map scale reaches `rank`.
+    pub fn first_age_of_rank(&self, rank: i64) -> Option<&Age> {
+        self.ages
+            .values()
+            .filter(|a| {
+                self.map_scales
+                    .get(&a.map_scale)
+                    .is_some_and(|s| s.rank >= rank)
+            })
+            .min_by_key(|a| (a.ordinal, a.id))
+    }
+
     /// Returns a definition; `id` must belong to this rules catalogue.
     pub fn def(&self, id: DefId) -> &Definition {
         self.definitions[id.0 as usize]

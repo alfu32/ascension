@@ -323,6 +323,12 @@ impl World {
                 if !self.rule_enabled(c.player, crate::RULE_INTERSTELLAR_TRADE) {
                     return Err(SimError::NeedsInterstellarTrade);
                 }
+                // A star cluster still closed to the player's ships closes its trade too.
+                if self.travel_path(c.player, a, b).is_none()
+                    && self.unreachable_reason(c.player, a, b) == SimError::ClusterClosed
+                {
+                    return Err(SimError::ClusterClosed);
+                }
                 self.interstellar_length(c.player, home.pos.body, target.pos.body)
             }
             _ if space => self

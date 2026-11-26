@@ -274,14 +274,22 @@ holds its arrays.
 
 ### Space tiers and orbital weapons (task 43)
 
-`map_scale` contains `planetary` (rank 0), `interplanetary` (rank 1), and
-`interstellar` (rank 2). `age.map_scale` governs camera levels and ship reach;
+`map_scale` contains `planetary` (rank 0), `interplanetary` (rank 1),
+`interstellar` (rank 2) and, since task 163, `galactic` (rank 3, `max_zoom_out` 320).
+`age.map_scale` governs camera levels and ship reach;
 `age.view_range` governs the planetary camera's ground half-width only.
 Fusion remains rank 0 with zero range (whole globe); starfaring is rank 1
 (home system); expansion and later ages rank 2 (star map and route travel).
 (Since task 138 fusion is rank 1 too, and since task 155 its ships move in the home system;
 see "The space ages split by distance".)
 The numeric ranks are the rules contract; code does not branch on the keys.
+Since task 163 rank 2 jumps only between the systems of one star cluster and rank 3
+(`rom_rules::CLUSTER_JUMP_RANK`) between clusters too; the Age of Abundance, the Age of Galactic
+War and the Galactic Federation are `galactic` (the seed's age rows: ordinal 11 `interstellar`,
+12 and later `galactic`; age 14 copies age 13). The camera follows: rank 2 the cluster view of
+the home's cluster, rank 3 the quadrant and galaxy views (`world-model.md`, "Jumps between
+clusters, and fair home clusters"). A new row only, no schema change; both lint views stay
+empty.
 
 `et_weapon.orbit_only INTEGER NOT NULL DEFAULT 0 CHECK (orbit_only IN (0,1))`
 marks weapons that require the attacker to orbit the target's body. Their

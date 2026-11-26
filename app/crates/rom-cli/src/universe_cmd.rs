@@ -2,7 +2,10 @@
 
 use std::{collections::BTreeMap, fs, path::PathBuf, sync::Arc};
 
-use rom_mapgen::{BodyKind, StartPlacement, Universe, UniverseRequest, generate_universe_placed};
+use rom_mapgen::{
+    BodyKind, StartPlacement, Universe, UniverseRequest, generate_universe_placed,
+    plan_universe_dealt, plan_universe_placed,
+};
 use rom_rules::{DefId, Rules};
 use rom_sim::{
     BodyId, BodyInfo, Command, EntityId, PlanetSurface, Player, PlayerId, Pos, RouteInfo, SimRng,
@@ -11,7 +14,7 @@ use rom_sim::{
 
 use crate::mapgen_cmd::ppm;
 
-const USAGE: &str = "usage: rom universe --db <rules.db> --style <key> --seed <n> --factions <key,key,...> [--start-placement separate|together] [--ppm <file>] [--simulate <ticks>] [--space]\n  styles: map.one_world (Planet), map.solar (Solar), map.many_worlds (Cluster), map.sector (Sector), map.quadrant (Quadrant), map.galaxy (Galaxy)";
+const USAGE: &str = "usage: rom universe --db <rules.db> --style <key> --seed <n> --factions <key,key,...> [--start-placement separate|together] [--ppm <file>] [--simulate <ticks>] [--space]\n       rom universe --db <rules.db> --style <key> --check-seeds <from>..<to> --factions <key,key,...> [--start-placement separate|together] [--homes <n>]\n  styles: map.one_world (Planet), map.solar (Solar), map.many_worlds (Cluster), map.sector (Sector), map.quadrant (Quadrant), map.galaxy (Galaxy)";
 /// Builders placed around each starting city.
 const BUILDERS: usize = 3;
 /// Ticks between rounds of random move orders for idle units.
@@ -48,6 +51,8 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
     let mut simulate = None;
     let mut space = false;
     let mut placement = None;
+    let mut check_seeds = None;
+    let mut dealt = None;
     while let Some(flag) = args.next() {
         if flag == "--space" {
             space = true;
@@ -63,6 +68,13 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
             "--factions" => factions = Some(value),
             "--ppm" => ppm_path = Some(PathBuf::from(value)),
             "--simulate" => simulate = Some(value.parse::<u64>()?),
+            "--homes" => dealt = Some(value.parse::<usize>()?),
+            "--check-seeds" => {
+                let (from, to) = value
+                    .split_once("..")
+                    .ok_or_else(|| format!("--check-seeds takes <from>..<to>, not {value}"))?;
+                check_seeds = Some((from.parse::<u64>()?, to.parse::<u64>()?));
+            }
             "--start-placement" => {
                 placement = Some(
                     StartPlacement::parse(&value)
@@ -72,12 +84,15 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
             _ => return Err(format!("unknown argument: {flag}").into()),
         }
     }
-    let (db, style, seed, factions) = (
+    let (db, style, factions) = (
         db.ok_or(USAGE)?,
         style.ok_or(USAGE)?,
-        seed.ok_or(USAGE)?,
         factions.ok_or(USAGE)?,
     );
+    let seed = match check_seeds {
+        Some(_) => 0,
+        None => seed.ok_or(USAGE)?,
+    };
     let conn =
         rusqlite::Connection::open_with_flags(db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
     let rules = Rules::load(&conn)?;
@@ -98,6 +113,17 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
         Some(placement) => placement,
         None => StartPlacement::of_rules(&rules)?,
     };
+    if let Some((from, to)) = check_seeds {
+        check_seed_range(
+            &rules,
+            style_id,
+            &player_factions,
+            placement,
+            dealt,
+            from..=to,
+        )?;
+        return Ok(());
+    }
     let universe = generate_universe_placed(
         &rules,
         &UniverseRequest {
@@ -543,6 +569,83 @@ pub fn world_line(world: &World) -> String {
 }
 
 /// The one-line summary printed by the command.
+/// Task 163: plans the universe of every seed in `seeds` (the star map and the bodies, no planet
+/// surfaces) and prints one line each, with the layout attempts it took, its fairness, its home
+/// clusters (systems / homes / planets / resource bodies) and the bodies added to them, then
+/// the totals. With `dealt`, the players are dealt over that many home systems whatever their
+/// races.
+fn check_seed_range(
+    rules: &Rules,
+    style: DefId,
+    factions: &[DefId],
+    placement: StartPlacement,
+    dealt: Option<usize>,
+    seeds: std::ops::RangeInclusive<u64>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (mut unfair, mut count, mut attempts, mut most) = (0, 0, 0, 0);
+    let (mut topped, mut planets, mut bodies, mut universes_topped) = (0, 0, 0, 0);
+    for seed in seeds {
+        let request = UniverseRequest {
+            style,
+            seed,
+            player_factions: factions.to_vec(),
+        };
+        let universe = match dealt {
+            Some(homes) => plan_universe_dealt(rules, &request, homes)?,
+            None => plan_universe_placed(rules, &request, placement)?,
+        };
+        let problems = universe.fairness(rules);
+        let clusters: Vec<String> = universe
+            .home_shares(rules)
+            .iter()
+            .map(|s| {
+                format!(
+                    "{}:{}s/{}homes/{}h/{}r",
+                    universe.systems[s.system as usize - 1]
+                        .name
+                        .replace(' ', "_"),
+                    s.cluster_systems,
+                    s.cluster_homes,
+                    s.cluster_habitable,
+                    s.cluster_bodies
+                )
+            })
+            .collect();
+        let added: Vec<String> = universe
+            .top_ups
+            .iter()
+            .map(|t| format!("{}+{}h+{}r", t.system, t.planets, t.bodies))
+            .collect();
+        println!(
+            "seed={seed} attempts={} fair={} home_clusters={} top_ups={} problems={:?}",
+            universe.attempts,
+            if problems.is_empty() { "yes" } else { "no" },
+            clusters.join(","),
+            if added.is_empty() {
+                "-".to_owned()
+            } else {
+                added.join(",")
+            },
+            problems
+        );
+        count += 1;
+        unfair += usize::from(!problems.is_empty());
+        attempts += universe.attempts;
+        most = most.max(universe.attempts);
+        topped += universe.top_ups.len();
+        universes_topped += usize::from(!universe.top_ups.is_empty());
+        planets += universe.top_ups.iter().map(|t| t.planets).sum::<u32>();
+        bodies += universe.top_ups.iter().map(|t| t.bodies).sum::<u32>();
+    }
+    println!(
+        "total universes={count} unfair={unfair} attempts_mean={:.1} attempts_max={most} \
+         topped_universes={universes_topped} topped_systems={topped} planets_added={planets} \
+         bodies_added={bodies}",
+        f64::from(attempts) / count.max(1) as f64
+    );
+    Ok(())
+}
+
 fn summary(rules: &Rules, universe: &Universe) -> String {
     let count = |kind: BodyKind| universe.bodies.iter().filter(|b| b.kind == kind).count();
     let homes: Vec<String> = universe

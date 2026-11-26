@@ -155,20 +155,105 @@ impl World {
             .max(100) as u64
     }
 
-    /// The systems a ship of `player` passes from `origin` to `destination`, both included: the
-    /// shortest by the time it takes, so a route the player has not charted counts
-    /// `space.charting_pct` of its length. Equal times keep the lower system id.
-    pub fn travel_path(&self, player: PlayerId, origin: u32, destination: u32) -> Option<Vec<u32>> {
+    /// The star cluster of system `system`; `None` for a system without one (the celestial
+    /// home, a flat or test world) or an unknown system.
+    pub fn system_cluster(&self, system: u32) -> Option<u32> {
+        let systems = self.systems();
+        systems
+            .binary_search_by_key(&system, |s| s.id)
+            .ok()
+            .map(|i| &systems[i])
+            .or_else(|| systems.iter().find(|s| s.id == system))
+            .and_then(|s| s.cluster)
+    }
+
+    /// Whether systems `a` and `b` lie in one star cluster; a system without a cluster counts as
+    /// being in every cluster (task 162).
+    pub fn same_cluster(&self, a: u32, b: u32) -> bool {
+        match (self.system_cluster(a), self.system_cluster(b)) {
+            (Some(x), Some(y)) => x == y,
+            _ => true,
+        }
+    }
+
+    /// Whether a ship of a player at map-scale `rank` may jump along a route between systems `a`
+    /// and `b` (task 163): from the interstellar tier within a star cluster, from the galactic
+    /// tier between clusters too.
+    fn jump_allowed_at(&self, rank: i64, a: u32, b: u32) -> bool {
+        rank >= rom_rules::CLUSTER_JUMP_RANK
+            || (rank >= rom_rules::JUMP_RANK && self.same_cluster(a, b))
+    }
+
+    /// Whether a ship of `player` may jump along a route between systems `a` and `b` now.
+    pub fn jump_allowed(&self, player: PlayerId, a: u32, b: u32) -> bool {
+        self.jump_allowed_at(self.space_rank(player), a, b)
+    }
+
+    /// The time cost of a route for `player`: a route it has not charted counts
+    /// `space.charting_pct` of its length.
+    fn route_cost(&self, player: PlayerId) -> impl Fn(u32, u32, u64) -> u64 + use<> {
         let pct = self.charting_pct();
         let sensors = self.rule_enabled(player, RULE_ROUTE_SENSORS);
         let known: BTreeSet<(u32, u32)> = self.known_routes(player).into_iter().collect();
-        self.route_path_by(origin, destination, |a, b, length| {
+        move |a, b, length| {
             if sensors || known.contains(&route_key(a, b)) {
                 length * 100
             } else {
                 length * pct
             }
+        }
+    }
+
+    /// The systems a ship of `player` passes from `origin` to `destination`, both included: the
+    /// shortest by the time it takes, so a route the player has not charted counts
+    /// `space.charting_pct` of its length, along the routes it may jump (task 163: within its
+    /// star cluster until the galactic tier). Equal times keep the lower system id.
+    pub fn travel_path(&self, player: PlayerId, origin: u32, destination: u32) -> Option<Vec<u32>> {
+        let cost = self.route_cost(player);
+        let rank = self.space_rank(player);
+        self.route_path_by(origin, destination, |a, b, length| {
+            self.jump_allowed_at(rank, a, b).then(|| cost(a, b, length))
         })
+    }
+
+    /// The route plan of a voyage of `player` from `origin` to `destination` (task 163): its
+    /// [`World::travel_path`] when it may go there; otherwise the shortest path by time whatever
+    /// the player may jump, cut after the last system it may reach along it, so a plan into a
+    /// star cluster still closed to it stops at its own cluster's edge. `None` when no route
+    /// leads there at all.
+    pub fn route_plan(&self, player: PlayerId, origin: u32, destination: u32) -> Option<Vec<u32>> {
+        if let Some(path) = self.travel_path(player, origin, destination) {
+            return Some(path);
+        }
+        let cost = self.route_cost(player);
+        let mut path =
+            self.route_path_by(origin, destination, |a, b, length| Some(cost(a, b, length)))?;
+        let rank = self.space_rank(player);
+        if let Some(stop) = path
+            .windows(2)
+            .position(|leg| !self.jump_allowed_at(rank, leg[0], leg[1]))
+        {
+            path.truncate(stop + 1);
+        }
+        Some(path)
+    }
+
+    /// Why no voyage of `player` leads from `origin` to `destination`: a star cluster on the way
+    /// is still closed to it ([`SimError::ClusterClosed`]), or no route leads there.
+    pub(crate) fn unreachable_reason(
+        &self,
+        player: PlayerId,
+        origin: u32,
+        destination: u32,
+    ) -> crate::SimError {
+        let cut = self
+            .route_plan(player, origin, destination)
+            .is_some_and(|plan| plan.last() != Some(&destination));
+        if cut {
+            crate::SimError::ClusterClosed
+        } else {
+            crate::SimError::InvalidTravelTarget
+        }
     }
 
     /// Marks a route charted for `player`.

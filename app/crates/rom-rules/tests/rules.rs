@@ -1900,3 +1900,37 @@ fn the_galactic_federation_follows_the_galactic_war() {
     assert_eq!(needs(id("tech.ascension")), [(federation, 0)]);
     assert!(r.ascension_requirements().contains(&advance));
 }
+
+/// Task 163: the galactic tier (rank 3) follows the interstellar one; the Starfaring Age jumps
+/// within a star cluster, the Age of Abundance first between clusters, and every later age keeps
+/// that reach. Found by rank, never by key.
+#[test]
+fn the_galactic_tier_opens_with_the_age_of_abundance() {
+    let r = seed();
+    let ranks: Vec<i64> = {
+        let mut v: Vec<i64> = r.map_scales.values().map(|s| s.rank).collect();
+        v.sort_unstable();
+        v
+    };
+    assert_eq!(ranks, [0, 1, 2, 3]);
+    let first = |rank: i64| r.first_age_of_rank(rank).map(|a| r.def(a.id).name.clone());
+    assert_eq!(
+        first(rom_rules::JUMP_RANK).as_deref(),
+        Some("Starfaring Age")
+    );
+    assert_eq!(
+        first(rom_rules::CLUSTER_JUMP_RANK).as_deref(),
+        Some("Age of Abundance")
+    );
+    let galactic = r.first_age_of_rank(rom_rules::CLUSTER_JUMP_RANK).unwrap();
+    for age in r.ages.values() {
+        let rank = r.age_rank(age.id).unwrap();
+        assert_eq!(
+            rank >= rom_rules::CLUSTER_JUMP_RANK,
+            age.ordinal >= galactic.ordinal,
+            "{}",
+            r.def(age.id).name
+        );
+    }
+    assert_eq!(r.age_rank(DefId(u32::MAX)), None);
+}

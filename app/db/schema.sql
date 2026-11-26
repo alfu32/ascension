@@ -101,7 +101,7 @@ CREATE TABLE body_kind (
 -- a player's view and reach widen when THAT player reaches the tier — players
 -- get there one by one, and the first to arrive finds space unclaimed.
 CREATE TABLE map_scale (
-  key   TEXT PRIMARY KEY,              -- planetary | interplanetary | interstellar
+  key   TEXT PRIMARY KEY,              -- planetary | interplanetary | interstellar | galactic
   name  TEXT NOT NULL,
   rank  INTEGER NOT NULL UNIQUE,       -- 0 = closest
   max_zoom_out INTEGER NOT NULL        -- camera limit, tiles visible across the screen

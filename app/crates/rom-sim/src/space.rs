@@ -101,9 +101,12 @@ impl World {
         self.space.orbits.get(&id)
     }
 
-    fn space_rank(&self, player: PlayerId) -> i64 {
-        let age = &self.rules.ages[&self.players[&player].age];
-        self.rules.map_scales[&age.map_scale].rank
+    /// The map-scale rank of `player`'s age; 0 for an unknown player.
+    pub fn space_rank(&self, player: PlayerId) -> i64 {
+        self.players
+            .get(&player)
+            .and_then(|p| self.rules.age_rank(p.age))
+            .unwrap_or(0)
     }
 
     /// Puts a complete spacecraft for match setup into the orbit of the planet below `above`,
@@ -453,17 +456,19 @@ impl World {
         .ok_or(SimError::CannotEnterSpace)?;
         self.check_space_placement(ship.type_id, ship.owner, ship.pos)?;
         if command.kind == "travel" {
-            if self.space_rank(ship.owner) < 2 {
+            if self.space_rank(ship.owner) < rom_rules::JUMP_RANK {
                 return Err(SimError::CannotEnterSpace);
             }
             let destination = command
                 .target_pos
                 .and_then(|p| self.system_space(p.body))
                 .ok_or(SimError::InvalidTravelTarget)?;
-            let path = (origin != destination)
-                .then(|| self.travel_path(ship.owner, origin, destination))
-                .flatten()
-                .ok_or(SimError::InvalidTravelTarget)?;
+            if origin == destination {
+                return Err(SimError::InvalidTravelTarget);
+            }
+            let path = self
+                .travel_path(ship.owner, origin, destination)
+                .ok_or_else(|| self.unreachable_reason(ship.owner, origin, destination))?;
             // Held by an enemy inhibitor: only the way it came is open.
             if !command.queue && self.jump_refused(ship.id, origin, path[1]) {
                 return Err(SimError::HeldByInhibitor);
@@ -616,16 +621,16 @@ impl World {
     /// the first equal path.
     #[cfg(test)]
     pub(crate) fn route_path(&self, origin: u32, destination: u32) -> Option<Vec<u32>> {
-        self.route_path_by(origin, destination, |_, _, length| length)
+        self.route_path_by(origin, destination, |_, _, length| Some(length))
     }
 
-    /// Integer Dijkstra with `cost(from, to, length)` for each route: settle equal distances by
-    /// system id, retain the first equal path.
+    /// Integer Dijkstra with `cost(from, to, length)` for each route, `None` for a route that
+    /// may not be taken: settle equal distances by system id, retain the first equal path.
     pub(crate) fn route_path_by(
         &self,
         origin: u32,
         destination: u32,
-        cost: impl Fn(u32, u32, u64) -> u64,
+        cost: impl Fn(u32, u32, u64) -> Option<u64>,
     ) -> Option<Vec<u32>> {
         let mut distances = BTreeMap::from([(origin, 0_u64)]);
         let mut previous = BTreeMap::new();
@@ -643,13 +648,14 @@ impl World {
                 .routes()
                 .iter()
                 .filter_map(|r| {
-                    if r.system_a == system {
-                        Some((r.system_b, cost(system, r.system_b, r.length as u64)))
+                    let next = if r.system_a == system {
+                        r.system_b
                     } else if r.system_b == system {
-                        Some((r.system_a, cost(system, r.system_a, r.length as u64)))
+                        r.system_a
                     } else {
-                        None
-                    }
+                        return None;
+                    };
+                    Some((next, cost(system, next, r.length as u64)?))
                 })
                 .collect();
             neighbours.sort_unstable();

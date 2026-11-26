@@ -7,8 +7,9 @@ mod universe;
 pub use sphere::{SpherePlanet, SphereRequest, expand_planet, generate_sphere};
 pub use universe::{
     BLACK_HOLE_NAME, Body, CELESTIAL_PLANET_NAME, CELESTIAL_SYSTEM_NAME, DormantSurface, FAIR_HOPS,
-    FAIR_NEAR_PCT, FAIR_VALUE_PCT, HomeShare, Route, StarSystem, StartPlacement, Universe,
-    UniverseRequest, generate_universe, generate_universe_placed, plan_universe,
+    FAIR_NEAR_PCT, FAIR_VALUE_PCT, HOME_CLUSTER_MIN_SYSTEMS, HomeShare, Route, SHARE_SYSTEMS,
+    StarSystem, StartPlacement, TopUp, Universe, UniverseRequest, cluster_components,
+    cluster_share, generate_universe, generate_universe_placed, plan_universe, plan_universe_dealt,
     plan_universe_placed, wedge_size,
 };
 

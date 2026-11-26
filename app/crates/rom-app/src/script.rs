@@ -32,8 +32,9 @@
 //!
 //! Space commands: `ships` selects every ship of player one, `producers` its finished
 //! training buildings (not cities), `orbit <rockN|=body>` and
-//! `travel <systemN|=system>` order the selected ships (`rockN` is the N-th nearest resource body
-//! of the home system, `systemN` the N-th nearest neighbouring system), `speed <percent>` sets
+//! `travel <systemN|outsideN|=system>` order the selected ships (`rockN` is the N-th nearest
+//! resource body of the home system, `systemN` the N-th nearest neighbouring system,
+//! `outsideN` the N-th nearest system of another star cluster, task 163), `speed <percent>` sets
 //! the game speed. Test-only setup lines take effect before the match starts, whatever their tick:
 //! `grant-age <age key>`, `grant <resource key> <amount>` for player one,
 //! `place <owner id> <entity key> @dx,dy` to place a test scene before tick one, and
@@ -94,6 +95,9 @@ pub struct ScriptContext {
     pub systems: Vec<u32>,
     /// The other habitable planets of the home system, nearest to the home planet first.
     pub planets: Vec<u32>,
+    /// Systems of other star clusters than the home's, nearest to the home system first (task
+    /// 163; universe worlds).
+    pub outside: Vec<u32>,
 }
 
 pub use rom_match::ScriptSetup;
@@ -202,6 +206,7 @@ impl ScriptContext {
             rocks: Vec::new(),
             systems: Vec::new(),
             planets: Vec::new(),
+            outside: Vec::new(),
         }
     }
 }
@@ -715,6 +720,9 @@ fn parse_line(
                 None if command == "orbit" && word.starts_with("planet") => {
                     nth("planet", &context.planets)
                 }
+                None if command == "travel" && word.starts_with("outside") => {
+                    nth("outside", &context.outside)
+                }
                 None => nth(prefix, list),
             }
             .ok_or_else(|| format!("{command} needs {prefix}N or =id, got {word:?}"))?;
@@ -1127,6 +1135,7 @@ mod tests {
             rocks: vec![40, 41],
             systems: vec![7],
             planets: vec![9],
+            outside: vec![12],
         }
     }
 

@@ -279,6 +279,7 @@ pub fn play(rules: &Arc<Rules>, duel: &DuelRequest, seed: u64) -> Result<DuelRes
         start_placement: duel.start_placement,
         city_area: duel.city_area,
         pace: duel.pace,
+        start_age: None,
     };
     let faction = duel_faction(rules, seed)?;
     // An unfair start (much less land, or no room for a gather site on a node terrain) decides
@@ -892,6 +893,7 @@ mod tests {
             start_placement: None,
             city_area: CityArea::default(),
             pace: EconomyPace::default(),
+            start_age: None,
         };
         let faction = duel_faction(&rules, 3).unwrap();
         let (world, _) = build_world_with(

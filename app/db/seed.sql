@@ -75,9 +75,10 @@ INSERT INTO body_kind VALUES
  ('star','centre of a star system'), ('habitable','planet with a full surface'),
  ('resource','moon, asteroid or small planet claimed by starship presence');
 
+-- Rank 2 jumps between the systems of one star cluster; rank 3 (task 163) between clusters too.
 INSERT INTO map_scale VALUES
  ('planetary','Planetary',0,60), ('interplanetary','Interplanetary',1,160),
- ('interstellar','Interstellar',2,240);
+ ('interstellar','Interstellar',2,240), ('galactic','Galactic',3,320);
 
 INSERT INTO tag(key,category) VALUES
  ('biological','body'), ('mechanical','body'),
@@ -155,7 +156,7 @@ INSERT INTO age(id,ordinal,era,map_scale)
    CASE WHEN sort<=7 THEN 'history' WHEN sort<=9 THEN 'near_future' WHEN sort<=12 THEN 'stellar'
         ELSE 'galactic' END,
    CASE WHEN sort<=8 THEN 'planetary' WHEN sort<=10 THEN 'interplanetary'
-        ELSE 'interstellar' END
+        WHEN sort<=11 THEN 'interstellar' ELSE 'galactic' END
  FROM def WHERE kind='age';
 WITH v(k,r) AS (VALUES ('age.ancient',30000), ('age.classical',36000), ('age.medieval',42000),
   ('age.gunpowder',48000), ('age.enlightenment',55000), ('age.industrial',62000),

@@ -97,7 +97,7 @@ name = "Starfaring"
 subtitle = "jumps, colonies and trade lanes"
 theme = "expansion.theme"
 interlude = "expansion.interlude"
-story = """Your ships jump between the stars now, and colonies dot a dozen worlds, linked by trade lanes your fleets keep open. Each new settlement learns its own sky and sings its own songs, and some are starting to forget the old home. Expand, connect and defend the lanes: an empire among the stars is made of distances."""
+story = """Your ships jump between the stars of your own cluster now, and colonies dot a dozen worlds, linked by trade lanes your fleets keep open. Each new settlement learns its own sky and sings its own songs, and some are starting to forget the old home. Expand, connect and defend the lanes: an empire among the stars is made of distances."""
 
 [[age]]
 ordinal = 12
@@ -105,7 +105,7 @@ name = "Abundance"
 subtitle = "when nothing costs anything"
 theme = "abundance.theme"
 interlude = "abundance.interlude"
-story = """Nothing costs anything any more. Food, metal, energy: there is enough of everything for everyone. What is left to want? Time still passes, buildings still take time to raise, and rivals still have ambitions. Plenty has not ended history. It has only changed what history is about."""
+story = """Nothing costs anything any more. Food, metal, energy: there is enough of everything for everyone, and your jump drives now cross to the other star clusters. What is left to want? Time still passes, buildings still take time to raise, and rivals still have ambitions. Plenty has not ended history. It has only changed what history is about."""
 
 [[age]]
 ordinal = 13

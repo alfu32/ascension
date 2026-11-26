@@ -54,6 +54,14 @@ const HOME_TRIALS: usize = 24;
 pub const FAIR_NEAR_PCT: i64 = 70;
 /// A route passes at least this far (map units) from every other system.
 const ROUTE_CLEARANCE: i64 = 40;
+/// Fewest systems of the star cluster a home system stands in (task 163): until the galactic
+/// tier a player's ships jump only between the systems of its own cluster, so a home needs room
+/// around it. Counted along the routes inside the cluster.
+pub const HOME_CLUSTER_MIN_SYSTEMS: usize = 3;
+/// A player's share of its home cluster beyond its home system, in systems' worth of the style's
+/// contents at the middle of its per-system ranges: the other systems of the smallest home
+/// cluster. Never more than the region holds per player.
+pub const SHARE_SYSTEMS: i64 = HOME_CLUSTER_MIN_SYSTEMS as i64 - 1;
 
 /// What to generate.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -148,6 +156,11 @@ pub struct Universe {
     /// The dormant surface of every resource body, keyed by body id (task 77): made before
     /// play, shown and simulated only once an ascended player brings the body to life.
     pub dormant: BTreeMap<u32, DormantSurface>,
+    /// Bodies added to the systems of home clusters short of their share (task 163), by system.
+    /// A record of the generation; not hashed (the bodies are).
+    pub top_ups: Vec<TopUp>,
+    /// Layout attempts the generator made before this one passed (task 163's report); not hashed.
+    pub attempts: u32,
 }
 
 /// One home system's share in the fairness measure.
@@ -164,6 +177,90 @@ pub struct HomeShare {
     pub value: i64,
     /// Summed length of the home system's two shortest routes, map units.
     pub near: i64,
+    /// The systems of its home cluster (task 163): the systems of its star cluster it reaches
+    /// along routes inside that cluster, itself included.
+    pub cluster_systems: u32,
+    /// Home systems in that home cluster, this one included.
+    pub cluster_homes: u32,
+    /// Habitable planets of the home cluster besides the home planets.
+    pub cluster_habitable: u32,
+    /// Resource bodies of the home cluster.
+    pub cluster_bodies: u32,
+    /// Summed `et_node.income` of the home cluster's resource bodies.
+    pub cluster_value: i64,
+}
+
+/// Bodies added to one system of a home cluster short of its share (task 163).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TopUp {
+    /// The system.
+    pub system: u32,
+    /// Habitable planets added.
+    pub planets: u32,
+    /// Resource bodies added.
+    pub bodies: u32,
+}
+
+/// Component labels of the systems joined by routes within one star cluster, indexed by system
+/// id − 1: the lowest system id of each component. A system without a cluster stands alone.
+pub fn cluster_components(clusters: &[Option<u32>], routes: &[(u32, u32)]) -> Vec<u32> {
+    let mut label: Vec<u32> = (1..=clusters.len() as u32).collect();
+    fn root(label: &mut [u32], mut v: u32) -> u32 {
+        while label[v as usize - 1] != v {
+            let up = label[label[v as usize - 1] as usize - 1];
+            label[v as usize - 1] = up;
+            v = up;
+        }
+        v
+    }
+    for &(a, b) in routes {
+        let (ca, cb) = (clusters[a as usize - 1], clusters[b as usize - 1]);
+        if ca.is_none() || ca != cb {
+            continue;
+        }
+        let (ra, rb) = (root(&mut label, a), root(&mut label, b));
+        let (low, high) = (ra.min(rb), ra.max(rb));
+        label[high as usize - 1] = low;
+    }
+    (1..=clusters.len() as u32)
+        .map(|v| root(&mut label, v))
+        .collect()
+}
+
+/// The share of a home cluster (task 163) holding `homes` of the `total` home systems of a
+/// match whose region holds `others` systems besides the homes: habitable planets besides the
+/// homes and resource bodies, rounded up. Each home's share is [`SHARE_SYSTEMS`] systems' worth
+/// of the style's contents, never more than the region holds per home.
+pub fn cluster_share(style: &MapStyle, homes: i64, total: i64, others: i64) -> (i64, i64) {
+    let total = total.max(1);
+    let systems = (SHARE_SYSTEMS * total).min(others.max(0));
+    let share = |lo: i64, hi: i64| {
+        let num = homes * systems * (lo + hi).max(0);
+        let den = 2 * total;
+        (num + den - 1) / den
+    };
+    (
+        share(
+            style.habitable_per_system_min,
+            style.habitable_per_system_max,
+        ),
+        share(
+            style.resource_bodies_per_system_min,
+            style.resource_bodies_per_system_max,
+        ),
+    )
+}
+
+/// `low` held by `per_low` homes against `high` held by `per_high`, per home, within `pct`
+/// percent.
+fn within_pct(low: i64, per_low: i64, high: i64, per_high: i64, pct: i64) -> bool {
+    low * per_high.max(1) * 100 >= high * per_low.max(1) * pct
+}
+
+/// Least amount `homes` must hold to stay within `pct` percent of `high` held by `per_high`.
+fn fair_floor(high: i64, per_high: i64, homes: i64, pct: i64) -> i64 {
+    let den = 100 * per_high.max(1);
+    (high * homes * pct + den - 1) / den
 }
 
 type Point = (i64, i64, i64);
@@ -277,19 +374,32 @@ fn local_reach(pts: &[Point], k: usize) -> Vec<i64> {
 /// Home systems among the region's stars so every player starts with a comparable
 /// neighbourhood: candidates are stars whose local reach is near the region's median, and of
 /// several farthest-point placements the one with the smallest spread of reach, then the widest
-/// gap between homes, wins. Returns region indices in increasing order.
-fn place_homes(rng: &mut SimRng, pts: &[Point], homes: usize, neighbours: usize) -> Vec<usize> {
+/// gap between homes, wins. Only `eligible` stars are candidates (task 163: those of a star
+/// cluster with room for a home). Returns region indices in increasing order; fewer than
+/// `homes` when too few stars are eligible.
+fn place_homes(
+    rng: &mut SimRng,
+    pts: &[Point],
+    homes: usize,
+    neighbours: usize,
+    eligible: &[bool],
+) -> Vec<usize> {
     let reach = local_reach(pts, neighbours);
     let mut sorted = reach.clone();
     sorted.sort_unstable();
     let median = sorted[sorted.len() / 2];
     let mut pool: Vec<usize> = (0..pts.len())
         .filter(|&i| {
-            reach[i] * 100 >= median * HOME_BAND_PCT.0 && reach[i] * 100 <= median * HOME_BAND_PCT.1
+            eligible[i]
+                && reach[i] * 100 >= median * HOME_BAND_PCT.0
+                && reach[i] * 100 <= median * HOME_BAND_PCT.1
         })
         .collect();
     if pool.len() < homes {
-        pool = (0..pts.len()).collect();
+        pool = (0..pts.len()).filter(|&i| eligible[i]).collect();
+    }
+    if pool.len() < homes || homes == 0 {
+        return Vec::new();
     }
     let mut best: Option<(HomeKey, Vec<usize>)> = None;
     for _ in 0..HOME_TRIALS {
@@ -454,6 +564,20 @@ impl Arrangement {
         }
     }
 
+    /// The arrangement of a system topped up for its home cluster (task 163): planets by size
+    /// outward, and every resource body in a belt beyond the outermost planet, where the orbit
+    /// is widest, so the added bodies keep clear of one another and no moon has to squeeze
+    /// beside an inner planet.
+    fn topped_up(mut planets: Vec<(u32, Option<usize>)>, kinds: Vec<DefId>) -> Self {
+        planets.sort_by_key(|&(n, home)| (n, home.is_none(), home));
+        let belt_slot = (!kinds.is_empty()).then_some(planets.len());
+        Self {
+            planets,
+            belt_slot,
+            resources: kinds.into_iter().map(|k| (k, None)).collect(),
+        }
+    }
+
     /// The bodies of the system with radii growing geometrically from the star, ids and names
     /// left for the caller, each with its place among the system's homes; a home planet's race
     /// is `races[its place]`.
@@ -595,6 +719,8 @@ struct Layout {
     figure: Vec<(u32, u32)>,
     /// The home group (index into the request's homes) of every home planet, by body id.
     homes: BTreeMap<u32, usize>,
+    /// Bodies added to home clusters short of their share (task 163).
+    top_ups: Vec<TopUp>,
 }
 
 /// Appends the bodies of one system (`orbits` already named) with their ids, recording which
@@ -819,7 +945,16 @@ fn layout(
         StarRegion::Wedge | StarRegion::All => WIDE_REACH_NEIGHBOURS,
         StarRegion::Nearest | StarRegion::Single => REACH_NEIGHBOURS,
     };
-    let chosen = place_homes(rng, &pts, homes, neighbours);
+    // Task 163: a home stands only in a star cluster of which the region holds enough systems.
+    let mut in_region: BTreeMap<u32, usize> = BTreeMap::new();
+    for s in &region {
+        *in_region.entry(s.cluster_id).or_default() += 1;
+    }
+    let eligible: Vec<bool> = region
+        .iter()
+        .map(|s| in_region[&s.cluster_id] >= HOME_CLUSTER_MIN_SYSTEMS)
+        .collect();
+    let chosen = place_homes(rng, &pts, homes, neighbours, &eligible);
     if chosen.len() != homes {
         return None;
     }
@@ -878,8 +1013,7 @@ fn layout(
     let home_resources = resource_kinds(rng, style, rows, true);
     let home_plan = Arrangement::new(rng, home_planets, home_resources, &[]);
 
-    let mut bodies = Vec::new();
-    let mut home_bodies = BTreeMap::new();
+    let mut contents: Vec<SystemContents> = Vec::new();
     for system in &systems {
         let (plan, race) = if let Some(&race) = races.get(system.id as usize - 1) {
             (home_plan.clone(), Some(race))
@@ -893,6 +1027,24 @@ fn layout(
             let kinds = resource_kinds(rng, style, rows, false);
             (Arrangement::new(rng, planets, kinds, &[]), None)
         };
+        let orbits = named(&system.name, plan.orbits(rng, race.as_slice()));
+        contents.push((plan, orbits));
+    }
+    // Home clusters short of their share get more bodies, from a generator of their own so the
+    // other systems keep what they had (task 163).
+    let mut extra = SimRng::new(mix64(u64::from(rng.next_u32()) ^ 0x7c3a_95e1_0d4b_2f68));
+    let top_ups = top_up_home_clusters(
+        &mut extra,
+        (rules, style, rows),
+        &systems,
+        &routes,
+        homes,
+        &mut contents,
+    )?;
+
+    let mut bodies = Vec::new();
+    let mut home_bodies = BTreeMap::new();
+    for (system, (_, orbits)) in systems.iter().zip(contents) {
         bodies.push(Body {
             id: bodies.len() as u32 + 1,
             system_id: system.id,
@@ -904,7 +1056,6 @@ fn layout(
             home_race: None,
             node_entity_type: None,
         });
-        let orbits = named(&system.name, plan.orbits(rng, race.as_slice()));
         let group = [system.id as usize - 1];
         push_orbits(&mut bodies, &mut home_bodies, system.id, orbits, &group);
     }
@@ -914,7 +1065,216 @@ fn layout(
         routes,
         figure,
         homes: home_bodies,
+        top_ups,
     })
+}
+
+/// A system's arrangement and its bodies on their orbits, each with its place among the homes.
+type SystemContents = (Arrangement, Vec<(Body, Option<usize>)>);
+
+/// The income of a resource body of node type `kind`.
+fn node_income(rules: &Rules, kind: DefId) -> i64 {
+    rules
+        .entity_types
+        .get(&kind)
+        .and_then(|e| e.node.as_ref())
+        .map_or(0, |n| n.income)
+}
+
+/// What a home cluster holds and needs while it is topped up (task 163).
+struct ClusterNeed {
+    /// System indices (id − 1) of the cluster, homes first.
+    members: Vec<usize>,
+    /// Home systems in it.
+    homes: i64,
+    /// Habitable planets besides the homes, resource bodies and their income.
+    habitable: i64,
+    bodies: i64,
+    value: i64,
+}
+
+impl ClusterNeed {
+    fn measure(
+        rules: &Rules,
+        members: Vec<usize>,
+        homes: i64,
+        contents: &[SystemContents],
+    ) -> Self {
+        let (mut habitable, mut bodies, mut value) = (0, 0, 0);
+        for &i in &members {
+            let plan = &contents[i].0;
+            habitable += plan.planets.iter().filter(|p| p.1.is_none()).count() as i64;
+            bodies += plan.resources.len() as i64;
+            value += plan
+                .resources
+                .iter()
+                .map(|&(kind, _)| node_income(rules, kind))
+                .sum::<i64>();
+        }
+        Self {
+            members,
+            homes,
+            habitable,
+            bodies,
+            value,
+        }
+    }
+}
+
+/// Task 163: every home cluster (the systems of a home's star cluster joined to it by routes
+/// inside the cluster) must hold at least [`HOME_CLUSTER_MIN_SYSTEMS`] systems, and, per home in
+/// it, the style's share of habitable planets and resource bodies ([`cluster_share`]) and at
+/// least [`FAIR_VALUE_PCT`] percent of the richest home cluster's planets and resource-body
+/// income per home. A cluster short of that gets planets and bodies in its systems other than
+/// the homes, one at a time to the one holding fewest, up to twice the style's per-system
+/// maximum. `None` when a cluster is too small or cannot take what
+/// it needs: the layout attempt fails. Returns what was added.
+fn top_up_home_clusters(
+    rng: &mut SimRng,
+    (rules, style, rows): (&Rules, &MapStyle, &[&MapStyleFeature]),
+    systems: &[StarSystem],
+    routes: &[Route],
+    homes: usize,
+    contents: &mut [SystemContents],
+) -> Option<Vec<TopUp>> {
+    let clusters: Vec<Option<u32>> = systems.iter().map(|s| s.cluster).collect();
+    let pairs: Vec<(u32, u32)> = routes.iter().map(|r| (r.system_a, r.system_b)).collect();
+    let label = cluster_components(&clusters, &pairs);
+    let mut needs: BTreeMap<u32, ClusterNeed> = BTreeMap::new();
+    for home in 0..homes {
+        let component = label[home];
+        if let Some(need) = needs.get_mut(&component) {
+            need.homes += 1;
+            continue;
+        }
+        let members: Vec<usize> = (0..systems.len())
+            .filter(|&i| label[i] == component)
+            .collect();
+        if members.len() < HOME_CLUSTER_MIN_SYSTEMS {
+            return None;
+        }
+        let need = ClusterNeed::measure(rules, members, 1, contents);
+        needs.insert(component, need);
+    }
+    let total = homes as i64;
+    let others = (systems.len() - homes) as i64;
+    let mut added: BTreeMap<usize, (Vec<u32>, Vec<DefId>)> = BTreeMap::new();
+    let n_pick = |rng: &mut SimRng| pick(rng, style.planet_n_min, style.planet_n_max) as u32;
+    // The system of `need` other than a home that holds fewest bodies now, then the lowest id.
+    // A topped-up system holds at most twice the style's per-system maximum of planets and of
+    // resource bodies, so its orbits keep their room.
+    let planet_cap = 2 * style.habitable_per_system_max.max(1) as usize;
+    let body_cap = 2 * style.resource_bodies_per_system_max.max(1) as usize;
+    // The system of `need` other than a home with room for another planet (or resource body)
+    // that holds fewest bodies now, then the lowest id.
+    let smallest = |need: &ClusterNeed,
+                    contents: &[SystemContents],
+                    added: &BTreeMap<usize, (Vec<u32>, Vec<DefId>)>,
+                    planet: bool| {
+        need.members
+            .iter()
+            .copied()
+            .filter(|&i| i >= homes)
+            .filter(|&i| {
+                let plan = &contents[i].0;
+                let (p, b) = added.get(&i).map_or((0, 0), |(p, b)| (p.len(), b.len()));
+                if planet {
+                    plan.planets.len() + p < planet_cap
+                } else {
+                    plan.resources.len() + b < body_cap
+                }
+            })
+            .min_by_key(|&i| {
+                let plan = &contents[i].0;
+                let extra = added.get(&i).map_or(0, |(p, b)| p.len() + b.len());
+                (plan.planets.len() + plan.resources.len() + extra, i)
+            })
+    };
+    // First the share, then the floor of the richest cluster per home; each pass adds what is
+    // missing.
+    for pass in 0..2 {
+        // Floors of habitable planets, resource bodies and their income, cluster by cluster.
+        let floors: Vec<(i64, i64, i64)> = if pass == 0 {
+            needs
+                .values()
+                .map(|n| {
+                    let (planets, bodies) = cluster_share(style, n.homes, total, others);
+                    (planets, bodies, 0)
+                })
+                .collect()
+        } else {
+            let richest = |f: fn(&ClusterNeed) -> i64| {
+                needs
+                    .values()
+                    .max_by(|a, b| (f(a) * b.homes).cmp(&(f(b) * a.homes)))
+                    .map_or((0, 1), |n| (f(n), n.homes))
+            };
+            let (hab, hab_homes) = richest(|n| n.habitable);
+            let (value, value_homes) = richest(|n| n.value);
+            needs
+                .values()
+                .map(|n| {
+                    (
+                        fair_floor(hab, hab_homes, n.homes, FAIR_VALUE_PCT),
+                        0,
+                        fair_floor(value, value_homes, n.homes, FAIR_VALUE_PCT),
+                    )
+                })
+                .collect()
+        };
+        for (need, &(hab_floor, body_floor, value_floor)) in needs.values_mut().zip(&floors) {
+            while need.habitable < hab_floor {
+                let i = smallest(need, contents, &added, true)?;
+                added.entry(i).or_default().0.push(n_pick(rng));
+                need.habitable += 1;
+            }
+            let mut tries = 0;
+            while need.bodies < body_floor || need.value < value_floor {
+                tries += 1;
+                if tries > MAX_ORBITS * 16 {
+                    return None;
+                }
+                if rows.is_empty() {
+                    return None;
+                }
+                let kind = weighted_kind(rng, rows);
+                let income = node_income(rules, kind);
+                // Past the share of bodies, only a body that pays raises the value.
+                if need.bodies >= body_floor && income <= 0 {
+                    continue;
+                }
+                let i = smallest(need, contents, &added, false)?;
+                added.entry(i).or_default().1.push(kind);
+                need.bodies += 1;
+                need.value += income;
+            }
+        }
+    }
+    let mut top_ups = Vec::new();
+    for (i, (planets, kinds)) in added {
+        let (plan, _) = &contents[i];
+        let all_planets: Vec<(u32, Option<usize>)> = plan
+            .planets
+            .iter()
+            .copied()
+            .chain(planets.iter().map(|&n| (n, None)))
+            .collect();
+        let all_kinds: Vec<DefId> = plan
+            .resources
+            .iter()
+            .map(|r| r.0)
+            .chain(kinds.iter().copied())
+            .collect();
+        let plan = Arrangement::topped_up(all_planets, all_kinds);
+        let orbits = named(&systems[i].name, plan.orbits(rng, &[]));
+        contents[i] = (plan, orbits);
+        top_ups.push(TopUp {
+            system: systems[i].id,
+            planets: planets.len() as u32,
+            bodies: kinds.len() as u32,
+        });
+    }
+    Some(top_ups)
 }
 
 /// Solar (task 89): one catalogue star chosen by the seed, whose system holds every race's home
@@ -998,6 +1358,7 @@ fn solar_layout(
         routes: Vec::new(),
         figure: Vec::new(),
         homes,
+        top_ups: Vec::new(),
     })
 }
 
@@ -1172,6 +1533,19 @@ pub fn plan_universe_placed(
     plan(&checked, request).map(|(u, _)| u)
 }
 
+/// [`plan_universe`] with the players dealt over `homes` home planets in turn (player `p` on
+/// home `p % homes`), each in its own home system, whatever their races: the together
+/// placement's fallback when one planet cannot hold everyone, and a way to test many homes.
+pub fn plan_universe_dealt(
+    rules: &Rules,
+    request: &UniverseRequest,
+    homes: usize,
+) -> Result<Universe, MapGenError> {
+    let mut checked = check_request(rules, request)?;
+    checked.together(homes)?;
+    plan(&checked, request).map(|(u, _)| u)
+}
+
 /// The players (indices in player order) who start on each home planet, by body id.
 type HomePlayers = BTreeMap<u32, Vec<usize>>;
 
@@ -1208,6 +1582,8 @@ fn plan(c: &Checked, request: &UniverseRequest) -> Result<(Universe, HomePlayers
             planets: BTreeMap::new(),
             starts: Vec::new(),
             dormant: BTreeMap::new(),
+            top_ups: layout.top_ups,
+            attempts: attempt as u32 + 1,
         };
         for body in &universe.bodies {
             let Some(n) = body.n else { continue };
@@ -1512,10 +1888,61 @@ impl Universe {
             .count()
     }
 
+    /// Component labels of the systems joined by routes inside one star cluster
+    /// ([`cluster_components`]), indexed by system id − 1.
+    pub fn cluster_labels(&self) -> Vec<u32> {
+        let clusters: Vec<Option<u32>> = self.systems.iter().map(|s| s.cluster).collect();
+        let pairs: Vec<(u32, u32)> = self
+            .routes
+            .iter()
+            .map(|r| (r.system_a, r.system_b))
+            .collect();
+        cluster_components(&clusters, &pairs)
+    }
+
     /// The fairness measure of every home system, ordered by race.
     pub fn home_shares(&self, rules: &Rules) -> Vec<HomeShare> {
         let homes = self.home_systems();
         let home_ids: BTreeSet<u32> = homes.iter().map(|&(_, s)| s).collect();
+        let label = self.cluster_labels();
+        let home_planets: BTreeSet<u32> = self
+            .bodies
+            .iter()
+            .filter(|b| b.home_race.is_some())
+            .map(|b| b.id)
+            .collect();
+        let cluster_of = |system: u32| {
+            let component = label[system as usize - 1];
+            let members: BTreeSet<u32> = (1..=self.systems.len() as u32)
+                .filter(|&s| label[s as usize - 1] == component)
+                .collect();
+            let homes = home_ids.iter().filter(|s| members.contains(s)).count() as u32;
+            let inside = || {
+                self.bodies
+                    .iter()
+                    .filter(|b| members.contains(&b.system_id))
+            };
+            let habitable = inside()
+                .filter(|b| b.kind == BodyKind::Habitable && !home_planets.contains(&b.id))
+                .count() as u32;
+            let incomes: Vec<i64> = inside()
+                .filter_map(|b| b.node_entity_type)
+                .map(|d| {
+                    rules
+                        .entity_types
+                        .get(&d)
+                        .and_then(|e| e.node.as_ref())
+                        .map_or(0, |n| n.income)
+                })
+                .collect();
+            (
+                members.len() as u32,
+                homes,
+                habitable,
+                incomes.len() as u32,
+                incomes.iter().sum::<i64>(),
+            )
+        };
         homes
             .iter()
             .map(|&(race, system)| {
@@ -1544,12 +1971,19 @@ impl Universe {
                     .collect();
                 lengths.sort_unstable();
                 let near = lengths.iter().take(2).sum();
+                let (cluster_systems, cluster_homes, cluster_habitable, cluster_bodies, value_in) =
+                    cluster_of(system);
                 HomeShare {
                     race,
                     system,
                     habitable,
                     value,
                     near,
+                    cluster_systems,
+                    cluster_homes,
+                    cluster_habitable,
+                    cluster_bodies,
+                    cluster_value: value_in,
                 }
             })
             .collect()
@@ -1599,6 +2033,69 @@ impl Universe {
             problems.push(format!(
                 "the two shortest routes of a home system total {low} to {high}"
             ));
+        }
+        if !self.routes.is_empty() {
+            problems.extend(self.home_cluster_problems(rules, &shares));
+        }
+        problems
+    }
+
+    /// Task 163: each home cluster has room ([`HOME_CLUSTER_MIN_SYSTEMS`]), its homes' share
+    /// ([`cluster_share`]), and per home at least [`FAIR_VALUE_PCT`] percent of the richest home
+    /// cluster's habitable planets and resource-body income.
+    fn home_cluster_problems(&self, rules: &Rules, shares: &[HomeShare]) -> Vec<String> {
+        let mut problems = Vec::new();
+        let Some(style) = rules.map_styles.get(&self.style) else {
+            return problems;
+        };
+        let total = shares.len() as i64;
+        let celestial = usize::from(self.celestial_system().is_some());
+        let others = (self.systems.len() - celestial - shares.len()) as i64;
+        for s in shares {
+            if (s.cluster_systems as usize) < HOME_CLUSTER_MIN_SYSTEMS {
+                problems.push(format!(
+                    "home system {} is in a cluster of {} systems",
+                    s.system, s.cluster_systems
+                ));
+            }
+            let (planets, bodies) = cluster_share(style, i64::from(s.cluster_homes), total, others);
+            if i64::from(s.cluster_habitable) < planets || i64::from(s.cluster_bodies) < bodies {
+                problems.push(format!(
+                    "the home cluster of system {} holds {} planets and {} resource bodies for {} \
+                     homes, short of {planets} and {bodies}",
+                    s.system, s.cluster_habitable, s.cluster_bodies, s.cluster_homes
+                ));
+            }
+        }
+        let per_player = |f: fn(&HomeShare) -> i64| {
+            let low = shares
+                .iter()
+                .min_by(|a, b| {
+                    (f(a) * i64::from(b.cluster_homes)).cmp(&(f(b) * i64::from(a.cluster_homes)))
+                })
+                .map(|s| (f(s), i64::from(s.cluster_homes)));
+            let high = shares
+                .iter()
+                .max_by(|a, b| {
+                    (f(a) * i64::from(b.cluster_homes)).cmp(&(f(b) * i64::from(a.cluster_homes)))
+                })
+                .map(|s| (f(s), i64::from(s.cluster_homes)));
+            low.zip(high)
+        };
+        for (what, f) in [
+            (
+                "habitable planets",
+                (|s: &HomeShare| i64::from(s.cluster_habitable)) as fn(&HomeShare) -> i64,
+            ),
+            ("resource-body value", |s: &HomeShare| s.cluster_value),
+        ] {
+            if let Some(((low, lp), (high, hp))) = per_player(f)
+                && !within_pct(low, lp, high, hp, FAIR_VALUE_PCT)
+            {
+                problems.push(format!(
+                    "home clusters hold {low} for {lp} homes to {high} for {hp} homes of {what}"
+                ));
+            }
         }
         problems
     }

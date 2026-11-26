@@ -662,6 +662,30 @@ pub(crate) fn read_script(
             .collect();
         neighbours.sort_unstable();
         context.systems = neighbours.into_iter().map(|(_, id)| id).collect();
+        let place = |id: u32| {
+            world
+                .systems()
+                .iter()
+                .find(|s| s.id == id)
+                .map(|s| (i64::from(s.x), i64::from(s.y), i64::from(s.z)))
+        };
+        if let Some(here) = place(home.system) {
+            let mut outside: Vec<(i64, u32)> = world
+                .systems()
+                .iter()
+                .filter(|s| s.cluster.is_some() && !world.same_cluster(home.system, s.id))
+                .map(|s| {
+                    let (dx, dy, dz) = (
+                        i64::from(s.x) - here.0,
+                        i64::from(s.y) - here.1,
+                        i64::from(s.z) - here.2,
+                    );
+                    (dx * dx + dy * dy + dz * dz, s.id)
+                })
+                .collect();
+            outside.sort_unstable();
+            context.outside = outside.into_iter().map(|(_, id)| id).collect();
+        }
     }
     Script::parse(&text, &context, &offset).map_err(|error| format!("{}: {error}", path.display()))
 }
