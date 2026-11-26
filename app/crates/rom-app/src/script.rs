@@ -65,8 +65,8 @@
 //! (task 117).
 //!
 //! Camera commands replay input on the render thread exactly as the window would send it
-//! (positions in canvas pixels): `cam wheel <steps> [x,y]` (each step glides, as one notch of
-//! the wheel does), `cam drag x,y x,y [shift]` (middle-button drag; `shift`, or the older
+//! (positions in canvas pixels): `cam wheel <steps> [x,y] [ctrl]` (each step glides, as one
+//! notch of the wheel does; with `ctrl` it turns a building being placed instead, task 165), `cam drag x,y x,y [shift]` (middle-button drag; `shift`, or the older
 //! `rotate`, holds Shift: since task 74 the plain drag turns the view in space and the Shift
 //! drag pans it), `cam dblclick x,y`, `cam click x,y`, `cam point
 //! x,y` (move the pointer only), `cam key <name> <down|up>` (a camera key by name: the arrows
@@ -777,12 +777,19 @@ fn camera_input(words: &[&str]) -> Result<Vec<rom_render::InputEvent>, String> {
                 .get(1)
                 .and_then(|w| w.parse::<f32>().ok())
                 .ok_or("cam wheel needs a number of steps")?;
+            // `ctrl` last holds Ctrl: the wheel turns a building being placed (task 165).
+            let ctrl = words.last() == Some(&"ctrl");
+            let point = words.len() - usize::from(ctrl) > 2;
             let mut events = Vec::new();
-            if words.len() > 2 {
+            if point {
                 let (x, y) = at(2)?;
                 events.push(InputEvent::PointerMoved { x, y });
             }
-            events.push(InputEvent::Wheel { steps });
+            events.push(if ctrl {
+                InputEvent::TurnWheel { steps }
+            } else {
+                InputEvent::Wheel { steps }
+            });
             events
         }
         Some("drag") => {
@@ -1268,6 +1275,8 @@ mod tests {
             5 cam dblclick 50,60
             6 cam key left down
             7 cam focus
+            8 cam wheel 1 ctrl
+            9 cam wheel -1 640,360 ctrl
         ";
         let setup = ScriptSetup::scan(text).unwrap();
         assert_eq!(
@@ -1315,6 +1324,17 @@ mod tests {
         assert_eq!(
             input(script.due_actions(7)),
             vec![InputEvent::KeyDown(Key::FocusSelection)]
+        );
+        assert_eq!(
+            input(script.due_actions(8)),
+            vec![InputEvent::TurnWheel { steps: 1.0 }]
+        );
+        assert_eq!(
+            input(script.due_actions(9)),
+            vec![
+                InputEvent::PointerMoved { x: 640.0, y: 360.0 },
+                InputEvent::TurnWheel { steps: -1.0 }
+            ]
         );
         assert!(Script::parse("1 cam spin", &context(), &offset).is_err());
         assert!(ScriptSetup::scan("0 place-space 1 unit.corvette 30").is_err());

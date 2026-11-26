@@ -422,6 +422,10 @@ pub enum SimError {
     /// Task 147: a line or minefield lays at most `MAX_LINE_SITES` sites.
     #[error("too long a line or too large a minefield")]
     LineTooLong,
+    /// Task 165: a gate goes into a line only over a straight run of the player's own segments
+    /// of the line it belongs to, as wide as the gate.
+    #[error("a gate goes into a straight run of its own line")]
+    GateOffLine,
 }
 
 #[cfg(test)]
@@ -434,6 +438,8 @@ mod cluster_jumps_tests;
 mod fields_tests;
 #[cfg(test)]
 mod fortification_tests;
+#[cfg(test)]
+mod gate_insert_tests;
 #[cfg(test)]
 mod life_tests;
 #[cfg(test)]

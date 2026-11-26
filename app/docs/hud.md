@@ -290,6 +290,20 @@ a right click. A minefield type drags a rectangle of mines. Every segment and ga
 its line, diagonals included: its model turns with it and a diagonal one is stretched to meet
 its neighbours.
 
+Turning and gates (task 165). While any other building is armed, R turns its ghost 45°
+clockwise and Shift+R back; Ctrl with the mouse wheel does the same (the plain wheel still
+zooms). The ghost, its check and the construct order follow the turn, which stays for the next
+placement of that type until the tool is disarmed. A gate is dragged like a wall: the drag lays
+gates side by side, each turned along it (a short flick lays one, turned towards it; a click
+lays one with the ghost's turn). Pointed at an own segment or field of its line (the segment
+type's `et_fortification.gate_type_id`), a gate snaps onto that tile along the wall; it fits
+over a straight run of own segments as wide as the gate, which give way to its site at once and
+without refund, and gates of a drag that fall on such a wall go into it the same way. While a
+tool is armed, the help line keeps a short hint on its first line ("Drag to build the wall ·
+Esc stops", "Press G to drop a gate · release to build", "Drag to lay gates · R turns · click a
+wall to put one in", "R turns it"), with the line's count and price, or why the ghost is red,
+beneath it.
+
 The CPU HUD preview includes all five button states and a sample research
 overview. It uses the same artwork and quad composition as the GPU HUD:
 `cargo run -p rom-render --example hud_preview -- docs/img/hud-states-preview.png 1672 941`.

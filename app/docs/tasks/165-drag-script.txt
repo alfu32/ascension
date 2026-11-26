@@ -1,0 +1,19 @@
+# Task 165: a stone wall dragged; the shot is taken with the button held. The help line keeps
+# the short hint "Press G to drop a gate · release to build" on top, with the count and price of
+# the line beneath it.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun fixed --size 1600x900 \
+#     --script app/docs/tasks/165-drag-script.txt --after 3 --screenshot app/docs/img/165-drag.png
+0 grant-age age.medieval
+0 grant-tech tech.age.classical
+0 grant-tech tech.age.medieval
+5 box builders
+8 hud tab 0
+10 hud arrow 1
+11 hud arrow 1
+12 hud slot 2
+20 brush-down @-9,8
+24 brush-move @-4,8
+28 brush-move @0,8
+34 brush-move @5,8
+38 brush-move @9,8
+15 cam wheel 2 800,560

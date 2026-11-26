@@ -1,0 +1,16 @@
+# Task 165: a barracks armed from the build menu and its ghost turned 45 degrees with R. The
+# builders are boxed, the barracks armed, the pointer rests east of the city and R turns the
+# ghost once: its box stands across the diagonal with an arrow towards its front, and the help
+# line keeps "R turns it" on screen.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun fixed --size 1600x900 \
+#     --script app/docs/tasks/165-turn-script.txt --after 3 --screenshot app/docs/img/165-turn.png
+0 grant-tech tech.military.1
+5 box builders
+8 hud tab 0
+10 hud arrow 1
+11 hud arrow 1
+12 hud arrow 1
+14 hud slot 0
+18 hover @4,6
+20 key r
+4 cam wheel 3 800,480

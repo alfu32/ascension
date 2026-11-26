@@ -26,7 +26,7 @@ pub(crate) fn footprint(et: &EntityType, pos: Pos, facing: u16) -> [i64; 4] {
     [x - w * 500, y - h * 500, x + w * 500, y + h * 500]
 }
 
-fn overlaps(a: [i64; 4], b: [i64; 4]) -> bool {
+pub(crate) fn overlaps(a: [i64; 4], b: [i64; 4]) -> bool {
     a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]
 }
 
@@ -179,8 +179,14 @@ impl World {
                 return Err(SimError::UnbuildableTerrain);
             }
         }
+        // A gate may go into the player's own line, over its segments (task 165).
+        let replaced = if self.is_gate_type(subject) {
+            self.gate_replaces(player, subject, pos, facing)?
+        } else {
+            Vec::new()
+        };
         // Footprints lie within one face, so only footprints on the same face can overlap.
-        if self.building_overlaps(pos, bounds)
+        if (replaced.is_empty() && self.building_overlaps(pos, bounds))
             || self.queued_sites().any(|(other, at, turned)| {
                 at.face == pos.face
                     && at.body == pos.body
@@ -196,11 +202,23 @@ impl World {
         Ok(pos)
     }
 
-    /// Whether a standing building's footprint overlaps `bounds` on the face of `pos`. Looks
-    /// only at the building index tiles a centre of an overlapping building could be on.
+    /// Whether a standing building's footprint overlaps `bounds` on the face of `pos`.
     fn building_overlaps(&self, pos: Pos, bounds: [i64; 4]) -> bool {
+        !self.buildings_overlapping(pos, bounds, true).is_empty()
+    }
+
+    /// The standing buildings whose footprints overlap `bounds` on the face of `pos`, in id
+    /// order; only the first found when `first` is set. Looks only at the building index tiles
+    /// a centre of an overlapping building could be on.
+    pub(crate) fn buildings_overlapping(
+        &self,
+        pos: Pos,
+        bounds: [i64; 4],
+        first: bool,
+    ) -> Vec<EntityId> {
+        let mut found = Vec::new();
         let Some(surface) = self.surface(pos.body) else {
-            return false;
+            return found;
         };
         let (reach_x, reach_y) = (self.max_footprint.0 * 500, self.max_footprint.1 * 500);
         let tiles = |low: i64, high: i64| {
@@ -216,19 +234,25 @@ impl World {
                 let Some(ids) = buildings.get(&(index as u32)) else {
                     continue;
                 };
-                if ids.iter().filter_map(|id| self.entity(*id)).any(|e| {
-                    e.pos.face == pos.face
+                for e in ids.iter().filter_map(|id| self.entity(*id)) {
+                    if e.pos.face == pos.face
                         && e.pos.body == pos.body
                         && overlaps(
                             bounds,
                             footprint(&self.rules.entity_types[&e.type_id], e.pos, e.facing),
                         )
-                }) {
-                    return true;
+                    {
+                        found.push(e.id);
+                        if first {
+                            return found;
+                        }
+                    }
                 }
             }
         }
-        false
+        found.sort_unstable();
+        found.dedup();
+        found
     }
 
     /// The free tile of a movement class nearest `anchor` among the tiles within `reach`
@@ -302,6 +326,11 @@ impl World {
 
     pub(crate) fn create_site(&mut self, order: &mut Order) {
         let subject = order.subject.expect("construction subject");
+        // A gate put into a line takes the place of the segments under it (task 165).
+        if self.is_gate_type(subject) {
+            let at = order.target_pos.expect("placement");
+            self.clear_under_gate(order.player, subject, at, order.facing);
+        }
         let id = self
             .spawn_turned(
                 subject,

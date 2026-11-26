@@ -1188,7 +1188,7 @@ fn render_loop(shared: &Shared) {
                             }
                         }
                     }
-                    other => other,
+                    other => crate::pick::turn_or_zoom(other, &hud_snapshot),
                 };
                 // With "middle drag: pan" the two middle-button jobs trade places everywhere.
                 let event = turn.map_event(event);

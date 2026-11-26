@@ -1,0 +1,30 @@
+# Task 165: a gate put into a finished diagonal stone wall. The wall is dragged north-west to
+# south-east of the city and built while the game runs fast; then the wall gate is armed from
+# the same page and the pointer rests on the wall's middle: the ghost snaps onto the wall,
+# centred on that segment and turned along the diagonal, green where it fits.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun fixed --size 1600x900 \
+#     --script app/docs/tasks/165-snap-script.txt --after 13 --screenshot app/docs/img/165-snap.png
+0 grant-age age.medieval
+0 grant-tech tech.age.classical
+0 grant-tech tech.age.medieval
+0 grant res.timber 3000
+0 grant res.metal 3000
+5 box builders
+8 hud tab 0
+10 hud arrow 1
+11 hud arrow 1
+12 hud slot 2
+20 brush-down @-4,3
+24 brush-move @0,7
+30 brush-move @6,13
+32 brush-up
+34 escape
+40 speed 1000
+1800 speed 100
+1802 box builders
+1804 hud tab 0
+1806 hud arrow 1
+1807 hud arrow 1
+1808 hud slot 3
+1812 hover @1,8
+1790 cam wheel 4 800,430

@@ -379,6 +379,12 @@ pub enum InputEvent {
         /// Number of wheel steps.
         steps: f32,
     },
+    /// Wheel movement with Ctrl held (task 165): it turns the building being placed, 45° a
+    /// step, positive clockwise; with nothing to turn it zooms as [`InputEvent::Wheel`] does.
+    TurnWheel {
+        /// Number of wheel steps.
+        steps: f32,
+    },
     /// A key went down.
     KeyDown(Key),
     /// A key went up.
@@ -481,7 +487,10 @@ impl CameraController {
                     self.held[index] = false;
                 }
             }
-            InputEvent::Hotkey { .. } | InputEvent::Escape | InputEvent::PointAt { .. } => {}
+            InputEvent::Hotkey { .. }
+            | InputEvent::Escape
+            | InputEvent::PointAt { .. }
+            | InputEvent::TurnWheel { .. } => {}
             InputEvent::ReleaseAll => {
                 self.held = [false; 4];
                 self.rotating = false;

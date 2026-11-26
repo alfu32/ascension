@@ -155,12 +155,31 @@ impl OverlayGeometry {
         }
     }
 
-    fn building_ghost(&mut self, o: Origin, view: &EntityView, contour: [u8; 4], dashed: bool) {
+    /// A building's outline as a translucent box over its footprint, turned `turn` degrees
+    /// clockwise (task 165) and stretched along its x on a diagonal as the model is.
+    fn building_ghost(
+        &mut self,
+        o: Origin,
+        view: &EntityView,
+        contour: [u8; 4],
+        dashed: bool,
+        turn: f32,
+    ) {
         let w = f32::from(view.footprint.0.max(1)) / 2.0;
         let h = f32::from(view.footprint.1.max(1)) / 2.0;
         let height = building_height(view);
         let mut tint = rgba(owner_color(view.owner));
         tint[3] = 48;
+        let (sin, cos) = turn.to_radians().sin_cos();
+        let stretch = if turn == 0.0 {
+            1.0
+        } else {
+            crate::scene::diagonal_stretch(turn)
+        };
+        let at = |x: f32, y: f32, lift: f32| {
+            let x = x * stretch;
+            o.at(x * cos - y * sin, x * sin + y * cos, lift)
+        };
         let corners = [(-w, -h), (w, -h), (w, h), (-w, h)];
         for edge in 0..4 {
             let (a, b) = (corners[edge], corners[(edge + 1) % 4]);
@@ -175,27 +194,27 @@ impl OverlayGeometry {
                 );
                 self.quad(
                     [
-                        o.at(a.0, a.1, LIFT),
-                        o.at(b.0, b.1, LIFT),
-                        o.at(b.0, b.1, height),
-                        o.at(a.0, a.1, height),
+                        at(a.0, a.1, LIFT),
+                        at(b.0, b.1, LIFT),
+                        at(b.0, b.1, height),
+                        at(a.0, a.1, height),
                     ],
                     tint,
                 );
                 if !dashed || i % 2 == 0 {
                     self.quad(
                         [
-                            o.at(a.0 - normal.0, a.1 - normal.1, LIFT + 0.04),
-                            o.at(b.0 - normal.0, b.1 - normal.1, LIFT + 0.04),
-                            o.at(b.0 + normal.0, b.1 + normal.1, LIFT + 0.04),
-                            o.at(a.0 + normal.0, a.1 + normal.1, LIFT + 0.04),
+                            at(a.0 - normal.0, a.1 - normal.1, LIFT + 0.04),
+                            at(b.0 - normal.0, b.1 - normal.1, LIFT + 0.04),
+                            at(b.0 + normal.0, b.1 + normal.1, LIFT + 0.04),
+                            at(a.0 + normal.0, a.1 + normal.1, LIFT + 0.04),
                         ],
                         contour,
                     );
                 }
-                self.line(o.at(a.0, a.1, height), o.at(b.0, b.1, height), tint);
+                self.line(at(a.0, a.1, height), at(b.0, b.1, height), tint);
             }
-            self.line(o.at(a.0, a.1, LIFT), o.at(a.0, a.1, height), tint);
+            self.line(at(a.0, a.1, LIFT), at(a.0, a.1, height), tint);
         }
         // Tile-sized roof panels follow the same ground samples as the footprint.
         for y in 0..view.footprint.1.max(1) {
@@ -203,14 +222,28 @@ impl OverlayGeometry {
                 let (x, y) = (-w + f32::from(x), -h + f32::from(y));
                 self.quad(
                     [
-                        o.at(x, y, height),
-                        o.at(x + 1.0, y, height),
-                        o.at(x + 1.0, y + 1.0, height),
-                        o.at(x, y + 1.0, height),
+                        at(x, y, height),
+                        at(x + 1.0, y, height),
+                        at(x + 1.0, y + 1.0, height),
+                        at(x, y + 1.0, height),
                     ],
                     tint,
                 );
             }
+        }
+        // A turned building shows which way it faces: an arrow on its roof towards its front.
+        if turn != 0.0 {
+            let tip = (w * 0.9, 0.0);
+            let base = (w * 0.9 - (2.0 * h).min(2.0 * w) * 0.35, 0.0);
+            let side = h.min(w) * 0.35;
+            self.tri(
+                [
+                    at(tip.0, tip.1, height + 0.05),
+                    at(base.0, -side, height + 0.05),
+                    at(base.0, side, height + 0.05),
+                ],
+                contour,
+            );
         }
     }
 
@@ -452,7 +485,7 @@ pub fn build_overlays_on(
             y: view.y,
             altitude: view.altitude,
         };
-        out.building_ghost(origin, view, rgba(owner_color(view.owner)), true);
+        out.building_ghost(origin, view, rgba(owner_color(view.owner)), true, 0.0);
     }
     effects::bombardment(out, ground, right, views, hud);
     shields::domes(out, ground, right, views, hud);
@@ -694,7 +727,7 @@ pub fn build_overlays_on(
             facing_deg: 0.0,
             hp_frac: 1.0,
             building: true,
-            footprint: (p.width, p.height),
+            footprint: p.size,
             radius: 0.0,
             carrying: false,
             kept: 0,
@@ -711,7 +744,7 @@ pub fn build_overlays_on(
             cloud: None,
             activity: Default::default(),
         };
-        out.building_ghost(origin, &view, line, false);
+        out.building_ghost(origin, &view, line, false, f32::from(p.facing));
         out.rect_outline(origin, min, max, line);
         out.rect_outline(
             origin,
@@ -842,6 +875,8 @@ mod tests {
                 kind: 3,
                 owner: 1,
                 valid: Some(true),
+                facing: 0,
+                size: (4, 2),
             }),
             ..HudSnapshot::default()
         };
@@ -974,6 +1009,8 @@ mod tests {
                 kind: 1,
                 owner: 1,
                 valid: Some(true),
+                facing: 0,
+                size: (7, 7),
             }),
             city_radii: vec![crate::HudCityRadius {
                 face: 2,
@@ -1057,6 +1094,8 @@ mod tests {
                 kind: 1,
                 owner: 1,
                 valid: Some(true),
+                facing: 0,
+                size: (3, 2),
             }),
             ..HudSnapshot::default()
         };

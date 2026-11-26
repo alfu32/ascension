@@ -1,0 +1,42 @@
+# Task 165: the same diagonal stone wall with the wall gate put into it by a click on its middle
+# segment; the three segments there give way to the gate's site at once and the builders raise
+# it. Player one's pikemen, placed inside, are then sent beyond the wall: they file out
+# through the new gate, the only way through for their side.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun fixed --size 1600x900 \
+#     --script app/docs/tasks/165-gate-script.txt --after 20 --screenshot app/docs/img/165-gate.png
+0 grant-age age.medieval
+0 grant-tech tech.age.classical
+0 grant-tech tech.age.medieval
+0 grant res.timber 3000
+0 grant res.metal 3000
+0 place 1 unit.pikeman @4,3
+0 place 1 unit.pikeman @5,3
+0 place 1 unit.pikeman @6,3
+0 place 1 unit.pikeman @4,4
+0 place 1 unit.pikeman @5,4
+0 place 1 unit.pikeman @6,4
+5 box builders
+8 hud tab 0
+10 hud arrow 1
+11 hud arrow 1
+12 hud slot 2
+20 brush-down @-4,3
+24 brush-move @0,7
+30 brush-move @6,13
+32 brush-up
+34 escape
+40 speed 1000
+1800 speed 100
+1802 box builders
+1804 hud tab 0
+1806 hud arrow 1
+1807 hud arrow 1
+1808 hud slot 3
+1812 brush-down @1,8
+1813 brush-up
+1814 escape
+1816 speed 1000
+2600 speed 100
+2602 box-near city1 9
+2606 rclick @-4,13
+2604 cam wheel 3 800,430

@@ -100,6 +100,8 @@ pub struct HudSnapshot {
     pub trade_targets: Vec<u32>,
     /// The building footprint being placed.
     pub placement: Option<HudPlacement>,
+    /// A building is armed for placement that R and Ctrl with the wheel turn (task 165).
+    pub turnable: bool,
     /// The fortification line or minefield being dragged, site by site (task 147b).
     pub line: Vec<HudLineSite>,
     /// A brush is in hand: the left button paints along its drag instead of selecting (task 150).
@@ -281,6 +283,7 @@ impl Default for HudSnapshot {
             selected: Vec::new(),
             markers: Vec::new(),
             placement: None,
+            turnable: false,
             line: Vec::new(),
             painting: false,
             data_tab: 0,
