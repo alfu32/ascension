@@ -6,7 +6,7 @@ from collections import defaultdict
 from pathlib import Path
 
 sys.dont_write_bytecode = True  # the star table is a module beside this file: leave no __pycache__
-from stars import star_sql  # noqa: E402
+from stars import curation_summary, star_sql  # noqa: E402
 
 SEED = Path(__file__).resolve().parents[1] / 'seed.sql'
 BEGIN = '-- BEGIN GENERATED CONTENT'
@@ -1755,6 +1755,7 @@ def main():
             parser.exit(1, 'seed.sql differs: run python3 db/content/generate.py\n')
     else:
         SEED.write_text(expected)
+        print(curation_summary())
 
 
 if __name__ == '__main__':

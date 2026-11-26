@@ -2614,8 +2614,9 @@ fn colony_script_run() -> (crate::match_setup::Match, Controller, BodyId, u64) {
     let options = crate::args::Options {
         sphere: Some(64),
         players: 2,
-        // Seed 2: the home planet of seed 1 puts these scripts' buildings across a face edge.
-        seed: 2,
+        // Seed 5: the home system needs a second habitable planet for the colony; with the
+        // curated star positions (task 161) the home systems of seeds 2 to 4 have none.
+        seed: 5,
         ..crate::args::Options::default()
     };
     let content = crate::terrain::generate_universe_content(&options).unwrap();

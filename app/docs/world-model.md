@@ -119,6 +119,13 @@ order, "Vega II"; resource bodies "Vega belt" and "Vega II moon".
   every constellation keeps its true shape seen from the Sun. Neighbours in
   the map are only approximately neighbours in space (the compression bends
   distances along the line of sight, never across it).
+- **Curated positions** (task 161, owner 2026-11-26). The map positions are
+  the curated ones: no two systems lie closer than 60 map units. The
+  components of one physical multiple are one system (Alpha Centauri with
+  Toliman and Proxima Centauri, five rows in all; 740 systems), and the 25
+  stars that were too close to a neighbour moved along their line of sight
+  (only their map radius changed, so their direction is exact). The list is
+  in `app/docs/database.md` "Star catalogue".
 - **A match uses a region.** A seeded centre star and the nearest stars to it
   (3D, in map units) until the match has its systems; the region must lie
   within the style's `star_map_radius` of the centre. Routes join real

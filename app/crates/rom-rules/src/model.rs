@@ -2286,7 +2286,8 @@ pub struct Star {
     pub dec_mdeg: i64,
     /// Distance from the Sun in hundredths of a light-year (published value).
     pub dist_cly: i64,
-    /// Map position computed from the three values above, abstract units.
+    /// Map position from the three values above, curated so no two stars lie closer than the
+    /// minimum spacing (task 161; `db/content/stars.py`), abstract units.
     pub x: i64,
     /// Map position, abstract units.
     pub y: i64,
