@@ -608,6 +608,11 @@ pub struct HudPlacement {
     pub owner: u8,
     /// Whether the position is currently valid; `None` before the first answer.
     pub valid: Option<bool>,
+    /// Facing in degrees, clockwise from the face's x axis (task 165); `width` and `height`
+    /// are the footprint turned with it.
+    pub facing: u16,
+    /// The footprint before it turns, along and across the facing, in tiles.
+    pub size: (u8, u8),
 }
 
 /// Wealth totals for the economy data tab.

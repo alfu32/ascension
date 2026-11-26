@@ -214,6 +214,37 @@ struct Placement {
     dirty: bool,
     checked: Option<u64>,
     checked_age: Option<DefId>,
+    /// The turn R and Ctrl with the wheel give it, degrees in steps of 45 (task 165); it stays
+    /// for the next placement of the same type until the tool is disarmed.
+    facing: u16,
+    /// A gate pointed at an own wall snaps onto it: the wall's facing there (task 165).
+    wall: Option<u16>,
+    /// Where the pointer last was, to aim again after a turn.
+    pointer: Option<Pos>,
+}
+
+impl Placement {
+    /// A building armed for placement, unturned.
+    fn new(def: DefId, et: &EntityType) -> Self {
+        Self {
+            def,
+            footprint: (et.footprint_w, et.footprint_h),
+            centre: None,
+            valid: None,
+            dirty: false,
+            checked: None,
+            checked_age: None,
+            facing: 0,
+            wall: None,
+            pointer: None,
+        }
+    }
+
+    /// The facing the ghost shows and the order carries: along the wall it snapped onto, else
+    /// the player's turn.
+    fn shown_facing(&self) -> u16 {
+        self.wall.unwrap_or(self.facing)
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -651,15 +682,19 @@ fn stance_icon(behavior: &str) -> &'static str {
     }
 }
 
-/// Whether `player` may place a building of type `def` centred near `centre`. Delegates to
-/// the simulation's own check, so the preview always agrees with `construct` at submit.
+/// Whether `player` may place a building of type `def` centred near `centre`, turned to
+/// `facing` (task 165). Delegates to the simulation's own check, so the preview always agrees
+/// with `construct` at submit.
 pub fn placement_check(
     world: &World,
     player: PlayerId,
     def: DefId,
     centre: Pos,
+    facing: u16,
 ) -> Result<(), SimError> {
-    world.check_placement(player, def, centre).map(|_| ())
+    world
+        .check_placement_facing(player, def, centre, facing)
+        .map(|_| ())
 }
 
 impl Controller {
@@ -1007,6 +1042,9 @@ impl Controller {
             PickEvent::HoverExit => self.hovered = None,
             PickEvent::Pointed { entity } => self.hovered = entity.map(EntityId),
             PickEvent::Hotkey { ch, modifiers } => self.hotkey(world, ch, modifiers),
+            PickEvent::Turn { steps } => {
+                self.turn_placement(world, steps);
+            }
             PickEvent::Escape => {
                 self.placement = None;
                 self.line = None;
@@ -1703,6 +1741,7 @@ impl Controller {
             return;
         }
         if self.placement.take().is_some() {
+            self.line = None;
             return;
         }
         // Armed for the ground, a right click fires there too.
@@ -2181,6 +2220,14 @@ impl Controller {
     fn hotkey(&mut self, world: &mut OrderSink<'_>, ch: char, mods: Modifiers) {
         // G drops a gate at the pointer into the line being dragged (task 147b).
         if ch.eq_ignore_ascii_case(&'g') && self.drop_gate(world, None) {
+            return;
+        }
+        // R turns the building being placed 45° clockwise, Shift+R back (task 165).
+        if ch.eq_ignore_ascii_case(&'r')
+            && !mods.ctrl
+            && !mods.alt
+            && self.turn_placement(world, if mods.shift { -1 } else { 1 })
+        {
             return;
         }
         if ch == DELETE_KEY {
@@ -3099,31 +3146,14 @@ impl Controller {
             }
             Action::Construct(def) => {
                 let et = &rules.entity_types[&def];
-                self.placement = Some(Placement {
-                    def,
-                    footprint: (et.footprint_w, et.footprint_h),
-                    centre: None,
-                    valid: None,
-                    dirty: false,
-                    checked: None,
-                    checked_age: None,
-                });
+                self.placement = Some(Placement::new(def, et));
                 self.attack_move = false;
-                // A wall or a minefield is dragged (task 147b): say how.
-                if let Some(kind) = lines::line_kind(world, def) {
-                    let name = rules.def(def).name.clone();
-                    self.say(
-                        world,
-                        match kind {
-                            lines::LineKind::Segments => format!(
-                                "{name}: press and drag along the ground, G drops a gate, \
-                                 Escape to stop"
-                            ),
-                            lines::LineKind::Mines => {
-                                format!("{name}: drag a rectangle of mines, Escape to stop")
-                            }
-                        },
-                    );
+                // A wall, a gate or a minefield is dragged (tasks 147b, 165): say how, in the
+                // short words the help line keeps showing.
+                if lines::line_kind(world, def).is_some()
+                    && let Some(hint) = self.armed_hint(world)
+                {
+                    self.say(world, hint);
                 }
             }
             Action::Train(def) | Action::Research(def) => {
@@ -3396,20 +3426,90 @@ impl Controller {
 
     // ----- placement -----------------------------------------------------------------------
 
+    /// Where the armed building would stand with the pointer at `at`, and its facing: on whole
+    /// tiles with its footprint turned to the player's turn, or, for a gate pointed at an own
+    /// wall of its line, on that wall's tile along the wall (task 165).
+    fn aim(&self, world: &World, at: Pos) -> Option<(Pos, Option<u16>)> {
+        let p = self.placement.as_ref()?;
+        if let Some((centre, facing)) = world.gate_in_line(self.me(), p.def, at) {
+            return Some((centre, Some(facing)));
+        }
+        let (w, h) = rom_sim::turned_footprint(p.footprint.0, p.footprint.1, p.facing);
+        Some((
+            Pos {
+                x: snap(at.x, w),
+                y: snap(at.y, h),
+                ..at
+            },
+            None,
+        ))
+    }
+
     fn hover(&mut self, world: &World, at: Pos) {
+        let Some((centre, wall)) = self.aim(world, at) else {
+            return;
+        };
         let Some(p) = &mut self.placement else {
             return;
         };
-        let centre = Pos {
-            x: snap(at.x, p.footprint.0),
-            y: snap(at.y, p.footprint.1),
-            ..at
-        };
-        if p.centre != Some(centre) {
+        p.pointer = Some(at);
+        if p.centre != Some(centre) || p.wall != wall {
             p.centre = Some(centre);
+            p.wall = wall;
             p.dirty = true;
         }
         self.refresh_placement(world);
+    }
+
+    /// Whether the armed building turns with R and Ctrl with the wheel: every building but the
+    /// line tools, whose drag sets their direction (task 165).
+    fn turnable(&self, world: &World) -> bool {
+        self.placement.as_ref().is_some_and(|p| {
+            !matches!(
+                lines::line_kind(world, p.def),
+                Some(lines::LineKind::Segments | lines::LineKind::Mines)
+            )
+        })
+    }
+
+    /// Turns the armed building by `steps` × 45°, clockwise for positive steps (task 165), and
+    /// checks it again where it stands; false when nothing armed turns.
+    fn turn_placement(&mut self, world: &World, steps: i32) -> bool {
+        if !self.turnable(world) {
+            return false;
+        }
+        let Some(p) = &mut self.placement else {
+            return false;
+        };
+        p.facing = (i32::from(p.facing) + 45 * steps).rem_euclid(360) as u16;
+        p.checked = None;
+        p.dirty = true;
+        if let Some(at) = p.pointer {
+            // The turned footprint snaps to the tiles anew.
+            p.centre = None;
+            self.hover(world, at);
+        } else {
+            self.refresh_placement(world);
+        }
+        true
+    }
+
+    /// The short instruction kept on screen while a tool is armed (task 165).
+    fn armed_hint(&self, world: &World) -> Option<&'static str> {
+        let p = self.placement.as_ref()?;
+        let dragging = self.line.is_some();
+        Some(match lines::line_kind(world, p.def) {
+            Some(lines::LineKind::Segments) if dragging => {
+                "Press G to drop a gate · release to build"
+            }
+            Some(lines::LineKind::Segments) => "Drag to build the wall · Esc stops",
+            Some(lines::LineKind::Mines) if dragging => "Release to lay the mines · Esc stops",
+            Some(lines::LineKind::Mines) => "Drag to lay mines · Esc stops",
+            Some(lines::LineKind::Gates) => {
+                "Drag to lay gates · R turns · click a wall to put one in"
+            }
+            None => "R turns it",
+        })
     }
 
     /// Whether a selected builder of `def` stands on the body of `centre`, so it can walk there.
@@ -3442,7 +3542,8 @@ impl Controller {
             || p.checked
                 .is_none_or(|at| world.tick() >= at + PLACEMENT_CHECK_TICKS);
         if let (true, true, Some(centre)) = (p.dirty || age_changed, due, p.centre) {
-            let result = placement_check(world, me, p.def, centre).and_then(|()| {
+            let facing = p.shown_facing();
+            let result = placement_check(world, me, p.def, centre, facing).and_then(|()| {
                 // A site no selected builder can walk to (another planet) is refused too.
                 if reachable == Some(false) {
                     Err(SimError::OtherBody)
@@ -3461,11 +3562,10 @@ impl Controller {
         let Some(p) = self.placement.clone() else {
             return;
         };
-        let centre = Pos {
-            x: snap(at.x, p.footprint.0),
-            y: snap(at.y, p.footprint.1),
-            ..at
+        let Some((centre, wall)) = self.aim(world, at) else {
+            return;
         };
+        let facing = wall.unwrap_or(p.facing);
         let rules = world.rules().clone();
         let mut builders: Vec<(bool, u64, EntityId)> = self
             .own_selected(world)
@@ -3507,15 +3607,14 @@ impl Controller {
             }
             return;
         };
-        if !self.submit(
-            world,
-            first,
-            "construct",
-            Some(p.def),
-            None,
-            Some(centre),
-            shift,
-        ) {
+        // The order carries the building's facing (task 165).
+        let site = rom_sim::LineSite {
+            subject: p.def,
+            pos: centre,
+            facing,
+            check: Ok(()),
+        };
+        if !self.submit_construct(world, first, &site, shift, true) {
             if let Some(active) = &mut self.placement {
                 active.valid = Some(false);
             }
@@ -4169,46 +4268,74 @@ impl Controller {
                 from: Some((home.face, home.x, home.y)),
             });
         }
+        let mut detail = None;
         if let Some(age) = self
             .placement
             .as_ref()
             .and_then(|p| world.placement_discovery_age(me, p.def))
         {
-            hud.help =
-                rejection_message(world, self.me(), &SimError::ResourceAgeRequired(age), None);
+            detail = Some(rejection_message(
+                world,
+                self.me(),
+                &SimError::ResourceAgeRequired(age),
+                None,
+            ));
         } else if let Some(p) = self.placement.as_ref().filter(|p| p.valid == Some(false))
             && let Some(centre) = p.centre
         {
             // Say why the red footprint is red.
-            let reason = placement_check(world, me, p.def, centre).err().or_else(|| {
-                (!self.builder_can_reach(world, p.def, centre)).then_some(SimError::OtherBody)
-            });
+            let reason = placement_check(world, me, p.def, centre, p.shown_facing())
+                .err()
+                .or_else(|| {
+                    (!self.builder_can_reach(world, p.def, centre)).then_some(SimError::OtherBody)
+                });
             if let Some(reason) = reason {
-                hud.help = rejection_message(world, self.me(), &reason, Some(p.def));
+                detail = Some(rejection_message(world, self.me(), &reason, Some(p.def)));
             }
         }
         hud.painting = (self.brush.is_some() && self.placement.is_none() && !self.descend_pick
             || self.line_armed(world).is_some())
             && !self.view.in_space;
-        // A line being dragged shows its sites and their price (task 147b).
+        hud.turnable = self.turnable(world) && !self.view.in_space;
+        // A line being dragged shows its sites and their count and price (task 147b).
         hud.line = self.line_hud(world);
         if let Some(help) = self.line_help(world) {
-            hud.help = help;
+            detail = Some(help);
+        }
+        // An armed tool keeps its short instruction on screen, first, above what it costs or
+        // why it cannot stand there (task 165).
+        if let Some(hint) = self.armed_hint(world) {
+            hud.help = match detail {
+                Some(detail) => format!("{hint}\n{detail}"),
+                None => hint.to_owned(),
+            };
+            if let Some(pointer) = hud.pointer.as_mut() {
+                pointer.hint = hint.to_owned();
+            }
+        } else if let Some(detail) = detail {
+            hud.help = detail;
         }
         hud.placement = self
             .placement
             .as_ref()
             .filter(|_| self.line.is_none())
             .and_then(|p| {
+                let facing = p.shown_facing();
+                let (w, h) = rom_sim::turned_footprint(p.footprint.0, p.footprint.1, facing);
                 p.centre.map(|c| HudPlacement {
                     face: c.face,
-                    width: p.footprint.0.clamp(1, 255) as u8,
-                    height: p.footprint.1.clamp(1, 255) as u8,
+                    width: w.clamp(1, 255) as u8,
+                    height: h.clamp(1, 255) as u8,
                     x: c.x,
                     y: c.y,
                     kind: u16::try_from(p.def.0).unwrap_or(u16::MAX),
                     owner: me.0 as u8,
                     valid: p.valid,
+                    facing,
+                    size: (
+                        p.footprint.0.clamp(1, 255) as u8,
+                        p.footprint.1.clamp(1, 255) as u8,
+                    ),
                 })
             });
         let city_selected = own.iter().any(|e| {
@@ -4485,6 +4612,7 @@ fn rejection_message(
         SimError::ResearchQueued => "Research already queued".into(),
         SimError::ExclusiveResearch => "Another research choice excludes this technology".into(),
         SimError::PlacementOverlap => "Another building occupies this footprint".into(),
+        SimError::GateOffLine => "A gate goes into a straight run of your own wall".into(),
         SimError::UnbuildableTerrain => "Cannot build on this terrain".into(),
         SimError::OutsideMap | SimError::CrossesFaceEdge => {
             "Footprint extends beyond the buildable surface".into()

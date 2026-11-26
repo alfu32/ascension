@@ -3,7 +3,9 @@
 //! line and the drag draws it, site by site, along the ground; G or a right click while
 //! dragging drops a gate (three tiles along the line) at the pointer; the release builds it.
 //! A press on an own wall continues the line from there. With a minefield type armed the drag
-//! is a rectangle of mines. The selected builders take the sites in line order, one stretch
+//! is a rectangle of mines. With a gate armed (task 165) the drag lays gates side by side,
+//! turned along it, and those that fall on an own wall of their line go into it; a click lays
+//! one with the ghost's turn. The selected builders take the sites in line order, one stretch
 //! each; the tool stays armed for the next line until Escape or a right click.
 
 use rom_render::{HudLineSite, MarkerKind};
@@ -19,6 +21,8 @@ pub(super) enum LineKind {
     Segments,
     /// A rectangle of mines (`World::minefield_sites`).
     Mines,
+    /// Gates side by side along the drag (`World::gate_sites`, task 165).
+    Gates,
 }
 
 /// The line or minefield being dragged.
@@ -39,6 +43,7 @@ pub(super) fn line_kind(world: &World, def: DefId) -> Option<LineKind> {
     let et = world.rules().entity_type(def)?;
     match (&et.fortification, &et.minefield) {
         (Some(f), _) if !f.gate => Some(LineKind::Segments),
+        (Some(_), _) => Some(LineKind::Gates),
         (_, Some(_)) => Some(LineKind::Mines),
         _ => None,
     }
@@ -63,7 +68,7 @@ impl Controller {
         if start || self.line.is_none() {
             let (start, continues) = match kind {
                 LineKind::Segments => self.wall_end(world, at).map_or((at, false), |p| (p, true)),
-                LineKind::Mines => (at, false),
+                LineKind::Mines | LineKind::Gates => (at, false),
             };
             self.line = Some(LineDrag {
                 def,
@@ -121,6 +126,7 @@ impl Controller {
 
     fn refresh_line(&mut self, world: &World) {
         let me = self.me();
+        let turn = self.placement.as_ref().map_or(0, |p| p.facing);
         let Some(drag) = &mut self.line else {
             return;
         };
@@ -129,6 +135,7 @@ impl Controller {
                 world.line_sites(me, drag.def, &[drag.start, drag.end], &drag.gates)
             }
             LineKind::Mines => world.minefield_sites(me, drag.def, drag.start, drag.end),
+            LineKind::Gates => world.gate_sites(me, drag.def, drag.start, drag.end, turn),
         };
         drag.sites = match sites {
             Ok(mut sites) => {
@@ -180,7 +187,7 @@ impl Controller {
             .collect()
     }
 
-    /// The line's count and price, and how to finish it, for the help line.
+    /// The line's count and price, for the help line under the armed tool's hint.
     pub(super) fn line_help(&self, world: &World) -> Option<String> {
         let drag = self.line.as_ref()?;
         let rules = world.rules();
@@ -200,21 +207,22 @@ impl Controller {
             .join(", ");
         let name = &rules.def(drag.def).name;
         let blocked = drag.sites.len() - valid.len();
+        let plural =
+            |n: usize, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
         let mut text = match drag.kind {
             LineKind::Segments => format!(
-                "{name}: {} segments, {gates} {} — {price}",
-                valid.len() - gates,
-                if gates == 1 { "gate" } else { "gates" }
+                "{name}: {}, {} — {price}",
+                plural(valid.len() - gates, "segment", "segments"),
+                plural(gates, "gate", "gates")
             ),
             LineKind::Mines => format!("{name}: {} mines — {price}", valid.len()),
+            LineKind::Gates => {
+                format!("{name}: {} — {price}", plural(valid.len(), "gate", "gates"))
+            }
         };
         if blocked > 0 {
             text.push_str(&format!(" ({blocked} cannot stand there)"));
         }
-        text.push_str(match drag.kind {
-            LineKind::Segments => ". Release to build; G or right click drops a gate",
-            LineKind::Mines => ". Release to lay them",
-        });
         Some(text)
     }
 
@@ -283,7 +291,7 @@ impl Controller {
     }
 
     /// Orders `builder` to construct one site, with its facing.
-    fn submit_construct(
+    pub(super) fn submit_construct(
         &mut self,
         world: &mut OrderSink<'_>,
         builder: EntityId,

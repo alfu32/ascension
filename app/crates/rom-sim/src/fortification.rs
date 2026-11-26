@@ -208,6 +208,264 @@ impl World {
         Ok(out)
     }
 
+    /// Whether `type_id` is a segment (no gate) of the line whose gate is `gate`, from its
+    /// `et_fortification` row (task 165).
+    fn segment_of(&self, type_id: DefId, gate: DefId) -> bool {
+        self.rules
+            .entity_type(type_id)
+            .and_then(|et| et.fortification.as_ref())
+            .is_some_and(|f| !f.gate && f.gate_type_id == Some(gate))
+    }
+
+    /// Whether `type_id` is a gate (a type whose `et_fortification` row says so).
+    pub(crate) fn is_gate_type(&self, type_id: DefId) -> bool {
+        self.rules
+            .entity_type(type_id)
+            .and_then(|et| et.fortification.as_ref())
+            .is_some_and(|f| f.gate)
+    }
+
+    /// The facing of the first own field of `gate`'s line (task 156) that spans the tile at
+    /// `index` of `body`, up or down, by the facing of the emitter it runs from.
+    fn field_line_tile(
+        &self,
+        player: PlayerId,
+        gate: DefId,
+        body: crate::BodyId,
+        index: usize,
+    ) -> Option<u16> {
+        let geo = &self.surface(body)?.geo;
+        let tile = geo.tile_at(index);
+        self.fields.links.iter().find_map(|link| {
+            let from = self.entity(link.from)?;
+            let to = self.entity(link.to)?;
+            let in_line = |t: DefId| t == gate || self.segment_of(t, gate);
+            if link.owner != player
+                || link.start.body != body
+                || link.start.face != tile.face
+                || !(in_line(from.type_id) || in_line(to.type_id))
+            {
+                return None;
+            }
+            let (dx, dy) = crate::fields::facing_step(from.facing);
+            let anchor = geo.tile_of(link.start);
+            (1..=i32::from(link.tiles))
+                .any(|k| (anchor.x + dx * k, anchor.y + dy * k) == (tile.x, tile.y))
+                .then_some(snap_facing(from.facing))
+        })
+    }
+
+    /// Where a gate of type `gate` pointed at `at` goes into a line of `player` (task 165): the
+    /// centre of the tile under `at` and the line's facing there, when an own segment of the
+    /// line the gate belongs to (finished or not) or an own field of that line stands on it.
+    /// Whether the gate fits there is [`World::check_placement_facing`]'s answer.
+    pub fn gate_in_line(&self, player: PlayerId, gate: DefId, at: Pos) -> Option<(Pos, u16)> {
+        if !self.is_gate_type(gate) {
+            return None;
+        }
+        let surface = self.surface(at.body)?;
+        let index = surface.geo.pos_index(at)?;
+        let segment = surface
+            .vision
+            .buildings
+            .get(&(index as u32))
+            .into_iter()
+            .flatten()
+            .filter_map(|id| self.entity(*id))
+            .find(|e| e.owner == player && e.hp > 0 && self.segment_of(e.type_id, gate));
+        if let Some(e) = segment {
+            return Some((surface.geo.index_centre(index), snap_facing(e.facing)));
+        }
+        let facing = self.field_line_tile(player, gate, at.body, index)?;
+        Some((surface.geo.index_centre(index), facing))
+    }
+
+    /// The tiles along the long side of a gate of type `gate` centred at `pos` facing
+    /// `facing`, through its centre: the tiles it takes in a line.
+    fn gate_axis(&self, gate: DefId, pos: Pos, facing: u16) -> Vec<Option<usize>> {
+        let et = &self.rules.entity_types[&gate];
+        let half = ((et.footprint_w.max(1) - 1) / 2) as i32;
+        let geo = self.geo(pos.body);
+        let centre = geo.tile_of(pos);
+        let (dx, dy) = crate::fields::facing_step(facing);
+        (-half..=half)
+            .map(|k| {
+                geo.index_of(crate::geometry::Tile::new(
+                    centre.face,
+                    centre.x + dx * k,
+                    centre.y + dy * k,
+                ))
+            })
+            .collect()
+    }
+
+    /// The own segments of `gate`'s line on the axis of a gate centred at `pos` facing
+    /// `facing` (task 165), and every other building its footprint overlaps, in id order.
+    fn under_gate(
+        &self,
+        player: PlayerId,
+        gate: DefId,
+        pos: Pos,
+        facing: u16,
+    ) -> (Vec<EntityId>, Vec<EntityId>) {
+        let et = &self.rules.entity_types[&gate];
+        let bounds = footprint(et, pos, facing);
+        let axis = self.gate_axis(gate, pos, facing);
+        let geo = self.geo(pos.body);
+        self.buildings_overlapping(pos, bounds, false)
+            .into_iter()
+            .partition(|id| {
+                let e = self.entity(*id).expect("overlapping building");
+                e.owner == player
+                    && e.hp > 0
+                    && self.segment_of(e.type_id, gate)
+                    && geo
+                        .pos_index(e.pos)
+                        .is_some_and(|index| axis.contains(&Some(index)))
+            })
+    }
+
+    /// The segments a gate of type `gate` centred at `pos` facing `facing` takes the place of
+    /// (task 165): none when it overlaps no building. A gate goes into a line only over the
+    /// player's own segments of the line it belongs to, finished or not, in one straight run
+    /// along its whole width (a tile of an own field of that line counts as part of the run);
+    /// anything else under it refuses it.
+    pub(crate) fn gate_replaces(
+        &self,
+        player: PlayerId,
+        gate: DefId,
+        pos: Pos,
+        facing: u16,
+    ) -> Result<Vec<EntityId>, SimError> {
+        let (segments, others) = self.under_gate(player, gate, pos, facing);
+        if !others.is_empty() {
+            let own_line = others.iter().all(|id| {
+                let e = self.entity(*id).expect("overlapping building");
+                e.owner == player && self.segment_of(e.type_id, gate)
+            });
+            return Err(if own_line {
+                SimError::GateOffLine
+            } else {
+                SimError::PlacementOverlap
+            });
+        }
+        if segments.is_empty() {
+            return Ok(segments);
+        }
+        let geo = self.geo(pos.body);
+        let taken: Vec<usize> = segments
+            .iter()
+            .filter_map(|id| geo.pos_index(self.entity(*id).expect("segment").pos))
+            .collect();
+        let whole = self.gate_axis(gate, pos, facing).into_iter().all(|tile| {
+            tile.is_some_and(|index| {
+                taken.contains(&index)
+                    || self
+                        .field_line_tile(player, gate, pos.body, index)
+                        .is_some()
+            })
+        });
+        if whole {
+            Ok(segments)
+        } else {
+            Err(SimError::GateOffLine)
+        }
+    }
+
+    /// Takes away, at once and without refund, the segments a gate site placed by `player`
+    /// stands over (task 165). They leave in the order step that lays the site, just before it,
+    /// so no tick passes with the line open.
+    pub(crate) fn clear_under_gate(
+        &mut self,
+        player: PlayerId,
+        gate: DefId,
+        pos: Pos,
+        facing: u16,
+    ) {
+        let (segments, _) = self.under_gate(player, gate, pos, facing);
+        for id in segments {
+            self.despawn(id).expect("segment under a gate");
+        }
+    }
+
+    /// The gates of type `gate` laid by a drag from `from` to `to` (task 165), each as wide as
+    /// its footprint and turned along the drag (to the nearest multiple of 45 degrees), side by
+    /// side from the one centred on `from`'s tile; a drag shorter than one gate lays one,
+    /// turned towards it, and a drag that stays on its first tile lays one facing `facing`.
+    /// Where a gate falls on an own segment or field of its line it goes into that line
+    /// ([`World::gate_in_line`]); gates that would overlap one laid before are left out. Each
+    /// says whether the player may place it now.
+    pub fn gate_sites(
+        &self,
+        player: PlayerId,
+        gate: DefId,
+        from: Pos,
+        to: Pos,
+        facing: u16,
+    ) -> Result<Vec<LineSite>, SimError> {
+        let et = self
+            .rules
+            .entity_type(gate)
+            .ok_or(SimError::UnknownType(gate))?;
+        if !self.is_gate_type(gate) {
+            return Err(SimError::NotALine);
+        }
+        if to.body != from.body {
+            return Err(SimError::OtherBody);
+        }
+        let surface = self
+            .surface(from.body)
+            .ok_or(SimError::UnknownBody(from.body))?;
+        let geo = &surface.geo;
+        geo.pos_index(from).ok_or(SimError::OutsideMap)?;
+        let (vx, vy) = geo.vector(from, to).ok_or(SimError::OutsideMap)?;
+        let start = geo.tile_of(from);
+        let tx = (i64::from(from.x) + vx).div_euclid(1000) - i64::from(start.x);
+        let ty = (i64::from(from.y) + vy).div_euclid(1000) - i64::from(start.y);
+        let width = et.footprint_w.max(1);
+        let (way, count) = if (tx, ty) == (0, 0) {
+            (snap_facing(facing), 1)
+        } else {
+            (
+                snap_facing(facing_of(tx, ty)),
+                tx.abs().max(ty.abs()) / width + 1,
+            )
+        };
+        if count as usize > MAX_LINE_SITES {
+            return Err(SimError::LineTooLong);
+        }
+        let (sx, sy) = crate::fields::facing_step(way);
+        let mut laid: Vec<(u8, [i64; 4])> = Vec::new();
+        let mut out = Vec::new();
+        for k in 0..count {
+            let reach = (width * k) as i32;
+            let index = geo
+                .plane_index(start.face, start.x + sx * reach, start.y + sy * reach)
+                .ok_or(SimError::CrossesFaceEdge)?;
+            let centre = geo.index_centre(index);
+            let (pos, turned) = self
+                .gate_in_line(player, gate, centre)
+                .unwrap_or((centre, way));
+            let bounds = footprint(et, pos, turned);
+            if laid
+                .iter()
+                .any(|(face, b)| *face == pos.face && crate::construction::overlaps(*b, bounds))
+            {
+                continue;
+            }
+            laid.push((pos.face, bounds));
+            out.push(LineSite {
+                subject: gate,
+                pos,
+                facing: turned,
+                check: self
+                    .placement_turned(player, gate, pos, turned, false)
+                    .map(|_| ()),
+            });
+        }
+        Ok(out)
+    }
+
     /// The sites of a minefield of `mine` (a type with an `et_minefield` row) over the
     /// rectangle of tiles between the corners `a` and `b`, one mine a tile, row by row from
     /// `a`. Each says whether the player may place it now.

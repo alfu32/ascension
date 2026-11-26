@@ -7,6 +7,9 @@
 //! [`crate::Entity::energy`] (hashed and saved with every entity). Unpaid, its field drops and
 //! only the emitters block.
 //!
+//! A gate's site (task 165) is an end of a field too, so a gate put into a standing line keeps
+//! the field joined on both sides of it while it is built.
+//!
 //! The fields are derived from the entities: [`World::refresh_fields`] runs at the end of every
 //! tick and after a restore, so a restored world blocks the same tiles.
 
@@ -88,6 +91,27 @@ impl World {
         ids
     }
 
+    /// What a field runs between, in id order: the finished emitters and the sites of gates
+    /// that are emitters (task 165). A gate put into a standing line holds the field on both
+    /// sides of it while it is built.
+    fn field_ends(&self) -> Vec<EntityId> {
+        let mut ids: Vec<EntityId> = self
+            .entities_of_types(|t| self.fields.types.contains(&t))
+            .filter(|e| e.hp > 0 && e.container_id.is_none())
+            .filter(|e| e.build_progress.is_none() || self.is_gate_type(e.type_id))
+            .map(|e| e.id)
+            .collect();
+        ids.sort_unstable();
+        ids
+    }
+
+    /// Whether a field end holds its side of a field: a finished emitter while powered, a gate's
+    /// site always (task 165).
+    fn holds_field(&self, id: EntityId) -> bool {
+        self.entity(id)
+            .is_some_and(|e| e.build_progress.is_some() || self.emitter_powered(id))
+    }
+
     /// Whether the emitter `id` is powered now: paid for beyond this tick and not neutralised.
     pub(crate) fn emitter_powered(&self, id: EntityId) -> bool {
         self.entity(id).is_some_and(|e| {
@@ -137,7 +161,7 @@ impl World {
         if self.fields.types.is_empty() {
             return;
         }
-        let emitters = self.emitters();
+        let emitters = self.field_ends();
         if emitters.is_empty() && self.fields.tiles.is_empty() && self.fields.links.is_empty() {
             return;
         }
@@ -193,7 +217,12 @@ impl World {
             if found.contains_key(&key) {
                 continue;
             }
-            let up = self.emitter_powered(id) && self.emitter_powered(other);
+            // A field stands between two powered emitters, or a powered emitter and a gate's
+            // site; never between two sites.
+            let finished = |e: EntityId| self.entity(e).is_some_and(|e| e.build_progress.is_none());
+            let up = self.holds_field(id)
+                && self.holds_field(other)
+                && (finished(id) || finished(other));
             if up {
                 tiles.extend(between.iter().map(|&i| (body, i as u32)));
             }

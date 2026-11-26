@@ -161,6 +161,12 @@ pub enum PickEvent {
         /// Entity under the pointer, if any.
         entity: Option<u32>,
     },
+    /// Ctrl and the wheel over a building being placed (task 165): turn it by `steps` × 45°,
+    /// positive clockwise.
+    Turn {
+        /// Steps of 45 degrees.
+        steps: i32,
+    },
     /// A letter or digit key.
     Hotkey {
         /// The character, lower case.
@@ -170,6 +176,15 @@ pub enum PickEvent {
     },
     /// Escape.
     Escape,
+}
+
+/// Ctrl and the wheel turn the building being placed when there is one to turn (task 165);
+/// otherwise they zoom as the plain wheel does.
+pub fn turn_or_zoom(event: InputEvent, hud: &HudSnapshot) -> InputEvent {
+    match event {
+        InputEvent::TurnWheel { steps } if !hud.turnable => InputEvent::Wheel { steps },
+        other => other,
+    }
 }
 
 /// A camera, a canvas size and the vanishing-point shift, enough to cast and project rays.
@@ -940,6 +955,9 @@ impl PickController {
                 modifiers: mods,
             }),
             InputEvent::Escape => out.push(PickEvent::Escape),
+            InputEvent::TurnWheel { steps } if steps != 0.0 => out.push(PickEvent::Turn {
+                steps: if steps > 0.0 { 1 } else { -1 },
+            }),
             InputEvent::ReleaseAll => {
                 self.press = None;
                 self.pan = None;
@@ -1580,6 +1598,36 @@ mod tests {
             }
             other => panic!("unexpected {other:?}"),
         }
+    }
+
+    #[test]
+    fn ctrl_and_the_wheel_turn_a_building_being_placed_and_else_zoom() {
+        let cam = camera();
+        let armed = HudSnapshot {
+            turnable: true,
+            ..HudSnapshot::default()
+        };
+        let idle = HudSnapshot::default();
+        let wheel = |steps| InputEvent::TurnWheel { steps };
+        assert_eq!(turn_or_zoom(wheel(1.0), &armed), wheel(1.0));
+        assert_eq!(
+            turn_or_zoom(wheel(-2.0), &idle),
+            InputEvent::Wheel { steps: -2.0 }
+        );
+        assert_eq!(
+            turn_or_zoom(InputEvent::Wheel { steps: 1.0 }, &armed),
+            InputEvent::Wheel { steps: 1.0 },
+            "the plain wheel keeps zooming"
+        );
+        let entities = vec![unit_view(1, 50.0, 60.0)];
+        let ctx = context(&entities, &armed, &cam);
+        let mut controller = PickController::default();
+        let mut camera = cam;
+        let up = controller.handle(wheel(1.0), &ctx, &mut camera);
+        let down = controller.handle(wheel(-1.0), &ctx, &mut camera);
+        assert_eq!(up, vec![PickEvent::Turn { steps: 1 }]);
+        assert_eq!(down, vec![PickEvent::Turn { steps: -1 }]);
+        assert_eq!(camera.target, cam.target, "turning moves no camera");
     }
 
     #[test]

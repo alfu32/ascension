@@ -502,7 +502,12 @@ impl Render for WorldView {
                 let now_ms = view.created.elapsed().as_millis() as u64;
                 let steps = view.wheel_gate.pass(now_ms, notches);
                 if steps != 0.0 {
-                    view.bridge.push_input(InputEvent::Wheel { steps });
+                    // With Ctrl it turns a building being placed (task 165).
+                    view.bridge.push_input(if event.modifiers.control {
+                        InputEvent::TurnWheel { steps }
+                    } else {
+                        InputEvent::Wheel { steps }
+                    });
                 }
             }))
             .on_key_down(cx.listener(|view, event: &KeyDownEvent, window, cx| {

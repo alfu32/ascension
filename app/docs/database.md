@@ -3134,7 +3134,11 @@ table; no save table and no save-format bump. Both lint views stay empty and the
   a fortification (a segment or a gate, `et_fortification`) that raises an energy field. The
   rules loader puts it in `EntityType::field_emitter`; validation refuses it on anything but a
   fortification, a gap outside 0 to 16, a period below two ticks and an upkeep without a
-  resource.
+  resource. Task 165 (no schema change): the site of a gate with this row is an end of a field
+  too, and the field between it and a powered emitter stands, so a gate put into a standing
+  line keeps the field joined on both sides while it is built; a gate placed over the owner's
+  own segments of its line (the segment's `et_fortification.gate_type_id`) in one straight run
+  as wide as the gate takes their place, removing them at once without refund.
 - **The content** (`db/content/generate.py`, `shield_emitters()`, written after every other
   definition so every earlier id stays), page `fortification` of the builders' palette, the
   next free places:

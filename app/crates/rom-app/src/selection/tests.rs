@@ -807,18 +807,22 @@ fn placement_check_reports_valid_and_invalid() {
         face: 0,
         ..Pos::default()
     };
-    assert_eq!(placement_check(&fx.world, PLAYER, building, free), Ok(()));
+    assert_eq!(
+        placement_check(&fx.world, PLAYER, building, free, 0),
+        Ok(())
+    );
     assert_eq!(
         placement_check(
             &fx.world,
             PLAYER,
             building,
-            fx.world.entity(city).unwrap().pos
+            fx.world.entity(city).unwrap().pos,
+            0
         ),
         Err(SimError::PlacementOverlap)
     );
     assert_eq!(
-        placement_check(&fx.world, PLAYER, building, Pos::flat(100, 100)),
+        placement_check(&fx.world, PLAYER, building, Pos::flat(100, 100), 0),
         Err(SimError::OutsideMap)
     );
     // The submit result agrees on a valid and an invalid spot.
@@ -2329,17 +2333,13 @@ fn undiscovered_deposit_preview_names_the_required_age() {
     let well = fx.rules.id_of("bld.oil_well").unwrap();
     let age = fx.rules.id_of("age.industrial").unwrap();
     assert_eq!(
-        placement_check(&fx.world, PLAYER, well, at(24, 24)),
+        placement_check(&fx.world, PLAYER, well, at(24, 24), 0),
         Err(SimError::ResourceAgeRequired(age))
     );
     fx.ctl.placement = Some(Placement {
-        def: well,
-        footprint: (2, 2),
         centre: Some(at(24, 24)),
-        valid: None,
         dirty: true,
-        checked: None,
-        checked_age: None,
+        ..Placement::new(well, &fx.rules.entity_types[&well])
     });
     fx.ctl.refresh_placement(&fx.world);
     assert_eq!(fx.ctl.placement.as_ref().unwrap().valid, Some(false));
@@ -2347,7 +2347,7 @@ fn undiscovered_deposit_preview_names_the_required_age() {
     fx.ctl.fill(&fx.world, &mut hud);
     assert_eq!(
         hud.help,
-        format!("Deposit revealed in {}", fx.rules.def(age).name)
+        format!("R turns it\nDeposit revealed in {}", fx.rules.def(age).name)
     );
 }
 
@@ -4207,16 +4207,7 @@ fn wall_fixture(age: &str, techs: &[&str], segment: &str) -> (Fx, DefId, Vec<Ent
         .unwrap();
     let builders = vec![fx.spawn(builder, 1, 14, 28), fx.spawn(builder, 1, 27, 28)];
     fx.ctl.set_selection(builders.clone());
-    let et = fx.rules.entity_types[&def].clone();
-    fx.ctl.placement = Some(Placement {
-        def,
-        footprint: (et.footprint_w, et.footprint_h),
-        centre: None,
-        valid: None,
-        dirty: false,
-        checked: None,
-        checked_age: None,
-    });
+    fx.ctl.placement = Some(Placement::new(def, &fx.rules.entity_types[&def]));
     (fx, def, builders)
 }
 
@@ -4329,4 +4320,290 @@ fn a_minefield_is_dragged_as_a_rectangle() {
     fx.step(2);
     let laid = fx.world.entities().filter(|e| e.type_id == mine).count();
     assert_eq!(laid, 8);
+}
+
+/// Task 165: hovers the armed building's ghost over tile (`x`, `y`).
+fn hover_at(fx: &mut Fx, x: f32, y: f32) {
+    fx.ctl.handle(
+        &mut fx.world,
+        PickEvent::Hover {
+            entity: None,
+            world_point: (x, y),
+            surface: flat_surface((x, y)),
+        },
+    );
+}
+
+fn key_with(fx: &mut Fx, ch: char, shift: bool) {
+    fx.ctl.handle(
+        &mut fx.world,
+        PickEvent::Hotkey {
+            ch,
+            modifiers: Modifiers {
+                shift,
+                ..Modifiers::default()
+            },
+        },
+    );
+}
+
+/// A finished line of `segment` for the player along `points`, as setup places it.
+fn lay_wall(fx: &mut Fx, segment: &str, points: &[Pos]) {
+    let def = fx.rules.id_of(segment).unwrap();
+    let sites = fx.world.line_sites(PLAYER, def, points, &[]).unwrap();
+    for s in sites {
+        fx.world
+            .place_turned_for_setup(s.subject, PLAYER, s.pos, s.facing)
+            .unwrap();
+    }
+}
+
+/// The two lines of the help box: the armed tool's hint, then its detail.
+fn help_lines(fx: &Fx) -> (String, String) {
+    let help = fx.hud_snapshot().help;
+    let (a, b) = help.split_once('\n').unwrap_or((help.as_str(), ""));
+    (a.to_owned(), b.to_owned())
+}
+
+#[test]
+fn the_ghost_turns_with_r_shift_r_and_ctrl_wheel_and_the_order_carries_it() {
+    let (mut fx, barracks, _) = wall_fixture("age.ancient", &["tech.military.1"], "bld.barracks");
+    hover_at(&mut fx, 24.2, 27.7);
+    let facing = |fx: &Fx| fx.hud_snapshot().placement.map(|p| p.facing);
+    assert_eq!(facing(&fx), Some(0));
+    assert!(fx.hud_snapshot().turnable, "Ctrl and the wheel turn it");
+    assert!(!fx.hud_snapshot().painting, "a click places it");
+    key_with(&mut fx, 'r', false);
+    assert_eq!(facing(&fx), Some(45));
+    key_with(&mut fx, 'r', false);
+    assert_eq!(facing(&fx), Some(90));
+    key_with(&mut fx, 'r', true);
+    assert_eq!(facing(&fx), Some(45), "Shift+R turns back");
+    fx.ctl.handle(&mut fx.world, PickEvent::Turn { steps: -1 });
+    assert_eq!(facing(&fx), Some(0));
+    fx.ctl.handle(&mut fx.world, PickEvent::Turn { steps: -1 });
+    assert_eq!(facing(&fx), Some(315), "the wheel turns both ways round");
+    for _ in 0..3 {
+        fx.ctl.handle(&mut fx.world, PickEvent::Turn { steps: 1 });
+    }
+    let hud = fx.hud_snapshot();
+    let ghost = hud.placement.unwrap();
+    assert_eq!((ghost.facing, ghost.size), (90, (4, 4)));
+    assert_eq!(ghost.valid, Some(true));
+    // A click places it turned: the order carries the facing to the site.
+    fx.ctl.handle(
+        &mut fx.world,
+        PickEvent::Click {
+            world_point: (24.2, 27.7),
+            surface: flat_surface((24.2, 27.7)),
+            entity: None,
+            modifiers: Modifiers {
+                shift: true,
+                ..Modifiers::default()
+            },
+            double: false,
+            on_screen: Vec::new(),
+        },
+    );
+    fx.step(1);
+    let site = fx
+        .world
+        .entities()
+        .find(|e| e.type_id == barracks)
+        .expect("barracks site");
+    assert_eq!(site.facing, 90);
+    // Shift kept the tool armed with its turn for the next one.
+    assert_eq!(fx.ctl.placement.as_ref().map(|p| p.facing), Some(90));
+    // A wall's line is turned by its drag: nothing turns its tool.
+    let (mut fx, palisade, _) = wall_fixture("age.ancient", &["tech.military.1"], "bld.palisade");
+    hover_at(&mut fx, 16.5, 25.5);
+    assert!(!fx.hud_snapshot().turnable);
+    fx.ctl.handle(&mut fx.world, PickEvent::Turn { steps: 1 });
+    assert_eq!(
+        fx.ctl.placement.as_ref().map(|p| (p.def, p.facing)),
+        Some((palisade, 0))
+    );
+}
+
+#[test]
+fn a_gate_ghost_snaps_onto_an_own_diagonal_wall_and_goes_into_it() {
+    let (mut fx, gate, _) = wall_fixture("age.classical", &[], "bld.wall_gate");
+    let wall = fx.rules.id_of("bld.stone_wall").unwrap();
+    lay_wall(&mut fx, "bld.stone_wall", &[at(14, 24), at(22, 32)]);
+    // Anywhere on a segment's tile the ghost centres on it, along the wall, and fits.
+    hover_at(&mut fx, 18.9, 28.2);
+    let ghost = fx.hud_snapshot().placement.expect("ghost");
+    assert_eq!((ghost.x, ghost.y, ghost.facing), (18_500, 28_500, 45));
+    assert_eq!((ghost.width, ghost.height, ghost.size), (3, 3, (3, 1)));
+    assert_eq!(ghost.valid, Some(true));
+    // R turns only a gate standing free; on the wall it keeps the wall's facing.
+    key_with(&mut fx, 'r', false);
+    assert_eq!(fx.hud_snapshot().placement.unwrap().facing, 45);
+    // Off the wall it stands free with the player's turn.
+    hover_at(&mut fx, 26.5, 22.5);
+    assert_eq!(fx.hud_snapshot().placement.unwrap().facing, 45);
+    key_with(&mut fx, 'r', true);
+    assert_eq!(fx.hud_snapshot().placement.unwrap().facing, 0);
+    // A click on the wall (a press and release on one tile) puts the gate into it.
+    stroke(&mut fx, 18.9, 28.2, true);
+    fx.ctl.handle(&mut fx.world, PickEvent::StrokeEnd);
+    fx.step(2);
+    let gates: Vec<_> = fx
+        .world
+        .entities()
+        .filter(|e| e.type_id == gate)
+        .map(|e| (e.pos.x / 1000, e.pos.y / 1000, e.facing))
+        .collect();
+    assert_eq!(gates, vec![(18, 28, 45)]);
+    let left: Vec<_> = fx
+        .world
+        .entities()
+        .filter(|e| e.type_id == wall)
+        .map(|e| (e.pos.x / 1000, e.pos.y / 1000))
+        .collect();
+    assert_eq!(left.len(), 9 - 3);
+    for t in [(17, 27), (18, 28), (19, 29)] {
+        assert!(!left.contains(&t), "segment {t:?} replaced");
+    }
+}
+
+#[test]
+fn a_gate_over_a_bend_or_a_foreign_wall_shows_red_and_says_why() {
+    let (mut fx, _, _) = wall_fixture("age.classical", &[], "bld.wall_gate");
+    lay_wall(
+        &mut fx,
+        "bld.stone_wall",
+        &[at(14, 26), at(20, 26), at(20, 31)],
+    );
+    hover_at(&mut fx, 20.5, 26.5);
+    let hud = fx.hud_snapshot();
+    let ghost = hud.placement.expect("ghost");
+    assert_eq!((ghost.facing, ghost.valid), (90, Some(false)));
+    assert!(hud.help.contains("straight run"), "{}", hud.help);
+    hover_at(&mut fx, 17.5, 26.5);
+    fx.step(PLACEMENT_CHECK_TICKS as usize);
+    assert_eq!(fx.hud_snapshot().placement.unwrap().valid, Some(true));
+    let enemy = fx.rules.id_of("bld.stone_wall").unwrap();
+    for x in 10..=16 {
+        fx.world
+            .place_for_setup(enemy, PlayerId(2), at(x, 29))
+            .unwrap();
+    }
+    hover_at(&mut fx, 13.5, 29.5);
+    fx.step(PLACEMENT_CHECK_TICKS as usize);
+    let ghost = fx.hud_snapshot().placement.unwrap();
+    assert_eq!((ghost.facing, ghost.valid), (0, Some(false)));
+}
+
+#[test]
+fn dragging_with_a_gate_armed_lays_gates_turned_along_the_drag() {
+    let (mut fx, gate, _) = wall_fixture("age.classical", &[], "bld.wall_gate");
+    assert!(fx.hud_snapshot().painting, "the left drag lays gates");
+    // A short flick lays one gate turned towards it.
+    stroke(&mut fx, 15.5, 25.5, true);
+    stroke(&mut fx, 16.5, 26.5, false);
+    let hud = fx.hud_snapshot();
+    assert_eq!(hud.line.len(), 1);
+    assert_eq!((hud.line[0].x, hud.line[0].facing), (15_500, 45));
+    assert!(hud.line[0].gate && hud.line[0].valid);
+    // Further, gates side by side along the drag.
+    stroke(&mut fx, 24.5, 25.5, false);
+    let hud = fx.hud_snapshot();
+    let laid: Vec<_> = hud.line.iter().map(|s| (s.x / 1000, s.facing)).collect();
+    assert_eq!(laid, vec![(15, 0), (18, 0), (21, 0), (24, 0)]);
+    assert!(hud.line.iter().all(|s| s.valid && s.length == 3));
+    assert!(hud.help.contains("4 gates"), "{}", hud.help);
+    fx.ctl.handle(&mut fx.world, PickEvent::StrokeEnd);
+    fx.step(2);
+    let mut sites: Vec<_> = fx
+        .world
+        .entities()
+        .filter(|e| e.type_id == gate)
+        .map(|e| (e.pos.x / 1000, e.facing))
+        .collect();
+    sites.sort();
+    assert_eq!(sites, vec![(15, 0), (18, 0), (21, 0), (24, 0)]);
+    // A drag across an own wall puts the gate that falls on it into it, along the wall.
+    lay_wall(&mut fx, "bld.stone_wall", &[at(24, 27), at(24, 30)]);
+    stroke(&mut fx, 21.5, 28.5, true);
+    stroke(&mut fx, 27.5, 28.5, false);
+    let hud = fx.hud_snapshot();
+    let laid: Vec<_> = hud
+        .line
+        .iter()
+        .map(|s| (s.x / 1000, s.facing, s.valid))
+        .collect();
+    assert_eq!(laid, vec![(21, 0, true), (24, 90, true), (27, 0, true)]);
+}
+
+#[test]
+fn short_hints_stay_on_screen_while_each_tool_is_armed() {
+    // A wall: before the drag and during it, with the count and price below.
+    let (mut fx, palisade, builders) =
+        wall_fixture("age.ancient", &["tech.military.1"], "bld.palisade");
+    assert_eq!(help_lines(&fx).0, "Drag to build the wall · Esc stops");
+    stroke(&mut fx, 15.5, 25.5, true);
+    stroke(&mut fx, 20.5, 25.5, false);
+    let (hint, detail) = help_lines(&fx);
+    assert_eq!(hint, "Press G to drop a gate · release to build");
+    assert!(detail.contains("6 segments, 0 gates"), "{detail}");
+    // Over an entity the hint replaces what a right click would do.
+    fx.ctl.handle(
+        &mut fx.world,
+        PickEvent::Pointed {
+            entity: Some(builders[0].0),
+        },
+    );
+    assert_eq!(
+        fx.hud_snapshot().pointer.map(|p| p.hint).as_deref(),
+        Some("Press G to drop a gate · release to build")
+    );
+    fx.ctl.handle(&mut fx.world, PickEvent::Escape);
+    // Armed from the palette, the message says the same short line.
+    let mut sink = OrderSink::Lead(&mut fx.world);
+    let slot = (0..8).find_map(|_| {
+        let found = fx
+            .ctl
+            .palette(&sink)
+            .and_then(|(_, actions)| {
+                actions
+                    .into_iter()
+                    .find(|(_, a)| *a == Action::Construct(palisade))
+            })
+            .map(|(slot, _)| slot);
+        if found.is_none() {
+            fx.ctl.handle_with(
+                &mut sink,
+                PickEvent::HudClick {
+                    region: HudRegionKind::PaletteArrow,
+                    index: 1,
+                    button: PointerButton::Left,
+                    modifiers: Modifiers::default(),
+                },
+            );
+        }
+        found
+    });
+    fx.ctl
+        .press_slot(&mut sink, slot.expect("palisade button"), false);
+    assert_eq!(
+        fx.ctl.message.as_ref().map(|(m, _)| m.as_str()),
+        Some("Drag to build the wall · Esc stops")
+    );
+    // A gate, before and during its drag.
+    let (mut fx, _, _) = wall_fixture("age.classical", &[], "bld.wall_gate");
+    let gate_hint = "Drag to lay gates · R turns · click a wall to put one in";
+    assert_eq!(help_lines(&fx).0, gate_hint);
+    stroke(&mut fx, 15.5, 25.5, true);
+    stroke(&mut fx, 21.5, 25.5, false);
+    let (hint, detail) = help_lines(&fx);
+    assert_eq!(hint, gate_hint);
+    assert!(detail.contains("3 gates"), "{detail}");
+    // Any other building.
+    let (mut fx, _, _) = wall_fixture("age.ancient", &["tech.military.1"], "bld.barracks");
+    hover_at(&mut fx, 24.5, 27.5);
+    assert_eq!(help_lines(&fx).0, "R turns it");
+    // Nothing armed, no hint.
+    fx.ctl.handle(&mut fx.world, PickEvent::Escape);
+    assert!(!fx.hud_snapshot().help.contains("R turns"));
 }
