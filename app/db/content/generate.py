@@ -1747,7 +1747,7 @@ def shields(definition, row, tag, need, cost, modifier, emit):
 # segment key, name, gate key, gate name, first age, last age, hit points, more a later age,
 # armour, prices of an emitter, build ticks, the kind before (segment, gate)
 SHIELD_EMITTERS = ('shield_emitter', 'Shield Emitter', 'shield_gate', 'Shield Gate', 'starfaring', 'federation',
-                   4000, 300, 12, {'metal': 45}, 120, ('defensive_line', 'checkpoint'))
+                   3800, 300, 12, {'metal': 45}, 120, ('defensive_line', 'checkpoint'))
 # Tiles of field between two emitters: a straight line has an emitter every FIELD_GAP + 1 tiles.
 FIELD_GAP = 2
 # Energy an emitter pays every FIELD_UPKEEP_PERIOD ticks (an income period); a gate pays

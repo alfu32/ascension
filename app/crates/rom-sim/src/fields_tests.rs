@@ -312,7 +312,7 @@ fn defensive_lines_become_emitters_at_the_spacefaring_advance() {
         let first = w.entity(built[0]).unwrap();
         assert_eq!(
             (first.hp, first.max_hp),
-            (2_000, 4_000),
+            (1_900, 3_800),
             "health keeps its share"
         );
         // The defensive line is out of the build menu.

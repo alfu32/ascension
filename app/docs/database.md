@@ -3141,11 +3141,13 @@ table; no save table and no save-format bump. Both lint views stay empty and the
 
   | Type | Ages | Hit points | Armour | Build ticks | Price | Upkeep |
   | --- | --- | --- | --- | --- | --- | --- |
-  | Shield Emitter `bld.shield_emitter` | spacefaring to federation | 4 000, +300 an age | 12, +1 an age | 120, +10 an age | 45 metal | 2 energy every 600 ticks |
-  | Shield Gate `bld.shield_gate` (3 × 1) | the same | 6 000, +450 an age | 12, +1 an age | 240, +20 an age | 135 metal | 6 energy every 600 ticks |
+  | Shield Emitter `bld.shield_emitter` | spacefaring to federation | 3 800, +300 an age | 12, +1 an age | 120, +10 an age | 45 metal | 2 energy every 600 ticks |
+  | Shield Gate `bld.shield_gate` (3 × 1) | the same | 5 700, +450 an age | 12, +1 an age | 240, +20 an age | 135 metal | 6 energy every 600 ticks |
 
   The gate has 150 % of the emitter's hit points, three times its price and upkeep and twice its
-  build time, as the earlier gates. Both are `structure` armour, so artillery, siege and orbital
+  build time, as the earlier gates. The emitter starts where the defensive line ends (3 800 hit
+  points and armour 12 after the Fusion advance, the checkpoint 5 700) and goes on growing.
+  Both are `structure` armour, so artillery, siege and orbital
   bombardment (`explosive` at 200 %) break them; the field itself has no hit points. The
   **Advance to Spacefaring** carries an `upgrade_type` from the defensive line to the emitter
   and from the checkpoint to the shield gate: the standing ones change in place, keeping their
@@ -3183,6 +3185,12 @@ table; no save table and no save-format bump. Both lint views stay empty and the
 - **Computer players**: nothing new; `rom-ai/src/fortify.rs` takes the newest segment type it
   may build, which from the Spacefaring age is the emitter, so a town's nine-tile line becomes
   four emitters and the shield gate with a tile of field either side.
+- **The orbit matrix's town** (`rom-cli/src/orbit_matrix.rs`, `town`, the owner's "three to five
+  volleys level a town" of task 75) leaves fortification lines and minefields out, as they are
+  no town's buildings (task 147): with the shield gate in it, laid at the edge of the test town
+  out of the splash, a frigate needed seven volleys. Without them the Spacefaring town is 23
+  buildings and the frigate levels it in five volleys, the cruiser in four, the battleship in
+  three.
 - **Test setup**: the script line `drain <resource key>` empties player one's store before the
   first tick (`World::drain`), for the picture of a line without energy.
 - **Screenshots** (the game's own paths, `--script`): `img/156-up.png`
