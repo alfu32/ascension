@@ -2237,6 +2237,13 @@ report's options line, `report.json`'s `gather_rate` and `research_time`.
 - Hashed only off the defaults (the options and the remainders), so default matches keep their
   hashes; the rules fingerprint is unchanged. No seed row.
 
+Calibration (one `balanced:moderate` computer alone, `rom ai-match --universe --seed 1`): the
+last age (ordinal 13) came at 149 561 ticks (2.1 h) at 100/100, 465 601 (6.5 h) at 25/400,
+1 101 841 (15.3 h) at 10/1000 and 8 479 521 (117.8 h, about 4.9 days) at 2/2000; at 2 % the
+first ages are the slow ones (the classical age at 7.7 h, the eighth at 99 h), the automated
+ages then go quickly. 2/2000, the slowest setting, gives this computer about five days of game
+time to the last age.
+
 Pictures: `img/159-setup-economy-pace.png` (the Play form at 10 % gathering, 400 % research
 time), `img/159-hud-rate-gathering-10.png` and `img/159-hud-rate-gathering-100.png` (the same
 five farmers at the same moment: food +5 against +50 a period, commerce 5/7 against 50/70;
