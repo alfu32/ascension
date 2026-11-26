@@ -70,6 +70,11 @@ const SHIELD_HIT_GAIN: f32 = 0.5;
 const HUM_GAIN: f32 = 0.3;
 /// At most this many shield sounds start in one pass.
 const SHIELD_SOUNDS_PER_PASS: usize = 3;
+/// Energy fields (task 156): a field rising or dropping, and a standing field's hum.
+const FIELD_SWITCH_GAIN: f32 = 0.45;
+const FIELD_HUM_GAIN: f32 = 0.25;
+/// At most this many fields rising or dropping are heard in one pass.
+const FIELD_SOUNDS_PER_PASS: usize = 2;
 const AMBIENT_GAIN: f32 = 0.9;
 
 const LINE_PRIORITY: u8 = 240;
@@ -184,6 +189,12 @@ pub struct Director {
     shield_hit: Vec<SoundId>,
     hum: Vec<SoundId>,
     shields_heard: (u64, u64),
+    /// Energy fields (task 156): the sounds of a field rising, dropping and standing, and the
+    /// emitters whose field stood at the last look (`None` before the first).
+    field_up: Vec<SoundId>,
+    field_down: Vec<SoundId>,
+    field_hum: Vec<SoundId>,
+    fields_standing: Option<BTreeSet<u32>>,
     /// The world's tick at the last look, and when that was.
     moved: Option<(u64, Instant)>,
 }
@@ -236,6 +247,10 @@ impl Director {
             shield_hit: family("act.shield_hit"),
             hum: family("act.shield_hum"),
             shields_heard: (0, 0),
+            field_up: family("act.field_up"),
+            field_down: family("act.field_down"),
+            field_hum: family("act.field_hum"),
+            fields_standing: None,
             moved: None,
         }
     }
@@ -385,6 +400,7 @@ impl Director {
         if let (Some(ear), Some(hearing)) = (ear.as_ref(), listener.as_ref()) {
             self.shots(&engine, &book, world, snapshot, ear, hearing, now);
             self.shield_sounds(&engine, world, snapshot, ear, hearing, now);
+            self.field_sounds(&engine, world, snapshot, ear, hearing, now);
         }
         if self
             .activity_at
@@ -686,6 +702,69 @@ impl Director {
         }
     }
 
+    /// Energy fields rising or dropping in view since the last look (task 156), heard at the
+    /// emitter they run from: the nearest few.
+    fn field_sounds(
+        &mut self,
+        engine: &AudioEngine,
+        world: &World,
+        snapshot: &EntitySnapshot,
+        ear: &Ear,
+        hearing: &Hearing,
+        now: Instant,
+    ) {
+        let standing: BTreeSet<u32> = world
+            .field_links()
+            .iter()
+            .filter(|l| l.up)
+            .map(|l| l.from.0)
+            .collect();
+        let Some(before) = self.fields_standing.replace(standing.clone()) else {
+            // The first look only remembers.
+            return;
+        };
+        if before == standing {
+            return;
+        }
+        let mut heard: Vec<(f32, f32, bool)> = Vec::new();
+        for (id, up) in standing
+            .difference(&before)
+            .map(|id| (*id, true))
+            .chain(before.difference(&standing).map(|id| (*id, false)))
+        {
+            let Ok(i) = snapshot.entities.binary_search_by_key(&id, |v| v.id) else {
+                continue;
+            };
+            let p = hearing.place(ear, &snapshot.entities[i]);
+            if p.gain > AUDIBLE {
+                heard.push((p.gain * FIELD_SWITCH_GAIN, p.pan, up));
+            }
+        }
+        heard.sort_by(|a, b| b.0.total_cmp(&a.0));
+        for (gain, pan, up) in heard.into_iter().take(FIELD_SOUNDS_PER_PASS) {
+            let (files, name) = if up {
+                (&self.field_up, "act.field_up")
+            } else {
+                (&self.field_down, "act.field_down")
+            };
+            if self
+                .started
+                .get(name)
+                .is_some_and(|at| now.duration_since(*at) < FAMILY_INTERVAL)
+            {
+                continue;
+            }
+            let Some(id) = variant(files) else { continue };
+            self.started.insert(name, now);
+            engine.play_as(
+                Category::Buildings,
+                id,
+                Placement { gain, pan },
+                activity_priority(gain),
+            );
+        }
+    }
+
     /// Moving units and construction sites in view: the loops units ask for, and the hammering
     /// of the sites. Buildings ask for no loop.
     #[allow(clippy::too_many_arguments)]
@@ -783,6 +862,39 @@ impl Director {
                 if p.gain * HUM_GAIN / MOVING_GAIN > want.gain {
                     // Scaled back by the moving loops' gain applied below.
                     want.gain = p.gain * HUM_GAIN / MOVING_GAIN;
+                    want.pan = p.pan;
+                }
+            }
+        }
+        // A standing energy field hums (task 156): the loudest emitter of each type in view.
+        if let Some(&hum) = self.field_hum.first() {
+            let standing: BTreeSet<u32> = world
+                .field_links()
+                .iter()
+                .filter(|l| l.up)
+                .flat_map(|l| [l.from.0, l.to.0])
+                .collect();
+            for view in snapshot
+                .entities
+                .iter()
+                .filter(|v| v.building && standing.contains(&v.id))
+            {
+                let p = hearing.place(ear, view);
+                if p.gain <= AUDIBLE {
+                    continue;
+                }
+                let key = (DefId(u32::from(view.kind)), SoundEvent::Active);
+                let want = wants.entry(key).or_insert(Want {
+                    key,
+                    gain: 0.0,
+                    pan: 0.0,
+                    count: 0,
+                    file: Some(hum),
+                });
+                want.count += 1;
+                if p.gain * FIELD_HUM_GAIN / MOVING_GAIN > want.gain {
+                    // Scaled back by the moving loops' gain applied below.
+                    want.gain = p.gain * FIELD_HUM_GAIN / MOVING_GAIN;
                     want.pan = p.pan;
                 }
             }

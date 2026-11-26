@@ -113,10 +113,10 @@ pub use hud::{
 };
 pub use hud_model::{
     AlertMark, ButtonState, HudAlert, HudBlast, HudButton, HudCapital, HudCard, HudCityName,
-    HudCityRadius, HudLineSite, HudMarker, HudPalette, HudPaletteGroup, HudPatrol, HudPlacement,
-    HudQueue, HudQueueItem, HudRename, HudShield, HudShieldHit, HudStain, HudTile, HudTradeRoute,
-    HudWealth, HudWreck, IconMark, MarkerKind, PaletteTab, ResearchCell, ResearchOverview,
-    ResearchTrack, SLOT_KEYS, slot_of_key,
+    HudCityRadius, HudField, HudLineSite, HudMarker, HudPalette, HudPaletteGroup, HudPatrol,
+    HudPlacement, HudQueue, HudQueueItem, HudRename, HudShield, HudShieldHit, HudStain, HudTile,
+    HudTradeRoute, HudWealth, HudWreck, IconMark, MarkerKind, PaletteTab, ResearchCell,
+    ResearchOverview, ResearchTrack, SLOT_KEYS, slot_of_key,
 };
 pub use pick::{
     Ground, HudRegionKind, HudTarget, PickContext, PickController, PickEvent, View, flat_surface,
