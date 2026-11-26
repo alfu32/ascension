@@ -36,7 +36,10 @@ The current state of every task is in `app/docs/tasks/STATUS.md`.
   on separate home worlds with equivalent technology and meet only in space;
   a setup option (owner, 2026-11-18, task 89) can instead put players of
   different races together on the same planet, in any map style.
-- Age 13 is the last age. A player who has researched everything at the
+- Ages are counted from 0 when the owner names them (ordinal; the HUD shows
+  ordinal + 1). Age 14, the Galactic Federation (owner, 2026-11-26, task 164),
+  is the last age; age 13 is the Age of Galactic War (renamed from Galactic
+  Empires). A player who has researched everything at the
   library may ascend (task 76, decided 2026-11-17); a player must complete
   the ascension before being defeated. Travel between galaxies is parked.
 - A match with human players ends when no human is left in it (every human

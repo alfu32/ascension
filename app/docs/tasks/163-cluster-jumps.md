@@ -12,8 +12,8 @@ Start from main after 162 has merged.
 ## What changes
 
 1. **A new map-scale tier.**
-   - **The tier.** Add `map_scale` row `galactic` ("Galactic", rank 3). `age.abundance` and
-     `age.galactic` move to it. Today `age.expansion` (Starfaring, age 12 counted from 1) is
+   - **The tier.** Add `map_scale` row `galactic` ("Galactic", rank 3). `age.abundance`,
+     `age.galactic` and `age.federation` (task 164) move to it. Today `age.expansion` (Starfaring, ordinal 11) is
      `interstellar`, rank 2, and opens jumps.
    - **The rule.** Reaching rank 3 is what allows a jump along a route whose two systems are in
      different clusters. A jump within a cluster still needs rank 2, as now. The rule reads the
@@ -30,7 +30,7 @@ Start from main after 162 has merged.
    Use the existing per-tier camera limits (`map_scale.max_zoom_out` and the zoom cap in
    `rom-render/src/zoom.rs` / `rom-app/src/space_view.rs`). Describe the result in
    `world-model.md`.
-3. **Fair home clusters** (`rom-mapgen`). With jumps between clusters closed until age 13, a
+3. **Fair home clusters** (`rom-mapgen`). With jumps between clusters closed until the Age of Abundance, a
    player's cluster is everything it can expand into for most of the space ages. For every
    cluster holding at least one home:
    - **Size.** Homes are placed only in clusters of at least 3 systems. If the region cannot

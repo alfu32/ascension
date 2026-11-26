@@ -14,8 +14,9 @@ Owner (chat, 2026-11-26), verbatim:
   magnitude of the coverage: planet / system / cluster -> we see indifidual stars / quadrant ->
   we see individual clusters / galaxy -> we see individual clusters"
 
-Runs after task 161 (catalogue curation: duplicates merged and close stars moved apart in 3D) and
-task 159 (it changes `schema.sql` and the save format) have merged. Start from main after both.
+Runs after task 161 (catalogue curation: duplicates merged and close stars moved apart in 3D),
+task 164 (both regenerate `seed.sql`) and task 159 (it changes `schema.sql` and the save format)
+have merged. Start from main after both.
 
 ## The levels
 
