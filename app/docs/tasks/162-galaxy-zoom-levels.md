@@ -65,6 +65,13 @@ similarity transform, as now (`rom-render/src/zoom.rs`, "Rendering notes" in
 - **Labels.** Cluster names show at the quadrant and galaxy levels; system names at the cluster
   level, as now.
 
+**Names.** The launcher already uses Cluster, Sector, Quadrant and Galaxy as map-style names
+(the size of the region a match takes, `map_style`). Keep those as they are. The zoom levels
+are named on screen and in docs as "cluster view", "quadrant view" and "galaxy view". Where the
+two meet in one sentence (the launcher hints, `world-model.md`), word them so a player can tell
+a map size from a zoom level. A small map style may have only one cluster; see the skipping
+rule above.
+
 ## Clusters in the data
 
 - **Schema.**
