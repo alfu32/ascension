@@ -1,5 +1,12 @@
 # Task 161 — Star catalogue curation: no two star systems on top of each other
 
+> **Scope (2026-11-26, after the owner's later messages).** This task is only section 2 (merge and
+> move apart), done in **3D**: positions are not flattened. A moved star moves along its line of
+> sight (ra, dec, dist and glon stay true; only x, y, z move), with D = 60 map units. The disk,
+> the view scales and map generation (sections 1, 3 and 4) moved to task 162 (five zoom levels:
+> planet, system, cluster, quadrant, galaxy). Section 5 keeps only the `rom-rules` tests:
+> no pair closer than D, no duplicates, and valid figure lines.
+
 Owner (chat, 2026-11-26), verbatim:
 - "please curate the entire starsystems database, i encountered up to 3 starsystems at virtually
   the same coordinates" (a screenshot of a system view with two or three suns drawn into one)
@@ -7,80 +14,121 @@ Owner (chat, 2026-11-26), verbatim:
   superposed to be moved at other free coordinates"
 - "the stars sit on top of each other in solar system view ... in this respect they are
   effectively identical"
+- "the measure is given by the distance that it is given to a star system in star system view
+  .... maybe it suffices to render those coordinates bigger in such a way that we cant even
+  glimpse at 2 solar systems with inner plannets in solar view on the same screen ... we need to
+  eliminate click confusion, maybe it would be a healthy approach to just ignore one of the
+  spatial coordinates and effectively represent the galaxy as a disk .... ( even though we would
+  keep the 3d rotation and positioning )."
 
 ## What is wrong
 
 `star` has 745 catalogue stars at map positions computed by `db/content/stars.py`
-(`position`: exact direction, distance compressed to `100 × sqrt(ly)`). Some lie almost on top of
-each other (map units, 3D):
+(`position`: exact equatorial direction, distance compressed to `100 × sqrt(ly)`). Some lie
+almost on top of each other (map units, 3D):
 - Alpha Centauri, Alpha2 Centauri and Proxima Centauri: 5 to 9 apart;
-- the Pleiades (Electra, Taygeta, Maia, Merope, Alcyone, Atlas): 17 to 28;
-- the Hyades (Secunda Hyadum, Theta1 Tauri, Chamukuy, Delta3 Tauri, Ain, Prima Hyadum);
-- Mizar and Alcor, Shaula and Lesath, Kappa1 and Upsilon Tauri, Tau and Gamma Centauri.
+- the Pleiades: 17 to 28;
+- the Hyades;
+- Mizar and Alcor, Shaula and Lesath.
 
-28 stars have a neighbour within 40 units and 51 within 60. The median distance to the nearest
-neighbour is 205. In a match these become systems whose suns are drawn into one in the system
-view and on the star map.
+The median nearest-neighbour distance is 205.
+
+The renderer then scales the map so the farthest system lies at `MAP_RADIUS` (40 000 frame
+units, `rom-render/src/universe.rs` `map_frame`). A system's disc is 12 000 system units, about
+1 250 frame units (`zoom.rs` `map_per_system`). On a large map, many systems' discs overlap, and in
+the system view neighbouring suns and planets crowd into the same screen. Systems spread over 3D
+are also hard to click.
 
 ## What changes
 
-All in the generator, so `seed.sql` is regenerated, never hand-edited:
+### 1. The galaxy is a disk
 
-1. **One system per physical star.** Merge a group of catalogue rows when both hold:
-   - their designations differ only by the component number (`Alpha1 Centauri` / `Alpha2
-     Centauri`, `Delta1` / `Delta2` / `Delta3 Tauri`, a bare letter counting as a number);
-   - they are closer than the minimum spacing D (below).
+In the generator (`stars.py`), a star's map position moves to the galactic plane:
+- direction: its galactic longitude (`glon_mdeg`, already computed);
+- radius: the same compressed distance `100 × sqrt(ly)`;
+- `z = 0`;
+- `x` toward galactic longitude 0, `y` toward 90 degrees.
 
-   Keep one row:
-   - the one with an IAU proper name (name differs from designation); else the lowest Hipparcos
-     number;
-   - name it by its proper name, or by its designation without the component number
-     ("Alpha Centauri").
+The galactic latitude is dropped. `ra_mdeg`, `dec_mdeg`, `dist_cly` and `glon_mdeg` keep their
+true catalogue values. `star_system.z` is then 0 for every catalogue system.
 
-   Drop the others. A constellation figure line that touched a dropped star moves to the kept
-   one; drop a line that would join a star to itself.
-2. **Every other close pair moves apart.** After the merge, no two stars may lie closer than D
-   in map units (3D).
-   - **Which star moves.** Process the stars in a fixed order: named stars first, then by
-     Hipparcos number. A star placed earlier stays; a later one that is too close moves.
-   - **First choice, along its line of sight.** Change only its map radius, never its direction:
-     the smallest change, farther or nearer, whichever is smaller, ties farther, that clears every
-     star already placed by D. The sky seen from the Sun is then unchanged and `glon_mdeg`
-     stays right.
-   - **Otherwise, the nearest free point.** If no radius within ±25 % clears them, take the
-     nearest point in 3D that does. Search it deterministically, for example on growing shells
-     of fixed directions.
-   - **What is stored.** `ra_mdeg`, `dec_mdeg` and `dist_cly` keep the true catalogue values;
-     only `x`, `y`, `z` move. Write down in the generator and in docs which stars moved, by how
-     much, and how many rows were merged (print a short summary when generating).
-3. **The spacing D.** Start from 60 map units. Check it against the renderer:
-   - **The case to check.** The widest map, where `place_systems` scales the farthest star to
-     `MAP_RADIUS`: all 745 stars, about 4.8 frame units per map unit
-     (`rom-render/src/universe.rs`, `zoom.rs` `map_per_system`). In the system view and on the
-     star map, two stars' drawn discs and their glow must be clearly apart, with at least one
-     star diameter between them.
-   - **If 60 is not enough there**, raise D and say why with the numbers. Do not lower it.
-4. **Docs.** Update `app/docs/database.md` "Star catalogue" and `app/docs/world-model.md`
-   "The real sky". Map positions are now the curated positions: directions are exact except for
-   the moved stars listed, physical multiples are one system, and the minimum spacing is D. The
-   owner decided this on 2026-11-26.
-5. **Tests.** Add a `rom-rules` test (or extend the existing catalogue test) that loads the seed
-   and asserts:
-   - no two stars are closer than D;
-   - no two stars share a name or a designation that differs only by the component number;
-   - every `constellation_line` joins two different existing stars.
+In the renderer, the disk lies in the frame's orbit plane (frame `y = 0`, the plane of every
+system's orbits). The camera keeps its full 3D rotation, elevation and positioning, as now.
+Update the frame description in `world-model.md` "The real sky", the schema comments on `star`
+(comments only) and `database.md` "Star catalogue". Constellation figures stay as display data;
+seen from the Sun they no longer keep their true shapes. Say so in the docs, and report how they
+look.
 
-   Fix the existing tests that pin star counts or region contents, and say which ones changed
-   and why.
+### 2. One system per physical star, the rest apart on the disk
 
-No schema change. No compatibility code for old saves (owner, 2026-11-25): a saved universe
-keeps its own systems.
+Both curations run on the disk positions:
+- **Merge.** Merge catalogue rows whose designations differ only by the component number
+  (`Alpha1` / `Alpha2 Centauri`, `Delta1` / `Delta2` / `Delta3 Tauri`; a bare letter counts as a
+  number) and that lie closer than the spacing D:
+  - keep the row with an IAU proper name, else the lowest Hipparcos number;
+  - name it by its proper name, or its designation without the number ("Alpha Centauri");
+  - move figure lines to the kept row, and drop self-lines.
+- **Move.** No two stars may lie closer than D on the disk. Process the stars in a fixed order:
+  named stars first, then by Hipparcos number. A later star that is too close moves:
+  - first along its own longitude ray: the smallest change of radius, farther or nearer, ties
+    farther, that clears every star already placed;
+  - if no radius within ±25 % clears it, the nearest free point on the disk, searched
+    deterministically.
 
-Files: `app/db/content/stars.py`, `app/db/content/generate.py` if needed, `app/db/seed.sql`
-(regenerated), `rom-rules` tests, `rom-mapgen` tests only where a pinned value changes, the two
-docs. Task 159 runs in parallel and edits `docs/database.md` (other sections) and
-`db/schema.sql`. Do not touch `schema.sql`, and keep your `database.md` edit to the
-"Star catalogue" section.
+  Print and document what merged and what moved, with the largest move.
+
+### 3. The measure is the system view
+
+Replace "the farthest system at `MAP_RADIUS`" with a fixed scale between map units and the
+frame, chosen from the spacing.
+- **The rule.** In the system view, at any zoom before the hand-over to the star map, centred on
+  any system, no other system's star or planets are on screen. Measure the view: the system
+  camera's widest distance and the field of view. Choose the scale S (frame units per map unit)
+  so that `D × S` is at least that screen's half-diagonal plus the other system's radius, with
+  margin.
+- **Picking D and S.** Pick D (starting near 60 map units) and S together and report the
+  numbers. A larger D moves more stars; a larger S makes the map larger.
+- **What follows from S.** The star map gets larger in frame units: the widest zoom
+  (`MAP_MAX_DISTANCE`, `MapRegion`, `fitted_to`) must still take in every system of the match,
+  including the all-catalogue styles. Keep the nested-frame precision (double composition) sound
+  at the new size. Check `REGION_MARGIN` and the star-map zoom steps feel the same: the wheel
+  goes from a system to the whole map.
+- **Clicks.** Picking a system or a body by a click on the star map or in the system view must
+  never hit a neighbouring system's star. Add a test where it can be tested without a window.
+
+### 4. Map generation follows the disk
+
+`rom-mapgen` uses `star.x/y/z`, so it now works on the disk. Check that it still fits:
+- the region choice and its `star_map_radius` per style;
+- `ROUTE_CLEARANCE`;
+- the fair-home density band;
+- every map style still generates;
+- route lengths, and so travel times, will change.
+
+Retune only the numbers that no longer fit, and say which and why. No rule other than these
+spatial ones changes.
+
+### 5. Tests
+
+- In `rom-rules`, on the loaded seed:
+  - every star has `z = 0`;
+  - no two stars are closer than D;
+  - no names repeat, and no designations differ only by the component number;
+  - every `constellation_line` joins two different existing stars.
+- In `rom-render`: the system-view rule from section 3, run over the systems of a generated
+  universe, for a nearest-region style and an all-catalogue style.
+- Fix tests that pin star counts, positions, region contents or universe hashes, and say which
+  and why.
+
+## Files and scope
+
+`app/db/content/stars.py` (and `generate.py` if needed), `app/db/seed.sql` (regenerated, never
+hand-edited), `app/db/schema.sql` comments on `star` only, `rom-rules` tests,
+`rom-mapgen`, `rom-render` (`universe.rs`, `zoom.rs` and the star-map and system drawing that
+depend on the scale), and docs: `database.md` "Star catalogue" only, and `world-model.md`.
+
+Task 159 runs in parallel and edits `schema.sql` (the match table) and other sections of
+`database.md`. Keep to your sections. No compatibility code for old saves (owner, 2026-11-25).
 
 Implementer: Claude (Opus).
 
@@ -93,29 +141,29 @@ Implementer: Claude (Opus).
   - fight matrix `unanswered=0`;
   - duel 20–0;
   - the database loads with empty lint views;
-  - the playthrough and ascension hashes, either unchanged or explained (they may not use the
-    star map).
-- **Before and after numbers:**
-  - star count;
+  - the playthrough and ascension hashes, either unchanged or explained.
+- **Numbers:**
+  - star count before and after;
   - rows merged, and which;
   - stars moved, and the largest move;
-  - the smallest nearest-neighbour distance;
-  - the 5 % and median nearest-neighbour distances.
+  - D, S and the measured system-view half-diagonal;
+  - the smallest and median nearest-neighbour distances on the disk;
+  - the new widest star-map distance.
 - **Screenshots** you have Read, saved as `app/docs/img/161-*.png`, through the game's own
-  paths:
-  - the Alpha Centauri system view in a match whose region holds it (one sun, Proxima clear of
-    it);
-  - the star map around the Pleiades or the Hyades, stars apart.
-
-  Find the seeds with the map generator. Use `--view system` / `--view starmap` and the existing
-  bench or script paths.
-- **Report:** files changed, the D chosen and why, what you could not verify.
+  paths (`--view system`, `--view starmap`, existing bench or script paths):
+  - the Alpha Centauri system view: one sun, no neighbour on screen;
+  - the system view zoomed to its widest just before the hand-over: only one system;
+  - the star map of a nearest-region match: a flat disk at the default elevation;
+  - the whole catalogue map at its widest.
+- **Report:** files changed, D and S and why, the retuned map-style numbers, how the
+  constellation figures look, what you could not verify.
 
 Read first: `AGENTS.md`, `CLAUDE.md`, `app/docs/database.md` "Star catalogue",
-`app/docs/world-model.md` "The real sky", `app/db/content/stars.py`,
-`app/db/content/generate.py`, `app/crates/rom-mapgen/src/universe.rs` (`choose_region`,
-`wedge_stars`, `layout`), `app/crates/rom-render/src/universe.rs` (`place_systems`,
-`map_frame`), `app/crates/rom-render/src/zoom.rs` (`map_per_system`).
+`app/docs/world-model.md` "The real sky" and the camera sections,
+`app/db/content/stars.py`, `app/crates/rom-mapgen/src/universe.rs` (`choose_region`,
+`wedge_stars`, `layout`, `connect`, `place_homes`), `app/crates/rom-render/src/universe.rs`
+(`place_systems`, `map_frame`, `sky_to_frame`), `app/crates/rom-render/src/zoom.rs`
+(`ZoomScale`, `map_per_system`, `MapRegion`, the distance constants).
 
 Memory rules: `CARGO_BUILD_JOBS=4`; check `free -g`; big runs under
 `systemd-run --user --scope -q -p MemoryMax=6G -p MemorySwapMax=0`. Another build agent is

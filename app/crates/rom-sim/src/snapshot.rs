@@ -485,6 +485,8 @@ pub struct Snapshot {
     pub players: Vec<PlayerSnapshot>,
     /// Fractional income per player and resource.
     pub income_remainders: Vec<((PlayerId, DefId), i64)>,
+    /// Gathered income below one unit at a gathering rate under 100 %, in hundredths (task 159).
+    pub gather_remainders: Vec<((PlayerId, DefId), i64)>,
     /// Victory state.
     pub victory: VictorySnapshot,
     /// Star systems.
@@ -935,6 +937,7 @@ impl World {
                 .iter()
                 .map(|(k, v)| (*k, *v))
                 .collect(),
+            gather_remainders: self.gather_remainders().collect(),
             victory: VictorySnapshot {
                 options: self.victory.options.clone(),
                 timers: self.victory.timers.iter().map(|(k, v)| (*k, *v)).collect(),
@@ -1095,6 +1098,7 @@ impl World {
             stats,
             players,
             income_remainders,
+            gather_remainders,
             victory,
             systems,
             bodies,
@@ -1144,6 +1148,7 @@ impl World {
         world.next_order_id = next_order_id;
         world.stats = stats;
         world.income_remainders = income_remainders.into_iter().collect();
+        world.gather_remainders = gather_remainders.into_iter().collect();
         world.universe = crate::universe::UniverseData {
             systems,
             bodies,

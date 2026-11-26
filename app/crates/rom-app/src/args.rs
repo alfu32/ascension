@@ -6,7 +6,7 @@ use std::path::PathBuf;
 pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <file.png>] \
 [--size <width>x<height>] [--scale <percent>] [--style <key>] [--seed <n>] [--players <n>] [--factions <key,key,...>] [--ai <profile:difficulty,...|none>] [--watch] \
 [--map-size <width>x<height>] [--sphere <n>] [--single-planet] [--orbit <lon_deg>,<lat_deg>,<distance>,<heading_deg>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
-[--universe] [--start-placement <separate|together>] [--city-area <on|off>] [--zoom-all] [--zoom-out] [--age <ordinal>] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-chrome] [--no-hud] [--hud-scale <percent>] [--stats] \
+[--universe] [--start-placement <separate|together>] [--city-area <on|off>] [--gather-rate <percent>] [--research-time <percent>] [--zoom-all] [--zoom-out] [--age <ordinal>] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-chrome] [--no-hud] [--hud-scale <percent>] [--stats] \
 [--sun <orbit|fixed|low|midnight>] [--graticule <on|off>] [--grass <on|off>] [--detail <min|medium|max|ultra>] [--projectiles <on|off>] [--look-at <terrain>[+<terrain>][,<distance>]] \
 [--mute] [--volume <percent>] [--music-volume <percent>] [--units-volume <percent>] [--buildings-volume <percent>] [--environment-volume <percent>] [--announcements-volume <percent>] [--mute-unfocused <on|off>] \
 [--middle-drag <turn|pan>] [--invert-horizontal-turn] [--invert-vertical-turn] \
@@ -76,6 +76,8 @@ pub struct Options {
     pub start_placement: Option<rom_mapgen::StartPlacement>,
     /// Whether the city area limits building (`--city-area on|off`, task 158).
     pub city_area: rom_sim::CityArea,
+    /// The economy's pace (`--gather-rate`, `--research-time`, task 159).
+    pub pace: rom_sim::EconomyPace,
     /// Map seed.
     pub seed: u64,
     /// Number of players.
@@ -247,6 +249,7 @@ impl Default for Options {
             style: None,
             start_placement: None,
             city_area: rom_sim::CityArea::LimitsBuilding,
+            pace: rom_sim::EconomyPace::default(),
             seed: 1,
             players: 4,
             factions: None,
@@ -356,6 +359,7 @@ impl Options {
                 vec![crate::selection::PLAYER]
             },
             city_area: self.city_area,
+            pace: self.pace,
         }
     }
 }
@@ -405,6 +409,20 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
                 let text = value("--city-area")?;
                 options.city_area = rom_sim::CityArea::parse(&text)
                     .ok_or_else(|| format!("--city-area expects on or off, got {text:?}"))?;
+            }
+            "--gather-rate" => {
+                let text = value("--gather-rate")?;
+                options.pace.gather_rate = rom_sim::EconomyPace::parse_gather_rate(&text)
+                    .ok_or_else(|| {
+                        format!("--gather-rate expects 100, 50, 25, 10, 5 or 2, got {text:?}")
+                    })?;
+            }
+            "--research-time" => {
+                let text = value("--research-time")?;
+                options.pace.research_time = rom_sim::EconomyPace::parse_research_time(&text)
+                    .ok_or_else(|| {
+                        format!("--research-time expects 100, 200, 400, 1000 or 2000, got {text:?}")
+                    })?;
             }
             "--seed" => options.seed = number("--seed", &value("--seed")?)?,
             "--players" => {
@@ -715,10 +733,12 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
 /// what a save keeps so loading can regenerate the same terrain, planets and looks. Window,
 /// camera and automation options are left out.
 pub fn match_arguments(arguments: &[String]) -> Vec<String> {
-    const WITH_VALUE: [&str; 11] = [
+    const WITH_VALUE: [&str; 13] = [
         "--style",
         "--start-placement",
         "--city-area",
+        "--gather-rate",
+        "--research-time",
         "--seed",
         "--players",
         "--factions",
@@ -1334,6 +1354,37 @@ mod tests {
         assert_eq!(
             match_arguments(&args(&["--city-area", "off", "--stats"])),
             ["--city-area", "off"]
+        );
+    }
+
+    /// Task 159: the economy pace parses, defaults to 100 % and is kept with the match; values
+    /// outside the lists are refused.
+    #[test]
+    fn the_economy_pace_parses_and_reaches_the_match() {
+        use rom_sim::EconomyPace;
+        assert_eq!(parse(args(&[])).unwrap().pace, EconomyPace::default());
+        let slow = parse(args(&["--gather-rate", "10", "--research-time", "400"])).unwrap();
+        let pace = EconomyPace {
+            gather_rate: 10,
+            research_time: 400,
+        };
+        assert_eq!(slow.pace, pace);
+        assert_eq!(
+            slow.match_settings(rom_match::ScriptSetup::default()).pace,
+            pace
+        );
+        assert!(parse(args(&["--gather-rate", "30"])).is_err());
+        assert!(parse(args(&["--gather-rate", "0"])).is_err());
+        assert!(parse(args(&["--research-time", "50"])).is_err());
+        assert_eq!(
+            match_arguments(&args(&[
+                "--gather-rate",
+                "2",
+                "--stats",
+                "--research-time",
+                "2000"
+            ])),
+            ["--gather-rate", "2", "--research-time", "2000"]
         );
     }
 

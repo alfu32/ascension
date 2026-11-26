@@ -10,7 +10,7 @@
 //! ```
 //!
 //! `fields` are the Play form's (`simple::FIELDS`: style, opponents, difficulty, placement,
-//! city_area, seed, speed, age, script, watch); `script` names a bundled script or a file. `icon` and
+//! city_area, gather_rate, research_time, seed, speed, age, script, watch); `script` names a bundled script or a file. `icon` and
 //! `picture` are optional.
 
 use std::collections::BTreeMap;
@@ -25,12 +25,14 @@ use super::simple::{FIELDS, Simple};
 pub(super) const FORMAT: &str = "rise-of-man presets 1";
 
 /// The fields a preset may set: the match, never the person's race, name or server.
-pub(super) const MATCH_FIELDS: [&str; 10] = [
+pub(super) const MATCH_FIELDS: [&str; 12] = [
     "style",
     "opponents",
     "difficulty",
     "placement",
     "city_area",
+    "gather_rate",
+    "research_time",
     "seed",
     "speed",
     "age",

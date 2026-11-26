@@ -158,6 +158,51 @@ fn a_sphere_economy_with_work_in_progress() {
     check("sphere_economy", &rules, w, 500, |_| {});
 }
 
+/// Task 159: a slow economy (5 % gathering, research ten times as long) saved with income below
+/// one unit carried and a research under way: the pace and the remainders come back and the
+/// loaded world goes on alike; a file written before the pace (format 23) is refused.
+#[test]
+fn a_slow_economy_with_remainders_carried() {
+    let rules = rules();
+    let pace = rom_sim::EconomyPace {
+        gather_rate: 5,
+        research_time: 1000,
+    };
+    let mut w = sphere_economy(&rules);
+    w.set_pace(pace).unwrap();
+    run_until(&mut w, 2_000, |w| w.gather_remainders().next().is_some());
+    let research = w
+        .entities()
+        .flat_map(|e| e.orders().iter())
+        .find(|o| o.kind == "research")
+        .and_then(|o| o.total_ticks)
+        .expect("a research under way");
+    let path = temp_path("slow-economy-format");
+    rom_save::save(&path, &w, &info(&w), &ai()).unwrap();
+    let (loaded, _, _) = rom_save::load(&path, &rules).unwrap();
+    assert_eq!(loaded.pace(), pace);
+    assert_eq!(
+        loaded.gather_remainders().collect::<Vec<_>>(),
+        w.gather_remainders().collect::<Vec<_>>()
+    );
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "ALTER TABLE match DROP COLUMN gather_rate; ALTER TABLE match DROP COLUMN research_time;
+             DROP TABLE gather_remainder; UPDATE match SET format = 23;",
+        )
+        .unwrap();
+    }
+    assert!(matches!(
+        rom_save::load(&path, &rules),
+        Err(rom_save::SaveError::UnsupportedFormat { found: 23 })
+    ));
+    std::fs::remove_file(&path).unwrap();
+    // Ten times the classical advance's time, less the tracks' bonuses.
+    assert!(research > 4_000, "{research}");
+    check("slow_economy", &rules, w, 500, |_| {});
+}
+
 #[test]
 fn formations_patrols_guards_and_failure_reports() {
     let rules = rules();

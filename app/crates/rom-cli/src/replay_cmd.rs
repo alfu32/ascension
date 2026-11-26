@@ -54,10 +54,11 @@ pub fn replay(settings: &MatchSettings, ticks: u64) -> Result<Replay, String> {
 }
 
 /// `rom replay-hash --seed N --ticks T [--universe] [--players N] [--style KEY]
-/// [--ai profile:difficulty,…] [--city-area on|off]`.
+/// [--ai profile:difficulty,…] [--city-area on|off] [--gather-rate pct] [--research-time pct]`.
 pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::error::Error>> {
     let usage = "usage: rom replay-hash --seed <n> --ticks <n> [--universe] [--players <n>] \
-                 [--style <key>] [--ai <profile:difficulty,...>] [--city-area <on|off>]";
+                 [--style <key>] [--ai <profile:difficulty,...>] [--city-area <on|off>] \
+                 [--gather-rate <pct>] [--research-time <pct>]";
     let mut settings = MatchSettings {
         content: ContentRequest {
             players: 2,
@@ -69,6 +70,7 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
         ai: Some(Vec::new()),
         humans: Vec::new(),
         city_area: Default::default(),
+        pace: Default::default(),
     };
     let (mut seed, mut ticks) = (None, None);
     while let Some(flag) = args.next() {
@@ -85,6 +87,12 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
             "--players" => settings.content.players = value.parse()?,
             "--style" => settings.content.style = Some(value),
             "--city-area" => settings.city_area = crate::ai_match_cmd::parse_city_area(&value)?,
+            "--gather-rate" => {
+                settings.pace.gather_rate = crate::ai_match_cmd::parse_gather_rate(&value)?;
+            }
+            "--research-time" => {
+                settings.pace.research_time = crate::ai_match_cmd::parse_research_time(&value)?;
+            }
             "--ai" => {
                 settings.ai = Some(
                     value
@@ -137,6 +145,7 @@ mod tests {
             ai: Some(Vec::new()),
             humans: Vec::new(),
             city_area: Default::default(),
+            pace: Default::default(),
         };
         let first = replay(&settings, 600).unwrap();
         assert_eq!(first.checks, 6);

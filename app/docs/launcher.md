@@ -37,7 +37,7 @@ the bundled set alike:
 ```
 
 `fields` may hold `style`, `opponents`, `difficulty`, `placement`, `city_area` (`on` or `off`,
-task 158), `seed`, `speed`, `age` (an
+task 158), `gather_rate` and `research_time` (percent, task 159), `seed`, `speed`, `age` (an
 ordinal), `script` (a bundled script's name, or a file) and `watch`; anything else is refused.
 `icon` names a HUD icon (`assets/hud/icons/`), `picture` a launcher capture (`tiles/<name>`,
 `maps/<style key>`); an imported preset without one shows a generic picture. Import skips a
@@ -61,7 +61,10 @@ for a race with many), opponents (stepper) and difficulty (choices), for Host th
 (remote players stepper, port, what happens when a player drops), and the map: picture cards
 of the six map styles with a line each from the rules (systems, share of the galaxy), start
 placement, seed, speed, **City area** (task 158: *Limits building*, the default, or *Anywhere in
-the borders*; `--city-area on|off`, the advanced Game group's switch of the same name), starting
+the borders*; `--city-area on|off`, the advanced Game group's switch of the same name),
+**Gathering rate** and **Research time** (task 159: 100, 50, 25, 10, 5 or 2 % of every income
+from the world; 100, 200, 400, 1000 or 2000 % of every research's time; `--gather-rate`,
+`--research-time`, the advanced Game group's fields of the same names), starting
 age and start script. Back is plain, the final button gold;
 the reason it is off stays beside it.
 

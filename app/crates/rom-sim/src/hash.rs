@@ -244,6 +244,16 @@ impl World {
             hash.u32(resource.0);
             hash.bytes(&remainder.to_le_bytes());
         }
+        // Only off the default pace (task 159), where they can exist, so default matches keep
+        // their hashes.
+        if !self.pace().is_default() {
+            hash.u64(self.gather_remainders.len() as u64);
+            for ((player, resource), remainder) in &self.gather_remainders {
+                hash.u32(player.0);
+                hash.u32(resource.0);
+                hash.bytes(&remainder.to_le_bytes());
+            }
+        }
         hash.u64(self.entities().count() as u64);
         for entity in self.entities() {
             hash.entity(entity);
@@ -514,6 +524,12 @@ impl StateHash {
         // with the default keep their hashes.
         if v.options.city_area == crate::CityArea::Free {
             self.bytes(b"city_area_free");
+        }
+        // Likewise the economy's pace (task 159), only off its defaults.
+        if !v.options.pace.is_default() {
+            self.bytes(b"pace");
+            self.u32(v.options.pace.gather_rate);
+            self.u32(v.options.pace.research_time);
         }
         self.u64(v.statuses.len() as u64);
         for (player, status) in &v.statuses {

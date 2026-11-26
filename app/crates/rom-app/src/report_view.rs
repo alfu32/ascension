@@ -35,6 +35,7 @@ pub fn report_element(report: &MatchReport, me: Option<PlayerId>, width: f32) ->
         ("Map style", report.map_style_name()),
         ("Seed", report.seed.to_string()),
         ("City area", report.city_area_text().to_owned()),
+        ("Economy", report.pace_text()),
         ("Length", report.clock(report.length())),
         ("End", report.end_text()),
         (

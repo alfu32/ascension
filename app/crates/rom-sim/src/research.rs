@@ -162,11 +162,12 @@ impl World {
             return self.ascension_duration(owner, subject);
         }
         let ticks = if research {
-            self.rules.player_stat(
+            // At the setup's research time (task 159).
+            self.pace().research_ticks(self.rules.player_stat(
                 "research_time",
                 self.rules.techs[&subject].research_ticks,
                 &sources,
-            )
+            ))
         } else {
             self.rules.build_ticks(subject, &sources)
         };

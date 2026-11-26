@@ -3,13 +3,14 @@
 use crate::{AiState, AiStates, Controller, FORMAT, MatchInfo, SaveError, SaveHeader, Seat, codec};
 use rom_rules::{BodyKind, DefId, Rules};
 use rom_sim::{
-    BodyId, BodyInfo, CityArea, DormantSurface, Elimination, EmitterSnapshot, EndReason, EntityId,
-    EntitySnapshot, HistorySample, HitSnapshot, Living, MatchEnd, MatchOptions, MoveSnapshot,
-    OrbitSnapshot, OrderId, OrderSnapshot, OrderStatus, Outcome, PathRequestSnapshot, PathSnapshot,
-    Player, PlayerId, PlayerSnapshot, PlayerStatus, PlayerTally, PlayerVisionSnapshot, Pos, Rally,
-    RememberedBuilding, RouteInfo, RouteSnapshot, SearchNodeSnapshot, SearchSnapshot, ShotSnapshot,
-    Snapshot, SpaceSnapshot, Stats, SurfaceShape, SurfaceSnapshot, SystemInfo, TileRef, TradeRoute,
-    TransitSnapshot, VictorySnapshot, ViewerSnapshot, World, victory_rule_from_key,
+    BodyId, BodyInfo, CityArea, DormantSurface, EconomyPace, Elimination, EmitterSnapshot,
+    EndReason, EntityId, EntitySnapshot, HistorySample, HitSnapshot, Living, MatchEnd,
+    MatchOptions, MoveSnapshot, OrbitSnapshot, OrderId, OrderSnapshot, OrderStatus, Outcome,
+    PathRequestSnapshot, PathSnapshot, Player, PlayerId, PlayerSnapshot, PlayerStatus, PlayerTally,
+    PlayerVisionSnapshot, Pos, Rally, RememberedBuilding, RouteInfo, RouteSnapshot,
+    SearchNodeSnapshot, SearchSnapshot, ShotSnapshot, Snapshot, SpaceSnapshot, Stats, SurfaceShape,
+    SurfaceSnapshot, SystemInfo, TileRef, TradeRoute, TransitSnapshot, VictorySnapshot,
+    ViewerSnapshot, World, victory_rule_from_key,
 };
 use rusqlite::{Connection, OpenFlags, Row, params};
 use std::{collections::BTreeMap, path::Path, sync::Arc};
@@ -1117,6 +1118,32 @@ fn snapshot(conn: &Connection, rules: &Rules) -> Result<Snapshot, SaveError> {
     } else {
         CityArea::LimitsBuilding
     };
+    // The economy's pace (task 159, format 24). A save written before it has no such columns
+    // and is refused (the owner: no conversion of older saves).
+    let pace = conn
+        .query_row("SELECT gather_rate, research_time FROM match", [], |r| {
+            Ok(EconomyPace {
+                gather_rate: r.get(0)?,
+                research_time: r.get(1)?,
+            })
+        })
+        .map_err(|_| SaveError::UnsupportedFormat { found: format })?;
+    if !pace.is_valid() {
+        return Err(bad("economy pace"));
+    }
+    let gather_remainders = query_vec(
+        conn,
+        "SELECT player_id, resource_id, remainder FROM gather_remainder ORDER BY player_id, resource_id",
+        |r| {
+            Ok((
+                (
+                    PlayerId(uint(r, 0, "player")?),
+                    DefId(uint(r, 1, "resource")?),
+                ),
+                int(r, 2)?,
+            ))
+        },
+    )?;
     let radii_rows = query_vec(
         conn,
         &format!("SELECT entity_id, economic_radius, {name_column} FROM city ORDER BY entity_id"),
@@ -1270,11 +1297,13 @@ fn snapshot(conn: &Connection, rules: &Rules) -> Result<Snapshot, SaveError> {
         stats: snap_stats,
         players,
         income_remainders,
+        gather_remainders,
         victory: VictorySnapshot {
             options: MatchOptions {
                 elimination,
                 victories: victories.into_iter().collect(),
                 city_area,
+                pace,
             },
             timers,
             outcome,

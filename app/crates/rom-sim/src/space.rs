@@ -23,7 +23,7 @@ pub enum BodyClaim {
 pub struct BodyYield {
     /// The base resource paid.
     pub resource: DefId,
-    /// Amount per income period after the player's modifiers.
+    /// Amount per income period after the player's modifiers, at the setup's gathering rate.
     pub per_period: i64,
     /// Length of the income period in ticks.
     pub period_ticks: i64,
@@ -973,7 +973,11 @@ impl World {
             .filter(|n| n.claim_mode == ClaimMode::Presence)?;
         Some(BodyYield {
             resource: node.resource_id,
-            per_period: self.stat_modified(player, node.resource_id, node.income),
+            per_period: self.pace().gathered(self.stat_modified(
+                player,
+                node.resource_id,
+                node.income,
+            )),
             period_ticks: self.rules.constant("economy.income_period_ticks")?,
         })
     }

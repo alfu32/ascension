@@ -467,6 +467,15 @@ impl Render for LobbyView {
                     )))),
             )
             .child(style::status(status, false));
+        // The host's economy pace (task 159), when it is not the usual one.
+        if let Some(setup) = state.lobby.as_ref().map(|l| &l.settings)
+            && (setup.gather_rate, setup.research_time) != (100, 100)
+        {
+            page = page.child(style::hint(SharedString::from(format!(
+                "Economy: gathering {} % · research time {} %",
+                setup.gather_rate, setup.research_time
+            ))));
+        }
         if let Some(error) = state.error.clone() {
             page = page.child(
                 style::panel()
