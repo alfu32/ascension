@@ -74,6 +74,12 @@ GitHub issue #167.
    current `say` text when the tool is armed with the same short line.
 6. **Computer players** are unchanged.
 
+**Shield gates (task 156, merged in 0.150.0).** The shield emitter line and its 3-tile
+shield gate (`bld.shield_emitter`, `bld.shield_gate`) are a fortification line like the
+others. Dragging gates, snapping into a finished line and the short hints apply to them too,
+found through data (`et_fortification`, `et_field_emitter`). A gate put into a standing field
+line must keep the field joined on both sides of it.
+
 ## Crates
 
 `rom-app` (input, ghost, help line), `rom-render` only if the ghost does not already draw a
