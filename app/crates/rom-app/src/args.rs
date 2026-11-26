@@ -6,7 +6,7 @@ use std::path::PathBuf;
 pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <file.png>] \
 [--size <width>x<height>] [--scale <percent>] [--style <key>] [--seed <n>] [--players <n>] [--factions <key,key,...>] [--ai <profile:difficulty,...|none>] [--watch] \
 [--map-size <width>x<height>] [--sphere <n>] [--single-planet] [--orbit <lon_deg>,<lat_deg>,<distance>,<heading_deg>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
-[--universe] [--start-placement <separate|together>] [--city-area <on|off>] [--gather-rate <percent>] [--research-time <percent>] [--zoom-all] [--zoom-out] [--age <ordinal>] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-chrome] [--no-hud] [--hud-scale <percent>] [--stats] \
+[--universe] [--start-placement <separate|together>] [--city-area <on|off>] [--gather-rate <percent>] [--research-time <percent>] [--zoom-all] [--zoom-out] [--age <ordinal>] [--view <surface|globe|system|cluster|quadrant|galaxy>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-chrome] [--no-hud] [--hud-scale <percent>] [--stats] \
 [--sun <orbit|fixed|low|midnight>] [--graticule <on|off>] [--grass <on|off>] [--detail <min|medium|max|ultra>] [--projectiles <on|off>] [--look-at <terrain>[+<terrain>][,<distance>]] \
 [--mute] [--volume <percent>] [--music-volume <percent>] [--units-volume <percent>] [--buildings-volume <percent>] [--environment-volume <percent>] [--announcements-volume <percent>] [--mute-unfocused <on|off>] \
 [--middle-drag <turn|pan>] [--invert-horizontal-turn] [--invert-vertical-turn] \
@@ -1070,7 +1070,14 @@ mod tests {
         assert!(o.universe && o.zoom_all);
         assert_eq!(o.view, Some(rom_render::Level::System));
         let o = parse(args(&["--view", "starmap"])).unwrap();
-        assert_eq!(o.view, Some(rom_render::Level::StarMap));
+        assert_eq!(o.view, Some(rom_render::Level::Galaxy));
+        for (name, level) in [
+            ("cluster", rom_render::Level::Cluster),
+            ("quadrant", rom_render::Level::Quadrant),
+            ("galaxy", rom_render::Level::Galaxy),
+        ] {
+            assert_eq!(parse(args(&["--view", name])).unwrap().view, Some(level));
+        }
         assert!(parse(args(&["--view", "moon"])).is_err());
         assert!(parse(args(&["--view", "globe,away"])).is_err());
     }

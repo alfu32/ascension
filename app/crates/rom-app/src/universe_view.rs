@@ -1,7 +1,7 @@
 //! The generated universe as the render thread draws it, and the zoom limit by age.
 
 use rom_mapgen::Universe;
-use rom_render::universe::{BodyView, BodyViewKind, SystemView, UniverseScene};
+use rom_render::universe::{BodyView, BodyViewKind, ClusterView, SystemView, UniverseScene};
 use rom_render::{Level, owner_color};
 use rom_rules::{BodyKind, DefId, Rules};
 
@@ -23,7 +23,7 @@ pub fn max_level(rules: &Rules, age: DefId) -> Level {
         .map(|scale| scale.rank)
     {
         Some(1) => Level::System,
-        Some(2..) => Level::StarMap,
+        Some(2..) => Level::Galaxy,
         _ => Level::Globe,
     }
 }
@@ -38,8 +38,13 @@ pub fn view_range(rules: &Rules, age: DefId) -> u32 {
 }
 
 /// Converts a generated universe. `start_bodies` holds the home planet of each player in player
-/// order; a home planet takes the colour of the first player living there.
-pub fn to_universe_scene(universe: &Universe, start_bodies: &[u32]) -> UniverseScene {
+/// order; a home planet takes the colour of the first player living there. The star clusters of
+/// its systems come from `rules` (task 162).
+pub fn to_universe_scene(
+    universe: &Universe,
+    start_bodies: &[u32],
+    rules: &Rules,
+) -> UniverseScene {
     let colour_of = |body: u32| {
         start_bodies
             .iter()
@@ -59,6 +64,7 @@ pub fn to_universe_scene(universe: &Universe, start_bodies: &[u32]) -> UniverseS
                     y: s.y,
                     z: s.z,
                     constellation: s.constellation.clone(),
+                    cluster: s.cluster,
                     // The celestial home glows with its black hole's accretion disc.
                     star_colour: if celestial {
                         rom_render::universe::ACCRETION_RGB[1]
@@ -97,6 +103,20 @@ pub fn to_universe_scene(universe: &Universe, start_bodies: &[u32]) -> UniverseS
             .map(|r| (r.system_a, r.system_b))
             .collect(),
         figure: universe.figure.clone(),
+        clusters: {
+            let mut ids: Vec<u32> = universe.systems.iter().filter_map(|s| s.cluster).collect();
+            ids.sort_unstable();
+            ids.dedup();
+            ids.iter()
+                .filter_map(|id| rules.star_clusters.get(id))
+                .map(|c| ClusterView {
+                    id: c.id,
+                    name: c.name.clone(),
+                    x: i32::try_from(c.x).unwrap_or(0),
+                    y: i32::try_from(c.y).unwrap_or(0),
+                })
+                .collect()
+        },
     }
 }
 
@@ -115,7 +135,7 @@ mod tests {
         scale.key = "renamed".into();
         rules.ages.get_mut(&age).unwrap().map_scale = scale.key.clone();
         rules.map_scales.insert(scale.key.clone(), scale);
-        for (rank, level) in [(0, Level::Globe), (1, Level::System), (2, Level::StarMap)] {
+        for (rank, level) in [(0, Level::Globe), (1, Level::System), (2, Level::Galaxy)] {
             rules.map_scales.get_mut("renamed").unwrap().rank = rank;
             for range in [0, 30_000] {
                 rules.ages.get_mut(&age).unwrap().view_range = range;
@@ -141,7 +161,7 @@ mod tests {
         assert_eq!(view_range(&rules, by_ordinal(9)), 0);
         assert_eq!(max_level(&rules, by_ordinal(9)), Level::System);
         assert_eq!(max_level(&rules, by_ordinal(10)), Level::System);
-        assert_eq!(max_level(&rules, by_ordinal(11)), Level::StarMap);
+        assert_eq!(max_level(&rules, by_ordinal(11)), Level::Galaxy);
         assert_eq!(view_range(&rules, DefId(u32::MAX)), 0);
     }
 
@@ -155,7 +175,7 @@ mod tests {
         let content = generate_universe_content(&options).expect("universe");
         let u = &content.universe;
         let bodies: Vec<u32> = u.starts.iter().map(|s| s.0).collect();
-        let scene = to_universe_scene(u, &bodies);
+        let scene = to_universe_scene(u, &bodies, &content.rules);
         assert!(scene.is_valid());
         assert_eq!(scene.systems.len(), u.systems.len());
         assert_eq!(scene.bodies.len(), u.bodies.len());
@@ -184,7 +204,10 @@ mod tests {
         assert!(u.planets.contains_key(&home.id));
         // The same options give the same scene.
         let again = generate_universe_content(&options).unwrap();
-        assert_eq!(scene, to_universe_scene(&again.universe, &bodies));
+        assert_eq!(
+            scene,
+            to_universe_scene(&again.universe, &bodies, &again.rules)
+        );
     }
 
     /// Resource bodies are drawn far larger than true (task 69), yet in every generated system
@@ -200,7 +223,7 @@ mod tests {
                 ..Options::default()
             };
             let content = generate_universe_content(&options).expect("universe");
-            let scene = to_universe_scene(&content.universe, &[]);
+            let scene = to_universe_scene(&content.universe, &[], &content.rules);
             for system in &scene.systems {
                 let placed = scene.place_system(system.id);
                 let gap = closest_gap(&placed);
@@ -248,7 +271,11 @@ mod match_tests {
         let radius = planet_radius(n);
         let orbit = OrbitCamera::new(radius, radius * 3.0);
         let camera = ZoomCamera::new(
-            Arc::new(to_universe_scene(&content.universe, &[home.0])),
+            Arc::new(to_universe_scene(
+                &content.universe,
+                &[home.0],
+                &content.rules,
+            )),
             ZoomScale::new(radius, orbit.max_distance),
             Some(Home {
                 system: body.system,
@@ -311,10 +338,18 @@ mod match_tests {
             } else {
                 assert_eq!(camera.l(), camera.scale().l_cap(expected));
             }
+            // Task 162: a level that would show one item is skipped by this universe's zoom.
+            let scale = *camera.scale();
+            let exists = |level: Level| match level {
+                Level::Cluster => scale.beyond_systems(),
+                Level::Quadrant => scale.ladder.quadrant.is_some(),
+                Level::Galaxy => scale.has_disk(),
+                _ => true,
+            };
             for level in Level::ALL {
                 camera.set_view(level, &mut orbit);
                 assert!(camera.level() <= expected);
-                if level <= expected {
+                if level <= expected && exists(level) {
                     assert_eq!(camera.level(), level);
                 }
             }
@@ -332,7 +367,7 @@ mod match_tests {
             assert!(
                 Level::ALL
                     .iter()
-                    .filter(|level| **level <= expected)
+                    .filter(|level| **level <= expected && exists(**level))
                     .all(|level| levels.contains(level))
             );
         }
@@ -463,5 +498,187 @@ mod match_tests {
             game.world.hash()
         };
         assert_eq!(run(), run());
+    }
+}
+
+/// Task 162: the levels beyond a system over the real catalogue.
+#[cfg(test)]
+mod cluster_tests {
+    use super::*;
+    use crate::terrain::load_rules;
+    use rom_render::galaxy::{GalaxyLayout, system_view_clearance};
+    use rom_render::zoom::{Target, ZoomCamera, ZoomScale};
+    use rom_render::{OrbitCamera, planet_radius};
+    use std::sync::Arc;
+
+    /// Every catalogue star as a system, joined to the next star of its cluster, as a Galaxy
+    /// match takes them (bodies are not needed to place and pick systems).
+    fn catalogue_scene(rules: &Rules) -> UniverseScene {
+        let systems: Vec<SystemView> = rules
+            .stars
+            .values()
+            .map(|s| SystemView {
+                id: s.id,
+                name: s.name.clone(),
+                x: s.x as i32,
+                y: s.y as i32,
+                z: s.z as i32,
+                constellation: String::new(),
+                star_colour: [255, 255, 255],
+                celestial: false,
+                cluster: Some(s.cluster_id),
+            })
+            .collect();
+        let mut routes = Vec::new();
+        for pair in systems.windows(2) {
+            if pair[0].cluster != pair[1].cluster || pair[0].id % 5 == 0 {
+                routes.push((pair[0].id, pair[1].id));
+            }
+        }
+        UniverseScene {
+            systems,
+            routes,
+            clusters: rules
+                .star_clusters
+                .values()
+                .map(|c| ClusterView {
+                    id: c.id,
+                    name: c.name.clone(),
+                    x: c.x as i32,
+                    y: c.y as i32,
+                })
+                .collect(),
+            ..UniverseScene::default()
+        }
+    }
+
+    fn camera(scene: UniverseScene) -> (ZoomCamera, OrbitCamera) {
+        let radius = planet_radius(192);
+        let orbit = OrbitCamera::new(radius, radius * 3.0);
+        let zoom = ZoomCamera::new(
+            Arc::new(scene),
+            ZoomScale::new(radius, orbit.max_distance),
+            None,
+            Level::Galaxy,
+        );
+        (zoom, orbit)
+    }
+
+    #[test]
+    fn every_cluster_keeps_the_system_view_clear() {
+        let rules = load_rules().expect("rules");
+        let layout = GalaxyLayout::new(&catalogue_scene(&rules));
+        assert_eq!(layout.groups.len(), rules.star_clusters.len());
+        let clearance = system_view_clearance();
+        for group in &layout.groups {
+            for (a, &i) in group.members.iter().enumerate() {
+                for &j in &group.members[a + 1..] {
+                    let way = [0, 1, 2].map(|k| layout.cluster[i][k] - layout.cluster[j][k]);
+                    let d = (way[0] * way[0] + way[1] * way[1] + way[2] * way[2]).sqrt();
+                    assert!(d >= clearance * 0.999, "{}: {d}", group.name);
+                }
+            }
+        }
+        // Every level exists for the whole catalogue: four quadrants and many clusters.
+        let ladder = layout.ladder;
+        assert!(ladder.cluster.is_some() && ladder.quadrant.is_some() && ladder.galaxy.is_some());
+        println!(
+            "clearance {clearance:.0}, cluster radius {:.0}, ladder {ladder:?}",
+            layout.cluster_radius
+        );
+    }
+
+    /// Picking never hits a neighbour: in the cluster view each system is picked at its own
+    /// place, and on the disk (the quadrant and galaxy views) each cluster at its centre and at
+    /// every one of its stars.
+    #[test]
+    fn picking_never_hits_a_neighbour_at_any_level() {
+        let rules = load_rules().expect("rules");
+        let size = (1280.0, 800.0);
+        let (mut zoom, mut orbit) = camera(catalogue_scene(&rules));
+        let groups = zoom.layout().groups.len();
+        let mut picked = 0;
+        // The cluster view of every eighth cluster, flown to as a double click on it would.
+        for group in (0..groups).step_by(8) {
+            zoom.fly_to_target(Target::Cluster(group), &mut orbit);
+            for _ in 0..600 {
+                zoom.advance(1.0 / 30.0);
+                zoom.sync_orbit(&mut orbit);
+                if !zoom.flying() {
+                    break;
+                }
+            }
+            assert_eq!(zoom.level(), Level::Cluster, "cluster {group}");
+            assert_eq!(zoom.anchored_group(), group);
+            let view = zoom.map_view(&orbit).view(size, 0.0);
+            let positions = zoom.map_positions();
+            for &i in &zoom.layout().groups[group].members {
+                let Some((x, y, _)) = view.project(positions[i]) else {
+                    continue;
+                };
+                if x < 0.0 || y < 0.0 || x > size.0 || y > size.1 {
+                    continue;
+                }
+                assert_eq!(zoom.target_at(&view, x, y), Some(Target::System(i)));
+                picked += 1;
+            }
+        }
+        assert!(picked > 40, "{picked} systems picked");
+        // On the disk, seen from above at the quadrant's and the galaxy's widest zooms.
+        for level in [Level::Quadrant, Level::Galaxy] {
+            zoom.set_view(level, &mut orbit);
+            assert_eq!(zoom.level(), level);
+            assert!(zoom.on_disk());
+            let view = zoom.map_view(&orbit).view(size, 0.0);
+            let positions = zoom.map_positions();
+            let mut clusters = 0;
+            for (g, group) in zoom.layout().groups.iter().enumerate() {
+                let points = std::iter::once(group.centre)
+                    .chain(group.members.iter().map(|&i| positions[i]));
+                let mut seen = false;
+                for point in points {
+                    let Some((x, y, _)) = view.project(point) else {
+                        continue;
+                    };
+                    if x < 0.0 || y < 0.0 || x > size.0 || y > size.1 {
+                        continue;
+                    }
+                    seen = true;
+                    assert_eq!(
+                        zoom.target_at(&view, x, y),
+                        Some(Target::Cluster(g)),
+                        "{level:?}: {}",
+                        group.name
+                    );
+                }
+                clusters += usize::from(seen);
+            }
+            assert!(clusters >= 20, "{level:?}: {clusters} clusters on screen");
+        }
+    }
+
+    /// Wheel notches from the whole system to the whole galaxy, for the record.
+    #[test]
+    fn the_wheel_crosses_the_levels_in_a_few_notches() {
+        let rules = load_rules().expect("rules");
+        let (mut zoom, _) = camera(catalogue_scene(&rules));
+        let s = *zoom.scale();
+        let mut count = |from: f32, to: f32| {
+            zoom.set_l(from);
+            let mut n = 0;
+            while zoom.l() < to - 1e-4 && n < 1000 {
+                zoom.wheel(-1.0);
+                n += 1;
+            }
+            n
+        };
+        let cluster = count(s.l_system_map, s.l_cluster);
+        let quadrant = count(s.l_cluster, s.l_quadrant);
+        let galaxy = count(s.l_quadrant, s.l_end);
+        println!("notches: system->cluster {cluster}, ->quadrant {quadrant}, ->galaxy {galaxy}");
+        assert!(
+            cluster + quadrant + galaxy <= 24,
+            "{cluster} {quadrant} {galaxy}"
+        );
     }
 }

@@ -371,7 +371,7 @@ pub(crate) fn show_match(
             crate::sim_thread::publish_camera_limits(&game.world, me, bridge);
             bridge.publish_zoom_all(options.zoom_all);
             bridge.publish_universe(
-                Arc::new(universe_view::to_universe_scene(universe, &bodies)),
+                Arc::new(universe_view::to_universe_scene(universe, &bodies, &rules)),
                 UniverseSettings {
                     home: Some((home_system, home_body)),
                     view: options.view,

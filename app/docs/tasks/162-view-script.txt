@@ -1,0 +1,6 @@
+# Task 162: the levels beyond a system. Run with --universe --style <key> --zoom-all
+# --view <cluster|quadrant|galaxy> --ai none: the galactic age and Automated Route Survey show
+# every route.
+0 grant-age age.galactic
+0 grant-tech tech.automated_route_survey
+1 speed 100

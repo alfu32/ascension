@@ -1,0 +1,9 @@
+# Task 162: Alpha Centauri's system view at its widest, before the hand-over to the cluster view:
+# no other system's star or planets on screen. Run with --universe --style map.galaxy --zoom-all
+# --view system --ai none --after 30.
+0 grant-age age.galactic
+0 grant-tech tech.automated_route_survey
+1 speed 100
+3 visit star:Alpha_Centauri
+400 cam wheel -6 640,400
+420 cam point 1180,480
