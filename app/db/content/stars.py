@@ -908,11 +908,9 @@ FIGURES = {
 }
 
 
-# Least distance between two stars on the map, in map units (task 161, 2026-11-26: 60 for now;
-# the star-map and system-view scales follow in a later card). In the widest map (every star,
-# 4.8 frame units per map unit) two stars 60 apart are 2 765 system units apart at the
-# hand-over to the star map: their discs (1 344 wide at whole-system zoom) stand apart, their
-# glows (2 600 wide) almost touch.
+# Least distance between two stars on the map, in map units (task 161, 2026-11-26). Since task
+# 162 the cluster view spreads each cluster's systems so that its closest pair lies far enough
+# apart for the system view (rom-render `galaxy.rs`), whatever this spacing is.
 MIN_SPACING = 60
 # A star that cannot be cleared by changing its map radius within this share (percent) of it
 # moves to the nearest free point instead.
@@ -1077,6 +1075,225 @@ def curation_summary(spacing=MIN_SPACING):
     return '\n'.join(lines)
 
 
+
+# Star clusters (task 162, owner 2026-11-26): the curated stars grouped into clusters of a few
+# systems each, which the cluster view shows on their own, and placed on the galactic disk for the
+# quadrant and galaxy views. `cluster()` does it and `cluster_summary()` reports it.
+#
+# Two stars link when they lie within `LINK_BASE` map units plus `LINK_PCT` percent of the nearer
+# one's map radius of each other: the map is denser near the Sun, so the bound grows outward.
+LINK_BASE = 150
+LINK_PCT = 10
+# Fewest and most stars of a cluster; a star with no neighbour within twice its link bound stands
+# alone (a cluster of one).
+CLUSTER_MIN = 3
+CLUSTER_MAX = 7
+# The disk (quadrant and galaxy views): a cluster is drawn as its stars, their offsets from its
+# centre flattened onto the disk and shrunk to this percent, and keeps this many map units of
+# room beyond them. No two clusters' footprints (shrunk offsets plus the room) overlap.
+DISK_SHRINK_PCT = 20
+DISK_ROOM = 25
+# Traditional names of open clusters, used for a cluster most of whose stars are members
+# (membership of the bright stars: the Pleiades and the Hyades as the catalogues of open
+# clusters list them). Hipparcos numbers.
+TRADITIONAL_CLUSTERS = [
+    ('Pleiades', (17499, 17531, 17573, 17608, 17702, 17847)),
+    ('Hyades', (20205, 20455, 20635, 20648, 20711, 20885, 20889, 20894)),
+]
+# Greek letters in alphabetical order: Bayer lettered a constellation's stars roughly by
+# brightness, so the letter ranks stars where the catalogue gives no magnitude.
+GREEK = ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta', 'Eta', 'Theta', 'Iota', 'Kappa',
+         'Lambda', 'Mu', 'Nu', 'Xi', 'Omicron', 'Pi', 'Rho', 'Sigma', 'Tau', 'Upsilon', 'Phi',
+         'Chi', 'Psi', 'Omega']
+
+# What cluster() makes of the curated catalogue (`cluster_summary()` prints it when the seed is
+# generated; docs/database.md "Star catalogue" lists the same): 160 clusters, by size 1: 13,
+# 3: 40, 4: 23, 5: 21, 6: 31, 7: 32 (the 13 single stars have no other star within twice their
+# link bound); 42 moved on the disk to clear a neighbour, 41 outward (at most 202 map units,
+# Atria group) and one inward (Markab group, 12).
+
+
+def galactic_basis():
+    """Unit vectors of the galactic frame (X toward longitude 0, Y toward 90, Z to the north
+    galactic pole) in the map's equatorial frame, from the same three constants as
+    `galactic_longitude()`."""
+    pole_ra, pole_dec = math.radians(GALACTIC_POLE_RA_DEG), math.radians(GALACTIC_POLE_DEC_DEG)
+    z = (math.cos(pole_dec) * math.cos(pole_ra), math.cos(pole_dec) * math.sin(pole_ra), math.sin(pole_dec))
+    # The north celestial pole, off the galactic pole, lies at galactic longitude 122.932.
+    p = [-z[2] * z[k] for k in range(3)]
+    p[2] += 1
+    norm = math.sqrt(sum(c * c for c in p))
+    p = [c / norm for c in p]
+    q = (z[1] * p[2] - z[2] * p[1], z[2] * p[0] - z[0] * p[2], z[0] * p[1] - z[1] * p[0])
+    t = math.radians(GALACTIC_NCP_LON_DEG)
+    x = [math.cos(t) * p[k] - math.sin(t) * q[k] for k in range(3)]
+    y = (z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0])
+    return x, y, z
+
+
+def _galactic(v, basis):
+    return tuple(sum(v[k] * axis[k] for k in range(3)) for axis in basis)
+
+
+def _rank(row):
+    """How a cluster picks the star it is named after, smaller first: a star with an IAU proper
+    name before one without, then the Bayer letter (Alpha first; Flamsteed and catalogue numbers
+    after the letters), then the nearer star, then the Hipparcos number."""
+    hip, name, designation = row[0], row[1], row[2]
+    word = designation.split(' ')[0].rstrip('0123456789')
+    letter = GREEK.index(word) if word in GREEK else len(GREEK)
+    return (name == designation, letter, row[6], hip)
+
+
+def cluster(rows=None):
+    """The clusters of the curated catalogue (`curate()` rows): a list of (id, name, x, y,
+    members) and the disk moves as (id, name, change of radius). Ids follow the distance of the
+    cluster's centre from the Sun, nearest first, ties by lowest Hipparcos number; members are
+    Hipparcos numbers in order; x, y is the place on the galactic disk in map units.
+
+    1. Agglomeration: pairs of stars within their link bound, nearest first (ties by Hipparcos
+       numbers), join their clusters when the union holds at most `CLUSTER_MAX` stars and no two
+       of its stars are farther apart than twice the pair's bound.
+    2. A cluster of fewer than `CLUSTER_MIN` stars joins the nearest cluster with room whose
+       nearest star is within twice the link bound, repeated in order of lowest Hipparcos number
+       until nothing changes.
+    3. A pair left over takes the star nearest to it from a cluster of more than `CLUSTER_MIN`
+       stars (ties by Hipparcos number); a single star left over stands alone.
+    4. Placement: the centre (the mean of the members' map positions) goes to its galactic
+       longitude at its map radius, its latitude dropped. A cluster whose footprint overlaps one
+       placed before it moves along its longitude ray: the smallest change of radius, farther
+       before nearer."""
+    rows = curate()[0] if rows is None else rows
+    by_hip = {r[0]: r for r in rows}
+    pos = {r[0]: (r[7], r[8], r[9]) for r in rows}
+    radius = {h: math.isqrt(sum(c * c for c in p)) for h, p in pos.items()}
+    hips = sorted(pos)
+
+    def d2(a, b):
+        p, q = pos[a], pos[b]
+        return sum((p[k] - q[k]) ** 2 for k in range(3))
+
+    def bound(a, b):
+        return LINK_BASE + LINK_PCT * min(radius[a], radius[b]) // 100
+
+    owner = {h: h for h in hips}
+    members = {h: [h] for h in hips}
+
+    def join(a, b):
+        keep, drop = min(a, b), max(a, b)
+        for h in members[drop]:
+            owner[h] = keep
+        members[keep] = sorted(members[keep] + members.pop(drop))
+
+    def spread2(ms):
+        return max((d2(a, b) for i, a in enumerate(ms) for b in ms[i + 1:]), default=0)
+
+    pairs = sorted((d2(a, b), a, b) for i, a in enumerate(hips) for b in hips[i + 1:]
+                   if d2(a, b) <= bound(a, b) ** 2)
+    for _, a, b in pairs:
+        x, y = owner[a], owner[b]
+        if x == y or len(members[x]) + len(members[y]) > CLUSTER_MAX:
+            continue
+        if spread2(members[x] + members[y]) > (2 * bound(a, b)) ** 2:
+            continue
+        join(x, y)
+    changed = True
+    while changed:
+        changed = False
+        for c in sorted(members):
+            if c not in members or len(members[c]) >= CLUSTER_MIN:
+                continue
+            best = None
+            for o in sorted(members):
+                if o == c or len(members[o]) + len(members[c]) > CLUSTER_MAX:
+                    continue
+                dd, a, b = min((d2(a, b), a, b) for a in members[c] for b in members[o])
+                if dd <= (2 * bound(a, b)) ** 2 and (best is None or (dd, o) < best):
+                    best = (dd, o)
+            if best is not None:
+                join(c, best[1])
+                changed = True
+    for c in sorted(members):
+        if c not in members or len(members[c]) != 2:
+            continue
+        candidates = sorted((d2(a, b), b) for a in members[c] for b in hips
+                            if owner[b] != c and len(members[owner[b]]) > CLUSTER_MIN)
+        if candidates:
+            star = candidates[0][1]
+            old = owner[star]
+            rest = [h for h in members[old] if h != star]
+            del members[old]
+            for h in rest:
+                owner[h] = min(rest)
+            members[min(rest)] = rest
+            owner[star] = c
+            members[c] = sorted(members[c] + [star])
+            keep = min(members[c])
+            if keep != c:
+                members[keep] = members.pop(c)
+                for h in members[keep]:
+                    owner[h] = keep
+
+    basis = galactic_basis()
+    groups = []
+    for ms in members.values():
+        n = len(ms)
+        centre = [sum(pos[h][k] for h in ms) / n for k in range(3)]
+        groups.append((math.sqrt(sum(c * c for c in centre)), ms[0], ms, centre))
+    groups.sort()
+    taken = set()
+    clusters = []
+    moves = []
+    placed = []
+    for i, (dist, _, ms, centre) in enumerate(groups):
+        cid = i + 1
+        name = None
+        for traditional, known in TRADITIONAL_CLUSTERS:
+            if traditional not in taken and 2 * sum(1 for h in ms if h in known) > len(ms):
+                name = traditional
+                taken.add(traditional)
+                break
+        if name is None:
+            name = by_hip[min(ms, key=lambda h: _rank(by_hip[h]))][1] + ' group'
+        g = _galactic(centre, basis)
+        lon = math.atan2(g[1], g[0])
+        flat = max(math.hypot(*_galactic([pos[h][k] - centre[k] for k in range(3)], basis)[:2])
+                   for h in ms)
+        room = math.ceil(DISK_SHRINK_PCT * flat / 100) + DISK_ROOM
+
+        def at(r):
+            return (round(r * math.cos(lon)), round(r * math.sin(lon)))
+
+        def clear(p):
+            return all((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 >= (room + qr) ** 2 for q, qr in placed)
+        r0 = round(dist)
+        step = 0
+        while True:
+            if clear(at(r0 + step)):
+                r = r0 + step
+                break
+            if r0 - step >= 0 and clear(at(r0 - step)):
+                r = r0 - step
+                break
+            step += 1
+        if r != r0:
+            moves.append((cid, name, r - r0))
+        p = at(r)
+        placed.append((p, room))
+        clusters.append((cid, name, p[0], p[1], ms))
+    return clusters, moves
+
+
+def cluster_summary():
+    """A few lines on what `cluster()` made, printed when the seed is generated."""
+    clusters, moves = cluster()
+    sizes = {}
+    for c in clusters:
+        sizes[len(c[4])] = sizes.get(len(c[4]), 0) + 1
+    lines = [f'clusters: {len(clusters)}; by size ' + ', '.join(f'{k}: {v}' for k, v in sorted(sizes.items()))]
+    lines.append(f'  {len(moves)} moved on the disk: ' + ', '.join(f'{n} {d:+d}' for _, n, d in moves))
+    return '\n'.join(lines)
+
 def position(ra_mdeg, dec_mdeg, dist_cly):
     """Integer map position (x toward RA 0h, y toward RA 6h, z toward the north pole)."""
     radius = RADIAL_SCALE * math.sqrt(dist_cly / 100)
@@ -1098,8 +1315,8 @@ def galactic_longitude(ra_mdeg, dec_mdeg):
 
 
 def star_sql(val):
-    """INSERT statements for constellation, star and constellation_line from the curated catalogue
-    (`curate()`); `val` quotes a value."""
+    """INSERT statements for constellation, star_cluster, star and constellation_line from the
+    curated catalogue (`curate()`, `cluster()`); `val` quotes a value."""
     rows, merged, _ = curate()
     used = sorted({s[3] for s in rows})
     sql = []
@@ -1107,12 +1324,18 @@ def star_sql(val):
     for abbr in used:
         name, genitive = CONSTELLATIONS[abbr]
         sql.append(f"INSERT INTO constellation(id,abbr,name,genitive) VALUES ({ids[abbr]},{val(abbr)},{val(name)},{val(genitive)});")
+    clusters, _ = cluster(rows)
+    cluster_of = {}
+    for cid, cname, cx, cy, members in clusters:
+        sql.append(f"INSERT INTO star_cluster(id,name,x,y) VALUES ({cid},{val(cname)},{cx},{cy});")
+        for hip in members:
+            cluster_of[hip] = cid
     star_id = {}
     for i, (hip, name, designation, abbr, ra, dec, dist, x, y, z) in enumerate(rows):
         star_id[hip] = i + 1
         glon = galactic_longitude(ra, dec)
-        sql.append("INSERT INTO star(id,hip,name,designation,constellation_id,ra_mdeg,dec_mdeg,dist_cly,x,y,z,glon_mdeg) VALUES "
-                   f"({i + 1},{hip},{val(name)},{val(designation)},{ids[abbr]},{ra},{dec},{dist},{x},{y},{z},{glon});")
+        sql.append("INSERT INTO star(id,hip,name,designation,constellation_id,ra_mdeg,dec_mdeg,dist_cly,x,y,z,glon_mdeg,cluster_id) VALUES "
+                   f"({i + 1},{hip},{val(name)},{val(designation)},{ids[abbr]},{ra},{dec},{dist},{x},{y},{z},{glon},{cluster_of[hip]});")
     for abbr in sorted(FIGURES):
         # A line to a merged star goes to the one kept in its place; a line from a star to
         # itself is dropped.

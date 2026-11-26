@@ -1573,6 +1573,259 @@ fn star_catalogue_is_curated() {
     }
 }
 
+/// The galactic frame's axes (toward longitude 0, toward 90 degrees, to the north galactic pole)
+/// in the map's equatorial frame, from the constants of `galactic_longitude()` in
+/// `db/content/stars.py`.
+fn galactic_basis() -> [[f64; 3]; 3] {
+    let (ra, dec) = (192.859_f64.to_radians(), 27.128_f64.to_radians());
+    let z = [dec.cos() * ra.cos(), dec.cos() * ra.sin(), dec.sin()];
+    let mut p = [-z[2] * z[0], -z[2] * z[1], 1.0 - z[2] * z[2]];
+    let norm = p.iter().map(|c| c * c).sum::<f64>().sqrt();
+    p = p.map(|c| c / norm);
+    let cross = |a: [f64; 3], b: [f64; 3]| {
+        [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ]
+    };
+    let q = cross(z, p);
+    let t = 122.932_f64.to_radians();
+    let x = [0, 1, 2].map(|k| t.cos() * p[k] - t.sin() * q[k]);
+    [x, cross(z, x), z]
+}
+
+/// The clusters of the catalogue's stars by steps 1 to 3 of `cluster()` in `db/content/stars.py`
+/// (integer arithmetic throughout): each cluster as its stars' Hipparcos numbers, ascending.
+fn clusters_by_rule(rules: &Rules) -> std::collections::BTreeSet<Vec<u32>> {
+    use std::collections::BTreeMap;
+    let pos: BTreeMap<u32, [i64; 3]> = rules
+        .stars
+        .values()
+        .map(|s| (s.hip, [s.x, s.y, s.z]))
+        .collect();
+    let hips: Vec<u32> = pos.keys().copied().collect();
+    let radius: BTreeMap<u32, i64> = pos
+        .iter()
+        .map(|(&h, p)| {
+            (
+                h,
+                (p.iter().map(|c| c * c).sum::<i64>() as u64).isqrt() as i64,
+            )
+        })
+        .collect();
+    let d2 = |a: u32, b: u32| {
+        (0..3)
+            .map(|k| (pos[&a][k] - pos[&b][k]).pow(2))
+            .sum::<i64>()
+    };
+    let bound = |a: u32, b: u32| 150 + 10 * radius[&a].min(radius[&b]) / 100;
+    let spread2 = |ms: &[u32]| {
+        let mut most = 0;
+        for (i, &a) in ms.iter().enumerate() {
+            for &b in &ms[i + 1..] {
+                most = most.max(d2(a, b));
+            }
+        }
+        most
+    };
+    let mut owner: BTreeMap<u32, u32> = hips.iter().map(|&h| (h, h)).collect();
+    let mut members: BTreeMap<u32, Vec<u32>> = hips.iter().map(|&h| (h, vec![h])).collect();
+    fn join(owner: &mut BTreeMap<u32, u32>, members: &mut BTreeMap<u32, Vec<u32>>, a: u32, b: u32) {
+        let (keep, drop) = (a.min(b), a.max(b));
+        let moved = members.remove(&drop).unwrap_or_default();
+        for &h in &moved {
+            owner.insert(h, keep);
+        }
+        let all = members.entry(keep).or_default();
+        all.extend(moved);
+        all.sort_unstable();
+    }
+    let mut pairs = Vec::new();
+    for (i, &a) in hips.iter().enumerate() {
+        for &b in &hips[i + 1..] {
+            if d2(a, b) <= bound(a, b).pow(2) {
+                pairs.push((d2(a, b), a, b));
+            }
+        }
+    }
+    pairs.sort_unstable();
+    for (_, a, b) in pairs {
+        let (x, y) = (owner[&a], owner[&b]);
+        if x == y || members[&x].len() + members[&y].len() > 7 {
+            continue;
+        }
+        let both: Vec<u32> = members[&x].iter().chain(&members[&y]).copied().collect();
+        if spread2(&both) > (2 * bound(a, b)).pow(2) {
+            continue;
+        }
+        join(&mut owner, &mut members, x, y);
+    }
+    let mut changed = true;
+    while changed {
+        changed = false;
+        let keys: Vec<u32> = members.keys().copied().collect();
+        for c in keys {
+            if !members.contains_key(&c) || members[&c].len() >= 3 {
+                continue;
+            }
+            let mut best: Option<(i64, u32)> = None;
+            for (&o, others) in &members {
+                if o == c || others.len() + members[&c].len() > 7 {
+                    continue;
+                }
+                let mut near = (i64::MAX, 0, 0);
+                for &a in &members[&c] {
+                    for &b in others {
+                        near = near.min((d2(a, b), a, b));
+                    }
+                }
+                if near.0 <= (2 * bound(near.1, near.2)).pow(2)
+                    && best.is_none_or(|best| (near.0, o) < best)
+                {
+                    best = Some((near.0, o));
+                }
+            }
+            if let Some((_, o)) = best {
+                join(&mut owner, &mut members, c, o);
+                changed = true;
+            }
+        }
+    }
+    let keys: Vec<u32> = members.keys().copied().collect();
+    for c in keys {
+        if members.get(&c).is_none_or(|m| m.len() != 2) {
+            continue;
+        }
+        let mut near: Option<(i64, u32)> = None;
+        for &a in &members[&c] {
+            for &b in &hips {
+                if owner[&b] != c && members[&owner[&b]].len() > 3 {
+                    near = Some(near.map_or((d2(a, b), b), |n| n.min((d2(a, b), b))));
+                }
+            }
+        }
+        if let Some((_, star)) = near {
+            let old = owner[&star];
+            let rest: Vec<u32> = members.remove(&old).unwrap_or_default();
+            let rest: Vec<u32> = rest.into_iter().filter(|&h| h != star).collect();
+            let head = rest[0];
+            for &h in &rest {
+                owner.insert(h, head);
+            }
+            members.insert(head, rest);
+            owner.insert(star, c);
+            let mut grown = members.remove(&c).unwrap_or_default();
+            grown.push(star);
+            grown.sort_unstable();
+            for &h in &grown {
+                owner.insert(h, grown[0]);
+            }
+            members.insert(grown[0], grown);
+        }
+    }
+    members.into_values().collect()
+}
+
+/// Task 162: every star belongs to one cluster of three to seven stars, or stands alone when no
+/// other star lies within twice its link bound; the clusters are the ones the generator's rule
+/// gives (it is deterministic); they are named after real stars or traditional cluster names;
+/// and no two overlap on the galactic disk.
+#[test]
+fn stars_are_grouped_into_clusters_that_stand_apart_on_the_disk() {
+    use std::collections::{BTreeMap, BTreeSet};
+    let rules = seed();
+    assert_eq!(rules.star_clusters.len(), 160);
+    let mut members: BTreeMap<u32, Vec<&rom_rules::Star>> = BTreeMap::new();
+    for star in rules.stars.values() {
+        assert!(
+            rules.star_clusters.contains_key(&star.cluster_id),
+            "{}",
+            star.name
+        );
+        members.entry(star.cluster_id).or_default().push(star);
+    }
+    assert_eq!(members.len(), rules.star_clusters.len(), "no empty cluster");
+    let stored: BTreeSet<Vec<u32>> = members
+        .values()
+        .map(|ms| {
+            let mut hips: Vec<u32> = ms.iter().map(|s| s.hip).collect();
+            hips.sort_unstable();
+            hips
+        })
+        .collect();
+    assert_eq!(stored, clusters_by_rule(&rules), "the clustering rule");
+    let mut sizes = BTreeMap::new();
+    for (id, ms) in &members {
+        assert!(
+            ms.len() == 1 || (3..=7).contains(&ms.len()),
+            "cluster {id}: {}",
+            ms.len()
+        );
+        *sizes.entry(ms.len()).or_insert(0) += 1;
+        let name = &rules.star_clusters[id].name;
+        let named_after_a_member = ms.iter().any(|s| *name == format!("{} group", s.name));
+        assert!(
+            named_after_a_member || ["Pleiades", "Hyades"].contains(&name.as_str()),
+            "{name}"
+        );
+    }
+    assert_eq!(
+        sizes,
+        BTreeMap::from([(1, 13), (3, 40), (4, 23), (5, 21), (6, 31), (7, 32)])
+    );
+    // A single star has no other star within twice its link bound.
+    let all: Vec<&rom_rules::Star> = rules.stars.values().collect();
+    let radius = |s: &rom_rules::Star| ((s.x * s.x + s.y * s.y + s.z * s.z) as u64).isqrt() as i64;
+    for ms in members.values().filter(|ms| ms.len() == 1) {
+        let a = ms[0];
+        for b in all.iter().filter(|b| b.id != a.id) {
+            let bound = 150 + 10 * radius(a).min(radius(b)) / 100;
+            let d2 = (a.x - b.x).pow(2) + (a.y - b.y).pow(2) + (a.z - b.z).pow(2);
+            assert!(d2 > (2 * bound).pow(2), "{} and {}", a.name, b.name);
+        }
+    }
+    // Footprints on the disk: the members' offsets from the centre, flattened onto the galactic
+    // plane, at 20 percent, plus 25 map units of room. No two overlap (a unit of rounding).
+    let basis = galactic_basis();
+    let room: BTreeMap<u32, f64> = members
+        .iter()
+        .map(|(&id, ms)| {
+            let n = ms.len() as f64;
+            let centre = [
+                ms.iter().map(|s| s.x as f64).sum::<f64>() / n,
+                ms.iter().map(|s| s.y as f64).sum::<f64>() / n,
+                ms.iter().map(|s| s.z as f64).sum::<f64>() / n,
+            ];
+            let flat = ms
+                .iter()
+                .map(|s| {
+                    let off = [
+                        s.x as f64 - centre[0],
+                        s.y as f64 - centre[1],
+                        s.z as f64 - centre[2],
+                    ];
+                    let along = |axis: [f64; 3]| (0..3).map(|k| off[k] * axis[k]).sum::<f64>();
+                    along(basis[0]).hypot(along(basis[1]))
+                })
+                .fold(0.0, f64::max);
+            (id, (0.2 * flat).ceil() + 25.0)
+        })
+        .collect();
+    let clusters: Vec<&rom_rules::StarCluster> = rules.star_clusters.values().collect();
+    for (i, a) in clusters.iter().enumerate() {
+        for b in &clusters[i + 1..] {
+            let d = ((a.x - b.x) as f64).hypot((a.y - b.y) as f64);
+            assert!(
+                d + 1.5 >= room[&a.id] + room[&b.id],
+                "{} and {} overlap: {d:.0} apart",
+                a.name,
+                b.name
+            );
+        }
+    }
+}
+
 /// Task 164: the Galactic Federation (age 14) follows the Age of Galactic War (13) as the last
 /// age, like it in era, map scale, view and colonisation. Its advance at the library needs age 13
 /// and the four track levels of age 14, which exist, each after the level before it; the
