@@ -1,4 +1,11 @@
-# Task 161 — The galaxy as a disk, with star systems far enough apart never to share a screen
+# Task 161 — Star catalogue curation: no two star systems on top of each other
+
+> **Scope (2026-11-26, after the owner's later messages).** This task is only section 2 (merge and
+> move apart), done in **3D**: positions are not flattened. A moved star moves along its line of
+> sight (ra, dec, dist and glon stay true; only x, y, z move), with D = 60 map units. The disk,
+> the view scales and map generation (sections 1, 3 and 4) moved to task 162 (five zoom levels:
+> planet, system, cluster, quadrant, galaxy). Section 5 keeps only the `rom-rules` tests:
+> no pair closer than D, no duplicates, and valid figure lines.
 
 Owner (chat, 2026-11-26), verbatim:
 - "please curate the entire starsystems database, i encountered up to 3 starsystems at virtually
