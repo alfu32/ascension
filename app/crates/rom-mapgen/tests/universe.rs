@@ -162,7 +162,8 @@ fn systems_are_real_stars_at_their_real_places() {
             );
             assert!(u.systems[i + 1..].iter().all(|t| t.star != s.star));
             // The region is a ball around some catalogue star: every pair is within a diameter.
-            for t in &u.systems[i + 1..] {
+            // The celestial home lies outside the region (half its radius beyond it).
+            for t in u.systems[i + 1..].iter().filter(|t| t.star.is_some()) {
                 assert!(dist2(pos(&u, s.id), pos(&u, t.id)) <= 4 * radius * radius);
             }
         }
@@ -883,7 +884,8 @@ fn solar_holds_every_home_in_one_system() {
 fn galaxy_takes_every_catalogue_star() {
     let r = rules();
     let all: BTreeSet<u32> = r.stars.keys().copied().collect();
-    assert_eq!(all.len(), 745);
+    // 745 catalogue rows, four merged into the systems they belong to (task 161).
+    assert_eq!(all.len(), 741);
     for seed in 0..3 {
         let u = plan(&r, "map.galaxy", seed, &FOUR);
         let systems: BTreeSet<u32> = star_systems(&u).iter().filter_map(|s| s.star).collect();

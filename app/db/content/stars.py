@@ -19,8 +19,17 @@ is compressed by `RADIAL_SCALE * sqrt(distance in light-years)`, so constellatio
 true shapes seen from the Sun and the order of distances is kept. The galactic longitude (which
 galactic quadrant a star lies in, task 89) is computed here too. The simulation and map
 generator read integers only.
+
+Curation (task 161, owner 2026-11-26): the map positions are curated so that no two star systems
+lie on top of each other. Components of one physical multiple ("Alpha1 Centauri" and "Alpha2
+Centauri") closer than `MIN_SPACING` are one system; every other star closer than that to a star
+placed before it moves along its line of sight (only its map radius changes), or, failing that,
+to the nearest free point. Right ascension, declination and distance stay the catalogue's; only
+x, y, z move. `curate()` does it and `curation_summary()` reports it; the result is recorded
+below `MIN_SPACING`.
 """
 import math
+import re
 
 # Map units per sqrt(light-year): Proxima Centauri (4.2 ly) lies at about 205, Deneb (2600 ly) at 5100.
 RADIAL_SCALE = 100
@@ -898,6 +907,161 @@ FIGURES = {
 }
 
 
+# Least distance between two stars on the map, in map units (task 161, 2026-11-26: 60 for now;
+# the star-map and system-view scales follow in a later card). In the widest map (every star,
+# 4.8 frame units per map unit) two stars 60 apart are 2 765 system units apart at the
+# hand-over to the star map: their discs (1 344 wide at whole-system zoom) stand apart, their
+# glows (2 600 wide) almost touch.
+MIN_SPACING = 60
+# A star that cannot be cleared by changing its map radius within this share (percent) of it
+# moves to the nearest free point instead.
+RADIAL_SLACK_PCT = 25
+
+# What curate() does to the catalogue at MIN_SPACING 60 (`curation_summary()` prints it when the
+# seed is generated; docs/database.md "Star catalogue" lists the same):
+# - 4 rows merged, 745 -> 741 systems: Alpha2 Centauri into Alpha Centauri, Delta3 Tauri into
+#   Secunda Hyadum, Theta1 Tauri into Chamukuy, Delta2 Gruis into Delta Gruis (the Delta1 row);
+# - 26 stars moved, in map units, along their line of sight unless marked: Kappa Phoenicis 17,
+#   Gamma Persei 2, Iota Persei 29, Taygeta 48, Maia 6, Merope 56, Alcyone 119, Atlas 119,
+#   Secunda Hyadum 16, Upsilon Tauri 59, Ain 21, Chamukuy 36, Phi1 Orionis 39, Rho Geminorum 5,
+#   Gamma Centauri 53, Alcor 38, Arcturus 27, Alpha Centauri 51 (to the nearest free point,
+#   14 degrees off its direction: Proxima Centauri, named and earlier in Hipparcos order, keeps
+#   its place, and no radius within 25 % clears it), Kappa Centauri 47, Epsilon Serpentis 26,
+#   Beta Apodis 49, Shaula 44, Eta Sagittarii 8, Iota2 Cygni 23, Beta Sagittae 22, Eta Cephei 20.
+
+
+def component_base(designation):
+    """The designation without its component number ("Alpha2 Centauri" -> "Alpha Centauri"),
+    or None when it is no Bayer designation (Flamsteed numbers, HR and GJ numbers). A bare
+    letter ("Alpha Centauri") is its own base, so it groups with the numbered components."""
+    m = re.fullmatch(r'([A-Z][a-z]+)\d* (.+)', designation)
+    return f'{m.group(1)} {m.group(2)}' if m else None
+
+
+def _clear(p, placed, spacing):
+    """True when the integer point `p` is at least `spacing` from every point of `placed`."""
+    limit = spacing * spacing
+    return all((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2 >= limit for q in placed)
+
+
+def _shell_directions(count=512):
+    """`count` fixed, evenly spread unit directions (a Fibonacci sphere), in a fixed order."""
+    golden = math.pi * (3 - math.sqrt(5))
+    out = []
+    for i in range(count):
+        z = 1 - (2 * i + 1) / count
+        r = math.sqrt(1 - z * z)
+        out.append((r * math.cos(golden * i), r * math.sin(golden * i), z))
+    return out
+
+
+def curate(stars=None, spacing=MIN_SPACING):
+    """The curated catalogue (task 161): a list of (hip, name, designation, abbr, ra, dec, dist,
+    x, y, z) in Hipparcos order, a map from each dropped Hipparcos number to the one kept in its
+    place, and the moves as (hip, name, how, change, distance moved) in placement order: `how` is
+    'radius' (`change` the radius step, + farther) or 'point' (`change` the shell's radius)."""
+    stars = sorted(STARS if stars is None else stars)
+    by_hip = {s[0]: s for s in stars}
+    true_pos = {s[0]: position(*s[4:7]) for s in stars}
+
+    def dist2(a, b):
+        p, q = true_pos[a], true_pos[b]
+        return sum((p[k] - q[k]) ** 2 for k in range(3))
+
+    def proper(hip):
+        return by_hip[hip][1] != by_hip[hip][2]
+
+    # 1. Components of one multiple closer than the spacing are one system (union by pairs).
+    parent = {h: h for h in by_hip}
+
+    def root(h):
+        while parent[h] != h:
+            h = parent[h]
+        return h
+    groups = {}
+    for s in stars:
+        base = component_base(s[2])
+        if base is not None:
+            groups.setdefault((base, s[3]), []).append(s[0])
+    for members in groups.values():
+        for i, a in enumerate(members):
+            for b in members[i + 1:]:
+                if dist2(a, b) < spacing * spacing:
+                    ra, rb = root(a), root(b)
+                    if ra != rb:
+                        parent[max(ra, rb)] = min(ra, rb)
+    merged = {}
+    kept_name = {}
+    clusters = {}
+    for h in by_hip:
+        clusters.setdefault(root(h), []).append(h)
+    for members in clusters.values():
+        if len(members) < 2:
+            continue
+        keep = min(members, key=lambda h: (not proper(h), h))
+        kept_name[keep] = by_hip[keep][1] if proper(keep) else component_base(by_hip[keep][2])
+        for h in members:
+            if h != keep:
+                merged[h] = keep
+
+    # 2. Every other close pair moves apart: named stars first, then by Hipparcos number.
+    order = sorted((h for h in by_hip if h not in merged), key=lambda h: (not proper(h), h))
+    placed = {}
+    moves = []
+    shells = None
+    for h in order:
+        p = true_pos[h]
+        others = list(placed.values())
+        if not _clear(p, others, spacing):
+            ra, dec, dist = by_hip[h][4:7]
+            radius = RADIAL_SCALE * math.sqrt(dist / 100)
+            ra_r, dec_r = math.radians(ra / 1000), math.radians(dec / 1000)
+            u = (math.cos(dec_r) * math.cos(ra_r), math.cos(dec_r) * math.sin(ra_r), math.sin(dec_r))
+            found = None
+            # Along its line of sight: the smallest change of radius, farther before nearer.
+            for step in range(1, int(radius * RADIAL_SLACK_PCT / 100) + 1):
+                for r in (radius + step, radius - step):
+                    q = tuple(round(r * c) for c in u)
+                    if _clear(q, others, spacing):
+                        found = (q, 'radius', step if r > radius else -step)
+                        break
+                if found:
+                    break
+            if found is None:
+                # The nearest free point: growing shells of fixed directions about the true place.
+                shells = shells or _shell_directions()
+                shell = 1
+                while found is None:
+                    for d in shells:
+                        q = tuple(round(p[k] + shell * d[k]) for k in range(3))
+                        if _clear(q, others, spacing):
+                            found = (q, 'point', shell)
+                            break
+                    shell += 1
+            p = found[0]
+            moves.append((h, kept_name.get(h, by_hip[h][1]), found[1], found[2], math.dist(p, true_pos[h])))
+        placed[h] = p
+    rows = []
+    for h in sorted(placed):
+        hip, name, designation, abbr, ra, dec, dist = by_hip[h]
+        rows.append((hip, kept_name.get(h, name), designation, abbr, ra, dec, dist, *placed[h]))
+    return rows, merged, moves
+
+
+def curation_summary(spacing=MIN_SPACING):
+    """A few lines on what `curate()` merged and moved, printed when the seed is generated."""
+    rows, merged, moves = curate(spacing=spacing)
+    names = {s[0]: s[1] for s in STARS}
+    kept = {r[0]: r[1] for r in rows}
+    lines = [f'stars: {len(STARS)} in the catalogue, {len(rows)} systems; minimum spacing {spacing}']
+    for dropped, into in sorted(merged.items()):
+        lines.append(f'  merged {names[dropped]} into {kept[into]}')
+    for hip, name, how, change, moved in moves:
+        what = f'radius {change:+d}' if how == 'radius' else f'shell {change}'
+        lines.append(f'  moved {name} (HIP {hip}) by {moved:.0f} ({what})')
+    return '\n'.join(lines)
+
+
 def position(ra_mdeg, dec_mdeg, dist_cly):
     """Integer map position (x toward RA 0h, y toward RA 6h, z toward the north pole)."""
     radius = RADIAL_SCALE * math.sqrt(dist_cly / 100)
@@ -919,21 +1083,25 @@ def galactic_longitude(ra_mdeg, dec_mdeg):
 
 
 def star_sql(val):
-    """INSERT statements for constellation, star and constellation_line; `val` quotes a value."""
-    used = sorted({s[3] for s in STARS})
+    """INSERT statements for constellation, star and constellation_line from the curated catalogue
+    (`curate()`); `val` quotes a value."""
+    rows, merged, _ = curate()
+    used = sorted({s[3] for s in rows})
     sql = []
     ids = {abbr: i + 1 for i, abbr in enumerate(used)}
     for abbr in used:
         name, genitive = CONSTELLATIONS[abbr]
         sql.append(f"INSERT INTO constellation(id,abbr,name,genitive) VALUES ({ids[abbr]},{val(abbr)},{val(name)},{val(genitive)});")
     star_id = {}
-    for i, (hip, name, designation, abbr, ra, dec, dist) in enumerate(sorted(STARS)):
+    for i, (hip, name, designation, abbr, ra, dec, dist, x, y, z) in enumerate(rows):
         star_id[hip] = i + 1
-        x, y, z = position(ra, dec, dist)
         glon = galactic_longitude(ra, dec)
         sql.append("INSERT INTO star(id,hip,name,designation,constellation_id,ra_mdeg,dec_mdeg,dist_cly,x,y,z,glon_mdeg) VALUES "
                    f"({i + 1},{hip},{val(name)},{val(designation)},{ids[abbr]},{ra},{dec},{dist},{x},{y},{z},{glon});")
     for abbr in sorted(FIGURES):
-        for a, b in sorted(tuple(sorted(e)) for e in FIGURES[abbr]):
+        # A line to a merged star goes to the one kept in its place; a line from a star to
+        # itself is dropped.
+        lines = {tuple(sorted(merged.get(h, h) for h in e)) for e in FIGURES[abbr]}
+        for a, b in sorted(e for e in lines if e[0] != e[1]):
             sql.append(f"INSERT INTO constellation_line(constellation_id,star_a,star_b) VALUES ({ids[abbr]},{star_id[a]},{star_id[b]});")
     return sql

@@ -1460,3 +1460,102 @@ fn the_reactor_becomes_the_fusion_plant_at_the_fusion_age() {
         "Advance to Freedom"
     );
 }
+
+/// Least distance between two stars on the map (task 161, `MIN_SPACING` in `db/content/stars.py`).
+const STAR_SPACING: i64 = 60;
+
+/// A Bayer designation without its component number ("Alpha2 Centauri" -> "Alpha Centauri"); a
+/// bare letter is its own base. None for Flamsteed, HR and GJ numbers.
+fn component_base(designation: &str) -> Option<String> {
+    let (letter, rest) = designation.split_once(' ')?;
+    let letter = letter.trim_end_matches(|c: char| c.is_ascii_digit());
+    let mut chars = letter.chars();
+    let first = chars.next()?;
+    (first.is_ascii_uppercase() && chars.as_str().chars().all(|c| c.is_ascii_lowercase()))
+        .then(|| format!("{letter} {rest}"))
+}
+
+/// The map position the catalogue values give before curation: `100 sqrt(ly)` along the true
+/// direction (`position()` in `db/content/stars.py`).
+fn catalogue_position(star: &rom_rules::Star) -> [f64; 3] {
+    let r = 100.0 * (star.dist_cly as f64 / 100.0).sqrt();
+    let (ra, dec) = (
+        (star.ra_mdeg as f64 / 1000.0).to_radians(),
+        (star.dec_mdeg as f64 / 1000.0).to_radians(),
+    );
+    [
+        r * dec.cos() * ra.cos(),
+        r * dec.cos() * ra.sin(),
+        r * dec.sin(),
+    ]
+}
+
+#[test]
+fn star_catalogue_is_curated() {
+    let rules = seed();
+    let stars: Vec<_> = rules.stars.values().collect();
+    assert_eq!(stars.len(), 741, "745 catalogue rows, 4 merged");
+    // No two star systems on top of each other.
+    for (i, a) in stars.iter().enumerate() {
+        for b in &stars[i + 1..] {
+            let d2 = (a.x - b.x).pow(2) + (a.y - b.y).pow(2) + (a.z - b.z).pow(2);
+            assert!(
+                d2 >= STAR_SPACING * STAR_SPACING,
+                "{} and {} are {} apart",
+                a.name,
+                b.name,
+                (d2 as f64).sqrt()
+            );
+        }
+    }
+    // One system per physical star: no shared name, and the components of one multiple
+    // ("Alpha1 Centauri", "Alpha2 Centauri") left apart only when the catalogue places them at
+    // least the spacing apart.
+    let names: std::collections::BTreeSet<_> = stars.iter().map(|s| s.name.as_str()).collect();
+    assert_eq!(names.len(), stars.len());
+    for (i, a) in stars.iter().enumerate() {
+        for b in &stars[i + 1..] {
+            let (Some(base_a), Some(base_b)) = (
+                component_base(&a.designation),
+                component_base(&b.designation),
+            ) else {
+                continue;
+            };
+            if base_a != base_b {
+                continue;
+            }
+            let (p, q) = (catalogue_position(a), catalogue_position(b));
+            let d = (0..3).map(|k| (p[k] - q[k]).powi(2)).sum::<f64>().sqrt();
+            assert!(
+                d >= STAR_SPACING as f64 - 1.0,
+                "{} and {} ({d:.1} apart) are one system",
+                a.designation,
+                b.designation
+            );
+        }
+    }
+    for kept in [
+        "Alpha Centauri",
+        "Proxima Centauri",
+        "Secunda Hyadum",
+        "Delta Gruis",
+    ] {
+        assert!(names.contains(kept), "{kept}");
+    }
+    for dropped in [
+        "Alpha2 Centauri",
+        "Delta3 Tauri",
+        "Theta1 Tauri",
+        "Delta2 Gruis",
+    ] {
+        assert!(!names.contains(dropped), "{dropped}");
+    }
+    // Every figure line joins two different stars of the catalogue.
+    assert!(!rules.constellation_lines.is_empty());
+    for line in &rules.constellation_lines {
+        assert!(line.star_a < line.star_b, "{line:?}");
+        for star in [line.star_a, line.star_b] {
+            assert!(rules.stars.contains_key(&star), "{line:?}");
+        }
+    }
+}
