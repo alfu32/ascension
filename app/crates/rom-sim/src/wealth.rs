@@ -20,7 +20,7 @@ pub struct TradeRoute {
     pub target: EntityId,
     /// Accepted centre-to-centre length in milli-tiles.
     pub length: u64,
-    /// Income per arrival; deliveries bypass the commerce cap.
+    /// Income per arrival at the setup's gathering rate; deliveries bypass the commerce cap.
     pub per_trip_income: i64,
 }
 
@@ -45,8 +45,11 @@ impl World {
         for order in self.all_orders().filter(|o| o.player == player) {
             if let Some(route) = &order.route {
                 let mut info = route.info.clone();
-                info.per_trip_income =
-                    self.delivery_income(player, route.resource, info.per_trip_income);
+                info.per_trip_income = self.pace().gathered(self.delivery_income(
+                    player,
+                    route.resource,
+                    info.per_trip_income,
+                ));
                 routes.entry(info.trader).or_insert(info);
             }
         }
@@ -271,7 +274,11 @@ impl World {
             facing: None,
         })?;
         let mut info = route.info;
-        info.per_trip_income = self.delivery_income(player, route.resource, info.per_trip_income);
+        info.per_trip_income = self.pace().gathered(self.delivery_income(
+            player,
+            route.resource,
+            info.per_trip_income,
+        ));
         Ok(info)
     }
 
@@ -515,15 +522,8 @@ impl World {
         .into_iter()
         .flatten()
         {
-            let balance = self
-                .players
-                .get_mut(&player)
-                .expect("partner")
-                .resources
-                .entry(route.resource)
-                .or_default();
-            *balance = balance.saturating_add(payment);
-            self.count_gathered(player, route.resource, payment);
+            let paid = self.credit_gathered(player, route.resource, payment);
+            self.count_gathered(player, route.resource, paid);
         }
         self.stats.trade_trips = self.stats.trade_trips.saturating_add(1);
     }

@@ -604,7 +604,8 @@ pub fn snapshot_of(world: &World, player_id: PlayerId) -> HudSnapshot {
         .map(|r| world.income(player.id, r.id).effective)
         .max()
         .unwrap_or(0);
-    result.commerce = (commerce, cap);
+    // The rates are at the setup's gathering rate (task 159); the cap is shown alike.
+    result.commerce = (commerce, world.pace().gathered(cap));
     result.population = (
         world.population_used(player.id),
         world.population_cap(player.id),

@@ -21,9 +21,9 @@ use crate::ai_match_cmd::{
 use rom_ai::Brain;
 use rom_mapgen::{StartPlacement, Universe};
 use rom_rules::{DefId, Rules, VictoryRule};
-use rom_sim::{CityArea, MatchOptions, Outcome, PlayerId, World};
+use rom_sim::{CityArea, EconomyPace, MatchOptions, Outcome, PlayerId, World};
 
-const USAGE: &str = "usage: rom duel --db <rules.db> --profiles <a[:difficulty]>,<b[:difficulty]> --seeds <first>..<last> [--ticks-limit <n>] [--universe [--style <map style key>] [--start-placement separate|together]] [--victories conquest[,territory]] [--city-area <on|off>] [--side <tiles>] [--jobs <n>] [--trace <ticks>]";
+const USAGE: &str = "usage: rom duel --db <rules.db> --profiles <a[:difficulty]>,<b[:difficulty]> --seeds <first>..<last> [--ticks-limit <n>] [--universe [--style <map style key>] [--start-placement separate|together]] [--victories conquest[,territory]] [--city-area <on|off>] [--gather-rate <pct>] [--research-time <pct>] [--side <tiles>] [--jobs <n>] [--trace <ticks>]";
 /// One and a half game hours at 20 ticks per second.
 pub const DEFAULT_TICKS_LIMIT: u64 = 108_000;
 /// Maps drawn for one seed before an unfair start is accepted.
@@ -57,6 +57,8 @@ pub struct DuelRequest {
     pub start_placement: Option<StartPlacement>,
     /// Whether the city area limits building (task 158).
     pub city_area: CityArea,
+    /// The economy's pace (task 159).
+    pub pace: EconomyPace,
 }
 
 /// How one match ended.
@@ -276,6 +278,7 @@ pub fn play(rules: &Arc<Rules>, duel: &DuelRequest, seed: u64) -> Result<DuelRes
         universe_style: duel.style.clone(),
         start_placement: duel.start_placement,
         city_area: duel.city_area,
+        pace: duel.pace,
     };
     let faction = duel_faction(rules, seed)?;
     // An unfair start (much less land, or no room for a gather site on a node terrain) decides
@@ -700,6 +703,7 @@ pub fn run_command(
     let mut victories: BTreeSet<VictoryRule> = [VictoryRule::Conquest].into();
     let (mut style, mut start_placement) = (None, None);
     let mut city_area = CityArea::default();
+    let mut pace = EconomyPace::default();
     let mut jobs = std::thread::available_parallelism().map_or(1, |n| n.get().min(4));
     while let Some(flag) = args.next() {
         if flag == "--universe" {
@@ -731,6 +735,12 @@ pub fn run_command(
                 )
             }
             "--city-area" => city_area = crate::ai_match_cmd::parse_city_area(&value)?,
+            "--gather-rate" => {
+                pace.gather_rate = crate::ai_match_cmd::parse_gather_rate(&value)?;
+            }
+            "--research-time" => {
+                pace.research_time = crate::ai_match_cmd::parse_research_time(&value)?;
+            }
             "--victories" => {
                 victories = value
                     .split(',')
@@ -754,6 +764,7 @@ pub fn run_command(
         style,
         start_placement,
         city_area,
+        pace,
     };
     let conn = rusqlite::Connection::open_with_flags(
         db.ok_or(USAGE)?,
@@ -859,6 +870,7 @@ mod tests {
             style: None,
             start_placement: None,
             city_area: CityArea::default(),
+            pace: EconomyPace::default(),
         };
         let (first, second) = (
             play(&rules, &duel, 3).unwrap(),
@@ -879,6 +891,7 @@ mod tests {
             universe_style: None,
             start_placement: None,
             city_area: CityArea::default(),
+            pace: EconomyPace::default(),
         };
         let faction = duel_faction(&rules, 3).unwrap();
         let (world, _) = build_world_with(

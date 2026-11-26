@@ -230,6 +230,7 @@ pub fn plan_of(options: &Options, humans: u32) -> Result<MatchPlan, String> {
         home_size: options.sphere,
         start_placement: options.start_placement.map(|p| p.key().to_owned()),
         city_area: Some(options.city_area.key().to_owned()),
+        pace: options.pace,
         age: options.age,
         script,
         humans,

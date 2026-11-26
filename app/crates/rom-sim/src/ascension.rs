@@ -104,8 +104,16 @@ impl World {
 
     /// How long the ascension takes `player`: `ascension.duration_pct` of the research time
     /// of the age advance that brought it its current age, with its modifiers; the
-    /// technology's own time when no advance led there.
+    /// technology's own time when no advance led there; both at the setup's research time
+    /// (task 159).
     pub fn ascension_duration(&self, player: PlayerId, tech: DefId) -> u64 {
+        let ticks = self.unpaced_ascension_duration(player, tech);
+        self.pace()
+            .research_ticks(i64::try_from(ticks).unwrap_or(i64::MAX))
+            .max(0) as u64
+    }
+
+    fn unpaced_ascension_duration(&self, player: PlayerId, tech: DefId) -> u64 {
         let sources = self.active_sources(player);
         let age = self.players[&player].age;
         let advance = self.rules.tech_effects.iter().find_map(|(id, effects)| {
@@ -321,6 +329,8 @@ impl World {
                 .resources
                 .clear();
             self.income_remainders
+                .retain(|(owner, _), _| *owner != player);
+            self.gather_remainders
                 .retain(|(owner, _), _| *owner != player);
             self.capture.capitals.remove(&player);
             self.capture.holds.remove(&player);

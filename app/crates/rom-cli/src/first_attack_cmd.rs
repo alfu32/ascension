@@ -104,6 +104,7 @@ pub fn measure(
         universe_style: None,
         start_placement: None,
         city_area: rom_sim::CityArea::default(),
+        pace: rom_sim::EconomyPace::default(),
     };
     let faction = duel_faction(rules, seed)?;
     let options = MatchOptions {

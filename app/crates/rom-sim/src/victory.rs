@@ -55,6 +55,8 @@ pub struct MatchOptions {
     pub victories: BTreeSet<VictoryRule>,
     /// Whether the city area limits building (task 158); on by default.
     pub city_area: CityArea,
+    /// The economy's pace (task 159): gathering rate and research time, 100 % by default.
+    pub pace: crate::EconomyPace,
 }
 
 impl Default for MatchOptions {
@@ -63,6 +65,7 @@ impl Default for MatchOptions {
             elimination: Elimination::Capital,
             victories: [VictoryRule::Conquest, VictoryRule::Territory].into(),
             city_area: CityArea::LimitsBuilding,
+            pace: crate::EconomyPace::default(),
         }
     }
 }
@@ -174,6 +177,7 @@ impl World {
     pub fn with_match_options(mut self, options: MatchOptions) -> Result<Self, SimError> {
         if self.tick != 0
             || !self.pending.is_empty()
+            || !options.pace.is_valid()
             || options.victories.iter().any(|rule| {
                 !matches!(rule, VictoryRule::Conquest | VictoryRule::Territory)
                     || !self.rules.victories.values().any(|row| row.rule == *rule)

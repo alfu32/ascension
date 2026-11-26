@@ -39,10 +39,13 @@ pub(crate) struct EconomyIndex {
 }
 
 impl World {
-    /// Returns a base resource's current rate, or zero for unknown players/resources.
+    /// Returns a base resource's current rate, or zero for unknown players/resources. `effective`
+    /// and `trade` are what reaches the stock, at the setup's gathering rate (task 159).
     pub fn income(&self, player: PlayerId, resource: DefId) -> Income {
         let mut income = self.modified_income(player, resource, self.raw_rate(player, resource));
-        income.trade = self.trade_income(player, resource);
+        let pace = self.pace();
+        income.effective = pace.gathered(income.effective);
+        income.trade = pace.gathered(self.trade_income(player, resource));
         income
     }
 
@@ -249,15 +252,8 @@ impl World {
                 let payment = (accumulated / i128::from(period)) as i64;
                 *remainder = (accumulated % i128::from(period)) as i64;
                 if payment != 0 {
-                    let balance = self
-                        .players
-                        .get_mut(&player)
-                        .expect("owner")
-                        .resources
-                        .entry(*resource)
-                        .or_default();
-                    *balance = balance.saturating_add(payment);
-                    self.count_gathered(player, *resource, payment);
+                    let paid = self.credit_gathered(player, *resource, payment);
+                    self.count_gathered(player, *resource, paid);
                 }
             }
         }

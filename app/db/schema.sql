@@ -1043,6 +1043,8 @@ CREATE TABLE match (
   stat_orders_no_slot INTEGER NOT NULL,
   stat_orders_target_gone INTEGER NOT NULL,
   city_area        TEXT NOT NULL DEFAULT 'on' CHECK (city_area IN ('on','off')), -- the setup option of task 158: 'off' lets buildings of the city area stand anywhere in the borders (format 22)
+  gather_rate      INTEGER NOT NULL DEFAULT 100 CHECK (gather_rate IN (100,50,25,10,5,2)), -- the setup option of task 159: percent of every income drawn from the world (format 24)
+  research_time    INTEGER NOT NULL DEFAULT 100 CHECK (research_time IN (100,200,400,1000,2000)), -- the setup option of task 159: percent of every research's time (format 24)
   CHECK ((outcome_team IS NULL) = (outcome_rule IS NULL) AND (outcome_rule IS NULL) = (outcome_tick IS NULL))
 ) STRICT;
 
@@ -1300,6 +1302,13 @@ CREATE TABLE income_remainder (         -- fractional income carried between tic
   player_id   INTEGER NOT NULL REFERENCES player(id),
   resource_id INTEGER NOT NULL REFERENCES resource(id),
   remainder   INTEGER NOT NULL,
+  PRIMARY KEY (player_id, resource_id)
+) STRICT, WITHOUT ROWID;
+
+CREATE TABLE gather_remainder (         -- gathered income below one unit at a gathering rate under 100 %, in hundredths (task 159, format 24)
+  player_id   INTEGER NOT NULL REFERENCES player(id),
+  resource_id INTEGER NOT NULL REFERENCES resource(id),
+  remainder   INTEGER NOT NULL CHECK (remainder BETWEEN 1 AND 99),
   PRIMARY KEY (player_id, resource_id)
 ) STRICT, WITHOUT ROWID;
 

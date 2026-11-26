@@ -3,7 +3,7 @@
 //! it as `report.json` and `rom report` prints it.
 
 use rom_save::{Controller, MatchInfo};
-use rom_sim::{CityArea, EndReason, MatchEnd, Outcome, PlayerId, PlayerStatus, World};
+use rom_sim::{CityArea, EconomyPace, EndReason, MatchEnd, Outcome, PlayerId, PlayerStatus, World};
 
 /// An aspect the players are ranked in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -152,6 +152,8 @@ pub struct MatchReport {
     pub seed: u64,
     /// The setup's city area option (task 158).
     pub city_area: CityArea,
+    /// The setup's economy pace (task 159).
+    pub pace: EconomyPace,
     /// The end, once reached.
     pub end: Option<MatchEnd>,
     /// The first victory: team, rule and tick.
@@ -281,6 +283,7 @@ impl MatchReport {
             map_style: info.map_style.clone(),
             seed: info.seed,
             city_area: world.match_options().city_area,
+            pace: world.pace(),
             end: world.match_end(),
             victory,
             players,
@@ -308,6 +311,14 @@ impl MatchReport {
             CityArea::LimitsBuilding => "limits building",
             CityArea::Free => "building anywhere in the borders",
         }
+    }
+
+    /// The economy pace in words: "gathering 25 % · research time 400 %".
+    pub fn pace_text(&self) -> String {
+        format!(
+            "gathering {} % · research time {} %",
+            self.pace.gather_rate, self.pace.research_time
+        )
     }
 
     /// A player's line.
@@ -425,10 +436,11 @@ impl MatchReport {
         let _ = writeln!(out, "match report at {}", self.clock(self.tick));
         let _ = writeln!(
             out,
-            "map style {} · seed {} · city area: {} · length {} · end: {}",
+            "map style {} · seed {} · city area: {} · {} · length {} · end: {}",
             self.map_style_name(),
             self.seed,
             self.city_area_text(),
+            self.pace_text(),
             self.clock(self.length()),
             self.end_text()
         );

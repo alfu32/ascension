@@ -4,7 +4,7 @@
 
 use rom_mapgen::StartPlacement;
 use rom_match::{ContentRequest, Entry, Journal, MapKind, MatchSettings, ScriptSetup, Spec};
-use rom_sim::{BodyId, CityArea, Command, EntityId, PlayerId, Pos};
+use rom_sim::{BodyId, CityArea, Command, EconomyPace, EntityId, PlayerId, Pos};
 use serde::{Deserialize, Serialize};
 
 /// The protocol's version: both ends must speak the same one.
@@ -404,6 +404,11 @@ pub struct MatchSetup {
     /// Whether the city area limits building (task 158): `on` or `off`; absent is on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub city_area: Option<String>,
+    /// Percent of every income drawn from the world (task 159): one of
+    /// [`EconomyPace::GATHER_RATES`].
+    pub gather_rate: u32,
+    /// Percent of every research's time (task 159): one of [`EconomyPace::RESEARCH_TIMES`].
+    pub research_time: u32,
     /// Every player starts in the age of this ordinal.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub age: Option<i64>,
@@ -437,6 +442,16 @@ impl MatchSetup {
             }
             None => CityArea::default(),
         };
+        let pace = EconomyPace {
+            gather_rate: self.gather_rate,
+            research_time: self.research_time,
+        };
+        if !pace.is_valid() {
+            return Err(format!(
+                "unknown economy pace: gathering {} %, research time {} %",
+                self.gather_rate, self.research_time
+            ));
+        }
         let ai = self
             .ai
             .iter()
@@ -458,6 +473,7 @@ impl MatchSetup {
             ai: Some(ai),
             humans: self.humans.iter().map(|p| PlayerId(*p)).collect(),
             city_area,
+            pace,
         })
     }
 }
@@ -712,6 +728,8 @@ mod tests {
             home_size: None,
             start_placement: Some("together".into()),
             city_area: Some("off".into()),
+            gather_rate: 10,
+            research_time: 400,
             age: Some(2),
             script: String::new(),
             ai: vec!["builder:tough".into()],
@@ -730,6 +748,30 @@ mod tests {
             Some(StartPlacement::Together)
         );
         assert_eq!(settings.city_area, CityArea::Free);
+        assert_eq!(
+            settings.pace,
+            EconomyPace {
+                gather_rate: 10,
+                research_time: 400
+            }
+        );
+        // Task 159: a pace outside the lists is refused.
+        assert!(
+            MatchSetup {
+                gather_rate: 30,
+                ..setup.clone()
+            }
+            .to_settings()
+            .is_err()
+        );
+        assert!(
+            MatchSetup {
+                research_time: 300,
+                ..setup.clone()
+            }
+            .to_settings()
+            .is_err()
+        );
         // A setup without the option (an older host's) keeps the city area limiting building.
         let older: MatchSetup =
             serde_json::from_str(&text.replace(",\"city_area\":\"off\"", "")).unwrap();
