@@ -70,7 +70,7 @@ pub struct Entity {
     pub stance: DefId,
     /// Earliest tick at which each weapon id can fire again.
     pub cooldowns: BTreeMap<u32, u64>,
-    /// Current energy pool.
+    /// Current energy pool; for a field emitter (task 156) the tick its upkeep is paid until.
     pub energy: i64,
     /// Fractional regeneration numerator, over ticks per second.
     pub energy_remainder: i64,

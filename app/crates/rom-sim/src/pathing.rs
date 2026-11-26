@@ -359,6 +359,16 @@ impl Pathing {
         }
     }
 
+    /// Adds or removes one tile of an energy field (task 156): it blocks every walker as a
+    /// building's tile does.
+    pub fn block_tile(&mut self, index: usize, add: bool) {
+        if add {
+            self.occupancy[index] += 1;
+        } else {
+            self.occupancy[index] -= 1;
+        }
+    }
+
     /// Speed percentage for a class on the tile under `pos`; flyers always 100.
     pub fn speed_pct(&self, class: u32, pos: Pos) -> u32 {
         match (self.classes.get(&class), self.geo.pos_index(pos)) {

@@ -127,6 +127,9 @@ pub struct World {
     /// Shield pools (hashed, saved), the shield types of the rules and the recent
     /// interceptions and blows on pools for the views (task 157).
     pub(crate) shield: crate::shields::ShieldState,
+    /// The field emitter types of the rules and the fields standing (task 156; derived from
+    /// the entities, not hashed, not saved).
+    pub(crate) fields: crate::fields::FieldState,
     /// Recent blasts of area weapons, for the views (task 75; not hashed, not saved).
     pub(crate) blasts: Vec<crate::combat::Blast>,
     /// Buildings that fell lately, for the views (task 75; not hashed, not saved).
@@ -328,6 +331,7 @@ impl World {
             return Err(SimError::InvalidRules("mine.detection_radius"));
         }
         let shield = crate::shields::ShieldState::of(&rules);
+        let fields = crate::fields::FieldState::of(&rules);
         let stain_rules = crate::stains::StainRules::of(&rules);
         // Rules with a market need a complete, valid set of market constants (task 107).
         let market_rules = crate::market::MarketRules::of(&rules);
@@ -378,6 +382,7 @@ impl World {
             max_leash,
             mine_types,
             shield,
+            fields,
             blasts: Vec::new(),
             wrecks: Vec::new(),
             strikes: Vec::new(),
@@ -1233,5 +1238,8 @@ impl World {
         self.arrive_transits();
         self.update_victory();
         self.record_tally();
+        // Last, so a world restored between two ticks blocks the same field tiles (task 156).
+        self.power_fields();
+        self.refresh_fields();
     }
 }

@@ -147,3 +147,30 @@ fn a_computer_player_lays_mines_before_its_gate_once_it_can() {
         "the mines lie before the gate"
     );
 }
+
+/// Task 156: from the Spacefaring age the line is of shield emitters, an emitter every third
+/// tile with the shield gate in the middle, and once they are paid for their field stands
+/// between them.
+#[test]
+fn a_computer_player_lays_a_shield_line_whose_field_stands() {
+    let run_once = || run("age.starfaring", &["tech.military.1"], 4000);
+    let w = run_once();
+    let rules = w.rules().clone();
+    let gates = own(&w, &rules, |t| {
+        t.fortification.as_ref().is_some_and(|f| f.gate) && t.field_emitter.is_some()
+    });
+    let emitters = own(&w, &rules, |t| {
+        t.fortification.as_ref().is_some_and(|f| !f.gate) && t.field_emitter.is_some()
+    });
+    assert_eq!(gates.len(), 1, "one shield gate");
+    // Nine tiles across the way: the gate's three and two emitters either side.
+    assert_eq!(emitters.len(), 4, "emitters every third tile");
+    let standing: Vec<_> = w
+        .field_links()
+        .iter()
+        .filter(|l| l.owner == P1 && l.up)
+        .collect();
+    assert_eq!(standing.len(), 4, "{standing:?}");
+    assert_eq!(standing.iter().map(|l| u32::from(l.tiles)).sum::<u32>(), 2);
+    assert_eq!(run_once().hash(), w.hash());
+}

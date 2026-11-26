@@ -270,6 +270,26 @@ impl Rules {
                     ),
                 });
             }
+            // Task 156: a field emitter is a fortification (a segment or a gate), powered from a
+            // resource for a period of more than one tick.
+            if let Some(field) = &entity.field_emitter
+                && (entity.fortification.is_none()
+                    || !(0..=16).contains(&field.gap)
+                    || field.upkeep_period_ticks < 2
+                    || field.upkeep < 0
+                    || (field.upkeep > 0 && field.upkeep_resource_id.is_none())
+                    || field
+                        .upkeep_resource_id
+                        .is_some_and(|r| !self.resources.contains_key(&r)))
+            {
+                problems.push(Problem {
+                    message: format!(
+                        "field emitter {} must be a fortification with a gap of 0 to 16 tiles and \
+                         an upkeep period of two ticks or more, paid in a resource",
+                        self.label(entity.id)
+                    ),
+                });
+            }
             if entity.keeper.as_ref().is_some_and(|k| k.capacity < 1) {
                 problems.push(Problem {
                     message: format!("keeper {} capacity must be positive", self.label(entity.id)),

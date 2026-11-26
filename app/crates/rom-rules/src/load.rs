@@ -384,6 +384,7 @@ fn load_entity_type(conn: &Connection) -> Result<Vec<EntityType>, RulesError> {
             fortification: None,
             minefield: None,
             shield: None,
+            field_emitter: None,
             market: None,
             drone_cloud: None,
             colony: None,
@@ -698,6 +699,21 @@ fn load_et_shield(conn: &Connection) -> Result<Vec<Shield>, RulesError> {
                     .get::<_, Option<u32>>("recharge_resource_id")?
                     .map(DefId),
                 recharge_cost: row.get("recharge_cost")?,
+            })
+        },
+    )
+}
+fn load_et_field_emitter(conn: &Connection) -> Result<Vec<FieldEmitter>, RulesError> {
+    read(
+        conn,
+        "SELECT * FROM et_field_emitter ORDER BY entity_type_id",
+        |row| {
+            Ok(FieldEmitter {
+                entity_type_id: DefId(row.get("entity_type_id")?),
+                gap: row.get("gap")?,
+                upkeep_period_ticks: row.get("upkeep_period_ticks")?,
+                upkeep_resource_id: row.get::<_, Option<u32>>("upkeep_resource_id")?.map(DefId),
+                upkeep: row.get("upkeep")?,
             })
         },
     )
@@ -1632,6 +1648,10 @@ impl Rules {
         for row in load_et_shield(conn)? {
             let entity = entity_mut(&mut rules, row.entity_type_id, "et_shield")?;
             entity.shield = Some(row);
+        }
+        for row in load_et_field_emitter(conn)? {
+            let entity = entity_mut(&mut rules, row.entity_type_id, "et_field_emitter")?;
+            entity.field_emitter = Some(row);
         }
         for row in load_et_colony(conn)? {
             let entity = entity_mut(&mut rules, row.entity_type_id, "et_colony")?;
