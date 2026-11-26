@@ -9,6 +9,17 @@ Owner (chat, 2026-11-26), verbatim, answering the proposal for task 162:
 Runs after task 162 (star clusters in the data, `star_system.cluster_id`, the five zoom levels).
 Start from main after 162 has merged.
 
+**What 162 left you (merged in 0.0.148):**
+- In the data: `star_cluster`, plus `star.cluster_id` and `star_system.cluster_id`.
+- In the simulation: `cluster: Option<u32>` on each universe system (saved; hashed only when
+  `Some`). A system with no cluster (the celestial home, flat or test worlds) counts as being
+  in every cluster, so tests without clusters behave as today.
+- In `rom-render/src/zoom.rs`: the zoom levels Surface, Globe, System, Cluster, Quadrant and
+  Galaxy, with single-item levels skipped.
+- In `rom-render/src/galaxy.rs`: the per-cluster scale and the disk.
+
+Read the 162 card's report section in `docs/world-model.md` ("Five zoom levels").
+
 ## What changes
 
 1. **A new map-scale tier.**
