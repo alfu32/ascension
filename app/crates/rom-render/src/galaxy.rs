@@ -25,8 +25,9 @@ pub const DISK_UNITS: f32 = 2000.0;
 pub const DISK_SHRINK: f32 = 0.2;
 /// Room about a cluster's stars on the disk, catalogue units: `DISK_ROOM` in `stars.py`.
 pub const DISK_ROOM: f32 = 25.0;
-/// Camera distance over the radius it frames in the cluster view.
-pub const CLUSTER_FIT: f32 = 3.0;
+/// Camera distance over the radius it frames in the cluster view: a system on the near side of
+/// the cluster stays in the picture.
+pub const CLUSTER_FIT: f32 = 4.0;
 /// Camera distance over the radius it frames in the quadrant and galaxy views (looking down on
 /// the disk from [`DISK_ELEVATION`]).
 pub const DISK_FIT: f32 = 2.6;
@@ -460,9 +461,24 @@ fn ladder(scene: &UniverseScene, groups: &[ClusterGroup], cluster_radius: f32) -
     quadrants.sort_unstable();
     quadrants.dedup();
     let quadrant = (quadrants.len() > 1).then(|| {
+        // A quadrant view frames the bulk of its quadrant (nine clusters in ten); the few far out
+        // are seen by panning, and the galaxy view holds them all.
         let widest = quadrants
             .iter()
-            .map(|&q| extent(material.iter().copied().filter(|g| g.quadrant == q)).1)
+            .map(|&q| {
+                let members: Vec<&ClusterGroup> = material
+                    .iter()
+                    .copied()
+                    .filter(|g| g.quadrant == q)
+                    .collect();
+                let (middle, _) = extent(members.iter().copied());
+                let mut reach: Vec<f32> = members
+                    .iter()
+                    .map(|g| length(sub(g.centre, middle)) + g.room)
+                    .collect();
+                reach.sort_by(f32::total_cmp);
+                reach[(reach.len() * 9 / 10).min(reach.len() - 1)]
+            })
             .fold(0.0, f32::max);
         let fit = (widest * DISK_FIT).max(past_cluster);
         galaxy = galaxy.max(fit * LEVEL_GAP.exp());

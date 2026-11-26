@@ -883,7 +883,19 @@ fn render_loop(shared: &Shared) {
             && let Some(body) = lock(&shared.fly_body).take()
             && let Some(index) = zoom_camera.scene().body_index(body)
         {
-            zoom_camera.fly_to_target(crate::zoom::Target::Body(index), orbit_camera);
+            let scene = zoom_camera.scene();
+            let system = scene.bodies[index].system;
+            let star = scene.bodies[index].kind == crate::universe::BodyViewKind::Star;
+            if star && zoom_camera.system_id() != Some(system) {
+                // The star of another system: across to it, the whole system in view.
+                let place = FocusPlace::System {
+                    system,
+                    at: [0.0; 3],
+                };
+                let _ = zoom_camera.focus(place, orbit_camera);
+            } else {
+                zoom_camera.fly_to_target(crate::zoom::Target::Body(index), orbit_camera);
+            }
         }
         if let Some(published) = lock(&shared.universe).take() {
             pending_universe = Some(published);

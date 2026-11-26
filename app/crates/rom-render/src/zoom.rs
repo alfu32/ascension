@@ -239,13 +239,12 @@ impl ZoomScale {
 
     /// The scale with the levels beyond a system at `ladder`'s widest zooms.
     pub fn with_ladder(mut self, ladder: Ladder) -> Self {
-        let at = |distance: f32| self.l_system_map + (distance / MAP_MIN_DISTANCE).max(1.0).ln();
+        let base = self.l_system_map;
+        let at = move |distance: f32| base + (distance / MAP_MIN_DISTANCE).max(1.0).ln();
         self.ladder = ladder;
-        self.l_cluster = ladder
-            .cluster
-            .map_or(self.l_system_map - FADE_HALF, |d| at(d));
-        self.l_quadrant = ladder.quadrant.map_or(self.l_cluster, |d| at(d));
-        self.l_end = ladder.galaxy.map_or(self.l_cluster, |d| at(d));
+        self.l_cluster = ladder.cluster.map_or(base - FADE_HALF, at);
+        self.l_quadrant = ladder.quadrant.map_or(self.l_cluster, at);
+        self.l_end = ladder.galaxy.map_or(self.l_cluster, at);
         self
     }
 
