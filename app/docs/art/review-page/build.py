@@ -14,6 +14,7 @@ VERSION = sys.argv[3] if len(sys.argv) > 3 else ""
 SOUND_DIR = Path(sys.argv[4]) if len(sys.argv) > 4 else None
 
 LEADS = {
+    "21": "Buildings and units built from parts inside the game. Round 21 brings the <strong>shield emitters</strong> (task 156, release 0.150.0), the fortification line of the space ages: the <strong>Shield Emitter</strong> pylon and the three-tile <strong>Shield Gate</strong>, from the Spacefaring age on (three looks: Spacefaring, Abundance, Galactic War, which the Federation reuses). In a match an energy wall stands between neighbouring pylons while they have energy and drops without it (pictures above); defensive lines turn into emitters at the Spacefaring advance. The gates you approved in round 20 are locked. Set each model's status and write directions; name a part as <code>model id/part</code>.",
     "20": "Buildings and units built from parts inside the game. Round 20 brings the <strong>gates redrawn three tiles wide</strong> (task 147b, release 0.0.140), as you asked: the palisade gate, the wall gate (the classical and medieval arches now three bays) and the defensive line's checkpoint, in every age they stand in. In a match they turn along the wall like its segments (pictures above). The walls, lines, minefields and the space probe you approved in round 19 are locked. Set each gate's status and write directions; name a part as <code>model id/part</code>.",
     "19": "Buildings and units built from parts inside the game. Round 19 brings the <strong>fortifications</strong> (task 147a, release 0.0.135): the <strong>palisade</strong> (Ancient), <strong>stone walls</strong> (Classical to Enlightenment) and <strong>defensive lines</strong> (trench, tank traps, barbed wire; Industrial to Fusion), each with its gate, and the <strong>minefield</strong> (Industrial on). Each sheet shows one segment; the pictures above show whole lines in a match. A wall standing in a later age wears that age's look. The <strong>gates will be rebuilt three tiles wide and turned along the wall</strong> (your request; task 147b), so judge their style, not their size. Also the <strong>space probe</strong> (<code>unit.space_probe@information</code>), never reviewed before. Set each model's status and write directions; name a part as <code>model id/part</code>.",
     "18": "Buildings and units built from parts inside the game. Round 18 brings the <strong>militia</strong> (task 141, release 0.0.131): citizens called up for free inside your own borders and stood down again, one step per age, from the ancient <strong>Levies</strong> with a spear to the <strong>Planetary Guard</strong> (<code>unit.militia_&lt;age&gt;@&lt;age&gt;</code>). Each wears the citizen's clothes with the weapon and headgear of its age (picture above, enlarged). Also the <strong>Nuclear Reactor</strong> (task 146, <code>bld.nuclear_reactor@automation</code>), which becomes the fusion plant. Each card plays the unit's own sounds. Set each model's status and write directions; name a part as <code>model id/part</code>.",
@@ -52,6 +53,8 @@ ROUND19 = {"unit.space_probe@information"} | {f"{k}@{a}" for k, ages in (
     ("bld.defensive_line", ("industrial", "modern", "information", "automation", "fusion")),
     ("bld.checkpoint", ("industrial", "modern", "information", "automation", "fusion")),
     ("bld.minefield", ("industrial", "modern", "information", "automation", "fusion"))) for a in ages}
+# Task 156: the shield emitters.
+ROUND21 = {f"{k}@{a}" for k in ("bld.shield_emitter", "bld.shield_gate") for a in ("starfaring", "abundance", "galactic")}
 # Task 147b: the gates redrawn three tiles wide.
 ROUND20 = {f"{k}@{a}" for k, ages in (
     ("bld.palisade_gate", ("ancient", "medieval", "gunpowder", "industrial", "modern", "automation")),
@@ -213,7 +216,11 @@ OVERVIEW20 = [
     ("147-wall", "Own pikemen passing through the three-tile gatehouse"),
     ("147-line", "A defensive line with its three-tile checkpoint and a minefield"),
 ]
-OVERVIEW = OVERVIEW20 if ROUND == "20" else OVERVIEW19 if ROUND == "19" else OVERVIEW18 if ROUND == "18" else OVERVIEW17 if ROUND == "17" else OVERVIEW16 if ROUND == "16" else OVERVIEW15 if ROUND == "15" else OVERVIEW14 if ROUND == "14" else OVERVIEW13 if ROUND == "13" else OVERVIEW12 if ROUND == "12" else OVERVIEW11 if ROUND == "11" else OVERVIEW10 if ROUND == "10" else OVERVIEW9 if ROUND == "9" else OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
+OVERVIEW21 = [
+    ("156-up", "A shield line with its gate in the Spacefaring age: the energy wall stands between the pylons"),
+    ("156-down", "The same line with no energy left: the field is down, only the pylons and the gate block"),
+]
+OVERVIEW = OVERVIEW21 if ROUND == "21" else OVERVIEW20 if ROUND == "20" else OVERVIEW19 if ROUND == "19" else OVERVIEW18 if ROUND == "18" else OVERVIEW17 if ROUND == "17" else OVERVIEW16 if ROUND == "16" else OVERVIEW15 if ROUND == "15" else OVERVIEW14 if ROUND == "14" else OVERVIEW13 if ROUND == "13" else OVERVIEW12 if ROUND == "12" else OVERVIEW11 if ROUND == "11" else OVERVIEW10 if ROUND == "10" else OVERVIEW9 if ROUND == "9" else OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
     ("gallery_ancient", "Ancient age, game camera: <code>--gallery ancient</code>"),
     ("gallery_classical", "Classical age, game camera: <code>--gallery classical</code>"),
     ("gallery_classical_close_team2", "Classical age, close, in player 2's blue to show where team colour sits"),
@@ -239,9 +246,11 @@ def round_of(m):
     site (task 82), 14 the higher-definition spaceships and the two line ships of task 92
     (task 93), 15 the Deep Space Tracking Station (task 118), 16 the rotorcraft (task 119), 17 the drone operator (task 120), 18 the militia (task 141) and the nuclear reactor
     (task 146), 19 the fortifications (task 147a) and the space probe, 20 the gates three tiles
-    wide (task 147b)."""
+    wide (task 147b), 21 the shield emitters (task 156)."""
     if m["id"] in ROUND1:
         return 1
+    if m["id"] in ROUND21:
+        return 21
     if m["id"] in ROUND20:
         return 20
     if m["id"] in ROUND19:
