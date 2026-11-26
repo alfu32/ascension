@@ -143,7 +143,9 @@ order, "Vega II"; resource bodies "Vega belt" and "Vega II moon".
   reachable, two routes per home, equal habitable counts, resource-body value
   within two routes at least 80 percent of the richest home's, and the two
   shortest routes of the poorest home at least 70 percent of the richest
-  home's. Layouts failing this are redrawn (up to 64 centres; 256 layouts in a Quadrant or Galaxy,
+  home's. Since task 163 homes stand only in star clusters with room, and every home
+  cluster holds its share of planets and resource bodies ("Jumps between clusters, and fair home
+  clusters" below). Layouts failing this are redrawn (up to 64 centres; 256 layouts in a Quadrant or Galaxy,
 task 89).
 - **Seeing the sky.** F2 switches the "Sky from the Sun" preset: the eye
   goes to the Sun and looks toward the middle of the systems; arrows or a drag
@@ -270,7 +272,8 @@ was not opened, its order is tested).
 | --- | --- | --- |
 | 0, planetary | home planet, positive `view_range` limits ground half-width; zero shows the globe | ancient; fusion has zero range |
 | 1, interplanetary | home system seen from fusion (task 138); since task 155 ships move and orbit within it from fusion too: the space frigate and the transport, which founds colonies on its other planets | fusion |
-| 2, interstellar | the star map (since task 162 the cluster, quadrant and galaxy views) and route travel (jumps) between systems | expansion (shown as the Starfaring Age since task 155) |
+| 2, interstellar | the cluster view of the home's star cluster and the ends of its routes (task 163), and jumps between the systems of that cluster | expansion (shown as the Starfaring Age since task 155) |
+| 3, galactic | the quadrant and galaxy views, and jumps between star clusters (task 163) | abundance (the Age of Abundance) |
 
 Research updates the existing camera's limit immediately without moving it.
 Starting zoom-out and mouse-wheel zoom obey the same limits. The code reads
@@ -841,8 +844,74 @@ match: the system, the cluster view, the cluster flattening onto the disk, the g
 `img/162-alpha-centauri.png` (Alpha Centauri's system view near its widest, before the hand-over:
 no other system on screen; its bodies are hidden, it is unexplored).
 
-Presentation only: routes, lengths, travel, homes and fairness keep the true 3D positions, and
-no rule reads the clusters yet (task 163 will).
+Presentation only: routes, lengths, travel, homes and fairness keep the true 3D positions.
+Since task 163 the jumps and the homes read the clusters (below).
+
+### Jumps between clusters, and fair home clusters (task 163)
+
+The owner (2026-11-26): "The alternative is to tie jumps between clusters to a later age is a
+good idea", and on the size of the clusters: "I'd use 3 to 7 systems but mind that it could
+impact planet choices for 8 players game ( even though we can resolve that with more habitable
+planets per star system when te number of planets in a cluster is low )".
+
+- **The tier.** A fourth map scale, `galactic` (rank 3), holds the Age of Abundance, the Age of
+  Galactic War and the Galactic Federation (`database.md`, "Space tiers"). The interstellar tier
+  (rank 2, the Starfaring Age) jumps along a route only when both its systems lie in one star
+  cluster; the galactic tier jumps along every route. A system without a cluster (the celestial
+  home, flat and test worlds) counts as being in every cluster. The rule reads the rank
+  (`rom_rules::JUMP_RANK`, `CLUSTER_JUMP_RANK`), never an age key.
+- **Where it holds.** `World::jump_allowed`. A travel order (given now or queued) whose voyage
+  needs a jump between clusters is refused with `SimError::ClusterClosed`, and the order panel
+  says "Other clusters open in the Age of Abundance" (the age named from the rules). The path a
+  ship takes (`World::travel_path`) keeps to the jumps it may make, so inside a cluster a ship
+  goes the long way round rather than through another cluster; freighters on an interstellar
+  trade route, transports and survey ships travel by the same path, and a trade route into a
+  closed cluster is refused the same way. `World::route_plan` is the plan of a voyage: the
+  travel path when the player may go, else the shortest path cut after the last system it may
+  reach, so a plan into a closed cluster stops at the edge of its own.
+- **What a player sees.** The camera's widest level follows the tier (`rom-app`
+  `universe_view::max_level`, the zoom cap of `rom-render` `zoom.rs`): the planet up to the
+  interplanetary tier's own system; the interstellar tier reaches the cluster view of its home's
+  cluster, with the ends of the routes that leave it (named after the cluster they lead to), but
+  no flight or double click takes the camera into another cluster (`ZoomCamera::reaches_group`);
+  the galactic tier opens the quadrant and galaxy views. `map_scale.max_zoom_out` (60, 160, 240,
+  320 tiles) is unchanged in meaning and still unread by the code. On reaching a tier the event
+  line says how to see it: "New reach: the stars of your own cluster ..." in the Starfaring Age,
+  "New reach: the other star clusters ..." in the Age of Abundance, whose story now tells of jump
+  drives crossing to the other clusters.
+- **Home clusters.** A player's home cluster is the systems of its home's star cluster joined to
+  it by routes inside that cluster: everything its ships reach until the Age of Abundance. The
+  generator (`rom-mapgen`) places homes only in star clusters of which the region holds at least
+  three systems, and a layout whose home cluster has fewer than three
+  (`HOME_CLUSTER_MIN_SYSTEMS`) is drawn again, as the other fairness checks are. Each home
+  cluster must hold, per home in it, its share of habitable planets besides the homes and of
+  resource bodies: two systems' worth of the style's contents at the middle of its ranges
+  (`SHARE_SYSTEMS`), never more than the region holds per home (`cluster_share`). And per home,
+  every home cluster holds at least 80 % (`FAIR_VALUE_PCT`) of the richest home cluster's
+  planets and resource-body income. A cluster short of either gets planets and resource bodies
+  in its systems other than the homes, one at a time to the one holding fewest, up to twice the
+  style's per-system maximum; a topped-up system lays its resource bodies in a belt beyond its
+  outermost planet. They are generated before play, from a generator of their own (the other
+  systems keep what they had), and recorded in `Universe::top_ups`. `Universe::home_shares`
+  carries each home cluster's systems, homes, planets, bodies and income, and `fairness` checks
+  them. Solar and Planet (one system) have no home cluster to check.
+- **Proof** (`rom universe --check-seeds 1..50`, release build, separate worlds; two players are
+  two races, four and eight players three, so two or three homes). Every universe fair; layout
+  attempts used, mean and most:
+
+  | Style | 2 players | 4 players | 8 players | Universes topped up (2 / 4 and 8) | Planets and bodies added (2 / 4 and 8) |
+  | --- | --- | --- | --- | --- | --- |
+  | Cluster | 2.4, 9 | 15.5, 43 | 15.5, 43 | 34 / 48 of 50 | 73 + 116 / 159 + 289 |
+  | Sector | 3.8, 16 | 12.8, 77 | 12.8, 77 | 47 / 49 | 78 + 178 / 154 + 564 |
+  | Quadrant | 4.0, 12 | 14.6, 72 | 14.6, 72 | 46 / 50 | 97 + 123 / 202 + 450 |
+  | Galaxy | 5.0, 15 | 12.8, 45 | 12.8, 45 | 43 / 50 | 92 + 90 / 305 + 683 |
+
+  Eight players dealt over eight home systems (`--homes 8`, `plan_universe_dealt`) pass the
+  cluster rules but not the earlier checks (resource value within two routes, the two shortest
+  routes) in any style: the generator still does not fit eight separate homes fairly.
+- **Computer players** (`rom-ai` `fleet.rs`) count as reachable only the systems joined to their
+  home by routes they may jump, so the navy, the claims and the colonies stay in the home
+  cluster until the Age of Abundance and spread over the others after it.
 
 ### Moving between levels (task 53)
 

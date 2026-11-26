@@ -4346,6 +4346,15 @@ fn inhibitor_help(inhibitor: &rom_rules::Inhibitor) -> String {
     help
 }
 
+/// Why a jump to another star cluster is refused (task 163): "Other clusters open in the Age of
+/// Abundance", naming the first age of the galactic tier from the rules.
+pub(crate) fn cluster_closed_message(rules: &rom_rules::Rules) -> String {
+    match rules.first_age_of_rank(rom_rules::CLUSTER_JUMP_RANK) {
+        Some(age) => format!("Other clusters open in the {}", rules.def(age.id).name),
+        None => "Other clusters are out of reach".into(),
+    }
+}
+
 /// Translate rejected placement and research orders into the rule the player can fix.
 fn rejection_message(
     world: &World,
@@ -4397,6 +4406,7 @@ fn rejection_message(
             "The ship must land first: troops board and leave it only on the ground".into()
         }
         SimError::BoundToOrbit => "A satellite moves only within its orbit".into(),
+        SimError::ClusterClosed => cluster_closed_message(world.rules()),
         SimError::HeldByInhibitor => {
             "An enemy jump inhibitor holds this system: leave the way you came, or destroy it"
                 .into()

@@ -2077,6 +2077,17 @@ fn wealth_rejections_name_the_rule() {
     }
 }
 
+/// Task 163: a jump refused because the other star cluster is still closed says when it opens,
+/// the age named from the rules.
+#[test]
+fn a_refused_jump_to_another_cluster_says_when_it_opens() {
+    let fx = wealth_fixture();
+    assert_eq!(
+        rejection_message(&fx.world, PLAYER, &SimError::ClusterClosed, None),
+        "Other clusters open in the Age of Abundance"
+    );
+}
+
 #[test]
 fn keeper_panel_counts_kept_relics() {
     let mut fx = wealth_fixture();

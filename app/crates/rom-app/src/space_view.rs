@@ -693,16 +693,22 @@ impl Default for Notices {
     }
 }
 
-/// How to see a newly reached tier (by its rank: 1 a star system, 2 the star map).
+/// How to see a newly reached tier, by its rank: 1 a star system, 2 the systems of the own star
+/// cluster, 3 every cluster (task 163).
 pub fn reach_hint(rank: i64) -> Option<&'static str> {
     match rank {
         1 => Some(
             "New reach: your star system. Scroll out past the planet to see it; \
              double-click a planet to fly there",
         ),
-        2.. => Some(
-            "New reach: the stars. Scroll out past the system to the cluster view, then the \
-             quadrant and galaxy views; double-click or scroll in on a system to enter it",
+        rom_rules::JUMP_RANK => Some(
+            "New reach: the stars of your own cluster. Jumps reach the systems of your star \
+             cluster; scroll out past the system to the cluster view, double-click or scroll in \
+             on a system to enter it",
+        ),
+        r if r >= rom_rules::CLUSTER_JUMP_RANK => Some(
+            "New reach: the other star clusters. Jumps cross between clusters now; scroll out \
+             past the cluster view to the quadrant and galaxy views",
         ),
         _ => None,
     }
@@ -1371,17 +1377,13 @@ mod trade_tests {
     use crate::script::ScriptSetup;
     use rom_sim::Command;
 
-    /// A space freighter of player one between its home city and a colony (`far`: on a planet
-    /// of the nearest star system one route away, with interstellar trade; otherwise on the
-    /// nearest other planet of the home system). Returns the route's length in milli-tiles,
-    /// its income per arrival and the wealth it earns per game minute, measured over a whole
-    /// round trip once it runs (its first voyage, charting, left out).
-    fn trade_rate(far: bool) -> (u64, i64, i64) {
+    /// The universe match of seed `seed` in the Age of Abundance with interstellar trade and a
+    /// colony of player one (`far`: in the nearest star system one route away; otherwise on
+    /// another planet of the home system); `None` when the universe has no room for it.
+    fn trade_match(far: bool, seed: u64) -> Option<crate::match_setup::Match> {
         let options = crate::args::Options {
             universe: true,
-            // Seed 2: since task 109 seed 1's Cluster has no room for a city on the nearest
-            // other planet of the home system.
-            seed: 2,
+            seed,
             ..crate::args::Options::default()
         };
         let content = crate::terrain::generate_universe_content(&options).expect("universe");
@@ -1392,7 +1394,7 @@ mod trade_tests {
             far_colonies: if far { vec![1] } else { vec![] },
             ..ScriptSetup::default()
         };
-        let mut game = crate::match_setup::build_universe_match(
+        crate::match_setup::build_universe_match(
             &content.rules,
             &content.universe,
             &content.factions,
@@ -1400,7 +1402,16 @@ mod trade_tests {
             None,
             &setup,
         )
-        .expect("match");
+        .ok()
+    }
+
+    /// A space freighter of player one between its home city and a colony (`far`: on a planet
+    /// of the nearest star system one route away, with interstellar trade; otherwise on the
+    /// nearest other planet of the home system). Returns the route's length in milli-tiles,
+    /// its income per arrival and the wealth it earns per game minute, measured over a whole
+    /// round trip once it runs (its first voyage, charting, left out).
+    fn trade_rate(far: bool, seed: u64) -> (u64, i64, i64) {
+        let mut game = trade_match(far, seed).expect("match");
         let world = &mut game.world;
         let home = world.home_body(PLAYER).unwrap();
         let kind = world.rules().id_of("unit.space_freighter").unwrap();
@@ -1473,8 +1484,13 @@ mod trade_tests {
     /// system, and is worth the longer trip: more wealth per minute.
     #[test]
     fn interstellar_trade_is_worth_the_longer_trip() {
-        let (near_length, near_trip, near_rate) = trade_rate(false);
-        let (far_length, far_trip, far_rate) = trade_rate(true);
+        // The first universe with room for both colonies: a home system with another planet
+        // a city fits on (since task 163 seed 2's home system has none) and a neighbour with one.
+        let seed = (2..40)
+            .find(|&seed| trade_match(false, seed).is_some() && trade_match(true, seed).is_some())
+            .expect("a universe with room for both colonies");
+        let (near_length, near_trip, near_rate) = trade_rate(false, seed);
+        let (far_length, far_trip, far_rate) = trade_rate(true, seed);
         assert!(far_length > near_length && far_trip > near_trip);
         assert!(
             far_rate > near_rate,

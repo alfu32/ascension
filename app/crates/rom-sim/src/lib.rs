@@ -369,6 +369,10 @@ pub enum SimError {
     /// route it arrived by.
     #[error("an enemy jump inhibitor holds this ship: it may leave only the way it came")]
     HeldByInhibitor,
+    /// Task 163: the voyage jumps between star clusters, which opens only with the galactic
+    /// map-scale tier (`rom_rules::CLUSTER_JUMP_RANK`).
+    #[error("jumps to other star clusters open in a later age")]
+    ClusterClosed,
     /// A space freighter trades with another star system only after the research that
     /// enables interstellar trade.
     #[error("trade with another star system needs interstellar trade")]
@@ -422,6 +426,8 @@ pub enum SimError {
 mod ascension_tests;
 #[cfg(test)]
 mod city_names_tests;
+#[cfg(test)]
+mod cluster_jumps_tests;
 #[cfg(test)]
 mod fortification_tests;
 #[cfg(test)]

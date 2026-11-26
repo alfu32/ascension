@@ -14,16 +14,14 @@ const STAR_COLOURS: [[u8; 3]; 5] = [
     [240, 240, 255],
 ];
 
-/// The farthest camera level allowed by the age's map-scale rank.
+/// The farthest camera level allowed by the age's map-scale rank: the home system from rank 1,
+/// the cluster view (the home's star cluster and the ends of its routes) from rank 2, the
+/// quadrant and galaxy views from rank 3, when jumps between clusters open (task 163).
 pub fn max_level(rules: &Rules, age: DefId) -> Level {
-    match rules
-        .ages
-        .get(&age)
-        .and_then(|a| rules.map_scales.get(&a.map_scale))
-        .map(|scale| scale.rank)
-    {
+    match rules.age_rank(age) {
         Some(1) => Level::System,
-        Some(2..) => Level::Galaxy,
+        Some(rank) if rank >= rom_rules::CLUSTER_JUMP_RANK => Level::Galaxy,
+        Some(rank) if rank >= rom_rules::JUMP_RANK => Level::Cluster,
         _ => Level::Globe,
     }
 }
@@ -135,7 +133,12 @@ mod tests {
         scale.key = "renamed".into();
         rules.ages.get_mut(&age).unwrap().map_scale = scale.key.clone();
         rules.map_scales.insert(scale.key.clone(), scale);
-        for (rank, level) in [(0, Level::Globe), (1, Level::System), (2, Level::Galaxy)] {
+        for (rank, level) in [
+            (0, Level::Globe),
+            (1, Level::System),
+            (2, Level::Cluster),
+            (3, Level::Galaxy),
+        ] {
             rules.map_scales.get_mut("renamed").unwrap().rank = rank;
             for range in [0, 30_000] {
                 rules.ages.get_mut(&age).unwrap().view_range = range;
@@ -161,7 +164,12 @@ mod tests {
         assert_eq!(view_range(&rules, by_ordinal(9)), 0);
         assert_eq!(max_level(&rules, by_ordinal(9)), Level::System);
         assert_eq!(max_level(&rules, by_ordinal(10)), Level::System);
-        assert_eq!(max_level(&rules, by_ordinal(11)), Level::Galaxy);
+        // Task 163: the Starfaring Age sees its own star cluster, the Age of Abundance and
+        // later ages the quadrant and galaxy views.
+        assert_eq!(max_level(&rules, by_ordinal(11)), Level::Cluster);
+        for n in 12..=14 {
+            assert_eq!(max_level(&rules, by_ordinal(n)), Level::Galaxy);
+        }
         assert_eq!(view_range(&rules, DefId(u32::MAX)), 0);
     }
 

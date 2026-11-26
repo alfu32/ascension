@@ -312,16 +312,25 @@ fn habitable_planets_are_within_size_bounds() {
                     .filter(|b| b.system_id == s.id && b.kind == k)
                     .count()
             };
+            // A system topped up for its home cluster (task 163) holds what the style gave it
+            // and what was added, at most twice the style's maximum.
+            let (planets, bodies) = u
+                .top_ups
+                .iter()
+                .find(|t| t.system == s.id)
+                .map_or((0, 0), |t| (t.planets as usize, t.bodies as usize));
             assert!(in_range(
-                count(BodyKind::Habitable),
+                count(BodyKind::Habitable) - planets,
                 style.habitable_per_system_min,
                 style.habitable_per_system_max
             ));
             assert!(in_range(
-                count(BodyKind::Resource),
+                count(BodyKind::Resource) - bodies,
                 style.resource_bodies_per_system_min,
                 style.resource_bodies_per_system_max
             ));
+            assert!(count(BodyKind::Habitable) as i64 <= 2 * style.habitable_per_system_max);
+            assert!(count(BodyKind::Resource) as i64 <= 2 * style.resource_bodies_per_system_max);
         }
     }
     // A neutral planet's recipe expands to an empty planet of its size.
@@ -972,4 +981,108 @@ fn every_system_carries_its_stars_cluster() {
         }
         assert!(u.systems.iter().any(|s| s.cluster.is_some()), "{style}");
     }
+}
+
+/// Task 163: until the Age of Abundance a player's ships jump only within the star cluster of
+/// its home, so every home stands in a home cluster of at least three systems (along the routes
+/// inside the cluster) holding its share of planets and resource bodies, and home clusters
+/// differ per home by no more than the fairness tolerance; short clusters are topped up in
+/// their other systems only. Two, four and eight players (two or three races, so two or three
+/// homes) over seeds 1 to 50 in every style with routes, each universe fair.
+#[test]
+fn home_clusters_are_fair_for_2_4_and_8_players_on_50_seeds() {
+    let r = rules();
+    let eight = [
+        "nation.romans",
+        "nation.ashscale",
+        "nation.highwind",
+        "nation.egyptians",
+        "nation.mirefang",
+        "nation.stormcrest",
+        "nation.greeks",
+        "nation.sunstone",
+    ];
+    let mut topped = 0;
+    for style in [
+        "map.many_worlds",
+        "map.sector",
+        "map.quadrant",
+        "map.galaxy",
+    ] {
+        let knobs = &r.map_styles[&r.id_of(style).unwrap()];
+        for players in [2, 4, 8] {
+            let factions = &eight[..players];
+            for seed in 1..=50 {
+                let u = plan(&r, style, seed, factions);
+                assert_eq!(
+                    u.fairness(&r),
+                    Vec::<String>::new(),
+                    "{style} {players} seed {seed}"
+                );
+                let shares = u.home_shares(&r);
+                let homes: BTreeSet<u32> = shares.iter().map(|s| s.system).collect();
+                let labels = u.cluster_labels();
+                let others = (u.systems.len() - 1 - shares.len()) as i64;
+                for s in &shares {
+                    assert!(
+                        s.cluster_systems as usize >= rom_mapgen::HOME_CLUSTER_MIN_SYSTEMS,
+                        "{style} {players} seed {seed}: {s:?}"
+                    );
+                    // Every member of the home cluster shares the home's star cluster.
+                    let cluster = u.systems[s.system as usize - 1].cluster;
+                    assert!(cluster.is_some());
+                    let label = labels[s.system as usize - 1];
+                    for (i, l) in labels.iter().enumerate() {
+                        if *l == label {
+                            assert_eq!(u.systems[i].cluster, cluster);
+                        }
+                    }
+                    let (planets, bodies) = rom_mapgen::cluster_share(
+                        knobs,
+                        i64::from(s.cluster_homes),
+                        shares.len() as i64,
+                        others,
+                    );
+                    assert!(i64::from(s.cluster_habitable) >= planets);
+                    assert!(i64::from(s.cluster_bodies) >= bodies);
+                }
+                let per_home = |f: &dyn Fn(&rom_mapgen::HomeShare) -> i64| {
+                    let low = shares
+                        .iter()
+                        .map(|s| f(s) as f64 / f64::from(s.cluster_homes))
+                        .fold(f64::MAX, f64::min);
+                    let high = shares
+                        .iter()
+                        .map(|s| f(s) as f64 / f64::from(s.cluster_homes))
+                        .fold(0.0, f64::max);
+                    (low, high)
+                };
+                for (low, high) in [
+                    per_home(&|s| i64::from(s.cluster_habitable)),
+                    per_home(&|s| s.cluster_value),
+                ] {
+                    assert!(
+                        low * 100.0 >= high * rom_mapgen::FAIR_VALUE_PCT as f64 - 1e-9,
+                        "{style} {players} seed {seed}: {low} against {high}"
+                    );
+                }
+                // Only systems other than the homes, inside a home cluster, are topped up.
+                for t in &u.top_ups {
+                    assert!(!homes.contains(&t.system));
+                    let label = labels[t.system as usize - 1];
+                    assert!(homes.iter().any(|&h| labels[h as usize - 1] == label));
+                    assert!(t.planets + t.bodies > 0);
+                }
+                topped += usize::from(!u.top_ups.is_empty());
+            }
+            let again = plan(&r, style, 9, factions);
+            assert_eq!(plan(&r, style, 9, factions).hash(), again.hash(), "{style}");
+            assert_eq!(
+                plan(&r, style, 9, factions).top_ups,
+                again.top_ups,
+                "{style}"
+            );
+        }
+    }
+    assert!(topped > 0, "some home cluster was short");
 }

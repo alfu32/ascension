@@ -46,8 +46,8 @@ const MAX_ESCORT: i64 = 12;
 /// Troops a transport takes along besides its builder when there is room.
 const ESCORT_TROOPS: usize = 4;
 
-/// The map-scale rank of the player's age: 0 on its planet, 1 in its star system, 2 and
-/// more between systems.
+/// The map-scale rank of the player's age: 0 on its planet, 1 in its star system, 2 between
+/// the systems of its star cluster, 3 between clusters too (task 163).
 pub(crate) fn rank(view: &View<'_>) -> i64 {
     view.rules
         .ages
@@ -312,14 +312,16 @@ fn system_of(view: &View<'_>, body: BodyId) -> Option<u32> {
     view.world.body(body).map(|b| b.system)
 }
 
-/// Systems a ship of the player can reach: its home system, and those joined to it by
-/// routes once the map scale allows travel between systems.
+/// Systems a ship of the player can reach: its home system, and those joined to it by the
+/// routes the simulation lets it jump (task 163: within its home's star cluster until the
+/// galactic tier, every cluster after it), so the navy, the claims and the colonies never ask
+/// for a voyage the simulation refuses.
 fn reachable(view: &View<'_>) -> BTreeSet<u32> {
     let Some(start) = home(view).and_then(|b| system_of(view, b)) else {
         return BTreeSet::new();
     };
     let mut seen = BTreeSet::from([start]);
-    if rank(view) < 2 {
+    if rank(view) < rom_rules::JUMP_RANK {
         return seen;
     }
     let mut open = vec![start];
@@ -332,7 +334,7 @@ fn reachable(view: &View<'_>) -> BTreeSet<u32> {
             } else {
                 continue;
             };
-            if seen.insert(next) {
+            if view.world.jump_allowed(view.me, system, next) && seen.insert(next) {
                 open.push(next);
             }
         }

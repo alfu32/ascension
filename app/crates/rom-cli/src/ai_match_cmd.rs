@@ -9,11 +9,14 @@ use rom_mapgen::{
 use rom_rules::{DefId, ResourceKind, Rules};
 use rom_sim::{BodyId, CityArea, EconomyPace, MatchOptions, Player, PlayerId, Pos, World};
 
-const USAGE: &str = "usage: rom ai-match --db <rules.db> --seed <n> --players <profile[:difficulty],...> --ticks <n> [--universe] [--trace <ticks>] [--city-area <on|off>] [--gather-rate <100|50|25|10|5|2>] [--research-time <100|200|400|1000|2000>]";
+const USAGE: &str = "usage: rom ai-match --db <rules.db> --seed <n> --players <profile[:difficulty],...> --ticks <n> [--universe] [--trace <ticks>] [--city-area <on|off>] [--gather-rate <100|50|25|10|5|2>] [--research-time <100|200|400|1000|2000>] [--style <map style key>] [--start-age <age key>]";
 /// Builders each player starts with, as in the application.
 const BUILDERS: usize = 5;
 /// Amount of every base resource each player starts with, as in the application.
 const START_RESOURCES: i64 = 500;
+/// Amount of every base resource each player starts with in a later age (`--start-age`), as the
+/// rich-start scripts give.
+const RICH_START_RESOURCES: i64 = 100_000;
 /// Difficulty of a player given without one.
 const DEFAULT_DIFFICULTY: &str = "moderate";
 /// Ticks between samples of the income rates for the gathered totals.
@@ -44,6 +47,10 @@ pub struct Request {
     pub city_area: CityArea,
     /// The economy's pace (task 159); it overrides the options' own.
     pub pace: EconomyPace,
+    /// Task 163: every player starts in this age (key) with everything researchable up to it
+    /// researched and a rich stock, as the rich-start scripts give player one; `None` starts in
+    /// the first age.
+    pub start_age: Option<String>,
 }
 
 /// One player's line of the result table.
@@ -91,6 +98,23 @@ pub struct PlayerResult {
     pub think_us: u128,
     /// Longest single thought, in microseconds of processor time (not deterministic).
     pub max_think_us: u128,
+    /// Task 163, in a universe: the star clusters where the player's cities and ships stood
+    /// (sampled), the tick its map scale first reached the galactic tier, and the first tick one
+    /// of them stood outside its home's star cluster.
+    pub space: ClusterReach,
+}
+
+/// Where a player reached among the star clusters (task 163).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ClusterReach {
+    /// Star clusters where its cities or ships stood at a sample.
+    pub clusters: std::collections::BTreeSet<u32>,
+    /// First tick at the galactic tier (jumps between clusters open).
+    pub galactic: Option<u64>,
+    /// First sampled tick with a city or ship outside the home's star cluster.
+    pub left_home: Option<u64>,
+    /// Systems where its cities or ships stood before the galactic tier.
+    pub systems_before: std::collections::BTreeSet<u32>,
 }
 
 /// The outcome of a match.
@@ -161,16 +185,30 @@ fn make_players(rules: &Rules, factions: &[DefId], request: &Request) -> Vec<Pla
         .filter(|r| r.kind == ResourceKind::Base)
         .map(|r| (r.id, START_RESOURCES))
         .collect();
+    let start_age = request
+        .start_age
+        .as_deref()
+        .and_then(|key| rules.id_of(key))
+        .filter(|age| rules.ages.contains_key(age));
+    let stock = match start_age {
+        Some(_) => stock
+            .into_keys()
+            .map(|r| (r, RICH_START_RESOURCES))
+            .collect(),
+        None => stock,
+    };
     let player = |id: u32, faction: DefId| Player {
         id: PlayerId(id),
         team: id,
         faction,
-        age: rules
-            .factions
-            .get(&faction)
-            .and_then(|f| f.first_age_id)
-            .filter(|age| rules.ages.contains_key(age))
-            .unwrap_or(earliest),
+        age: start_age.unwrap_or_else(|| {
+            rules
+                .factions
+                .get(&faction)
+                .and_then(|f| f.first_age_id)
+                .filter(|age| rules.ages.contains_key(age))
+                .unwrap_or(earliest)
+        }),
         resources: if id == 0 {
             BTreeMap::new()
         } else {
@@ -415,6 +453,17 @@ pub fn build_world_with(
 pub fn run_match(rules: &Arc<Rules>, request: &Request) -> Result<MatchResult, String> {
     let start = Instant::now();
     let (mut world, universe) = build_world(rules, request)?;
+    if let Some(key) = &request.start_age {
+        rules
+            .id_of(key)
+            .filter(|age| rules.ages.contains_key(age))
+            .ok_or_else(|| format!("unknown age {key}"))?;
+        for player in 1..=request.players.len() as u32 {
+            world
+                .complete_research_for_setup(PlayerId(player))
+                .map_err(|e| e.to_string())?;
+        }
+    }
     let mut brains = request
         .players
         .iter()
@@ -456,6 +505,13 @@ pub fn run_match(rules: &Arc<Rules>, request: &Request) -> Result<MatchResult, S
             (age, Vec::new())
         })
         .collect();
+    let mut reach = vec![ClusterReach::default(); count];
+    let home_cluster: Vec<Option<u32>> = (0..count)
+        .map(|i| {
+            let body = universe.as_ref()?.starts.get(i)?.0;
+            world.system_cluster(world.body(BodyId(body))?.system)
+        })
+        .collect();
     for tick in 0..request.ticks {
         for (i, brain) in brains.iter_mut().enumerate() {
             if brain.thinks_at(tick) {
@@ -481,6 +537,7 @@ pub fn run_match(rules: &Arc<Rules>, request: &Request) -> Result<MatchResult, S
             && tick % SAMPLE_TICKS == 0
         {
             generate_visited(&mut world, universe)?;
+            sample_clusters(&world, &home_cluster, &mut reach);
         }
         for (i, brain) in brains.iter().enumerate() {
             let Some(player) = world.players().find(|p| p.id == brain.player()) else {
@@ -567,6 +624,7 @@ pub fn run_match(rules: &Arc<Rules>, request: &Request) -> Result<MatchResult, S
                 thinks: stats.thinks,
                 think_us: think_us[i],
                 max_think_us: max_think_us[i],
+                space: reach[i].clone(),
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
@@ -576,6 +634,43 @@ pub fn run_match(rules: &Arc<Rules>, request: &Request) -> Result<MatchResult, S
         ticks: world.tick(),
         elapsed_us: start.elapsed().as_micros(),
     })
+}
+
+/// Records, for every player (index `i` is player `i + 1`), the star clusters of the systems
+/// where its cities and ships stand, when it first reaches the galactic tier and when it first
+/// stands outside its home's cluster.
+fn sample_clusters(world: &World, home: &[Option<u32>], reach: &mut [ClusterReach]) {
+    for (i, r) in reach.iter_mut().enumerate() {
+        if r.galactic.is_none()
+            && world.space_rank(PlayerId(i as u32 + 1)) >= rom_rules::CLUSTER_JUMP_RANK
+        {
+            r.galactic = Some(world.tick());
+        }
+    }
+    for e in world.entities() {
+        let Some(i) = (e.owner.0 as usize)
+            .checked_sub(1)
+            .filter(|&i| i < reach.len())
+        else {
+            continue;
+        };
+        let Some(cluster) = world
+            .body(e.pos.body)
+            .and_then(|b| world.system_cluster(b.system))
+        else {
+            continue;
+        };
+        let r = &mut reach[i];
+        r.clusters.insert(cluster);
+        if r.galactic.is_none()
+            && let Some(system) = world.body(e.pos.body).map(|b| b.system)
+        {
+            r.systems_before.insert(system);
+        }
+        if Some(cluster) != home[i] && r.left_home.is_none() {
+            r.left_home = Some(world.tick());
+        }
+    }
 }
 
 /// Parses `profile[:difficulty],...`.
@@ -646,6 +741,7 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
     let mut universe = false;
     let mut city_area = CityArea::default();
     let mut pace = EconomyPace::default();
+    let (mut style, mut start_age) = (None, None);
     while let Some(flag) = args.next() {
         if flag == "--universe" {
             universe = true;
@@ -663,6 +759,8 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
             "--city-area" => city_area = parse_city_area(&value)?,
             "--gather-rate" => pace.gather_rate = parse_gather_rate(&value)?,
             "--research-time" => pace.research_time = parse_research_time(&value)?,
+            "--style" => style = Some(value),
+            "--start-age" => start_age = Some(value),
             _ => return Err(format!("unknown argument: {flag}").into()),
         }
     }
@@ -674,10 +772,11 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
         trace,
         side: 0,
         map_seed: None,
-        universe_style: None,
+        universe_style: style,
         start_placement: None,
         city_area,
         pace,
+        start_age,
     };
     let conn = rusqlite::Connection::open_with_flags(
         db.ok_or(USAGE)?,
@@ -712,6 +811,18 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
                 ages.join("/")
             },
         );
+        if !p.space.clusters.is_empty() {
+            let tick = |t: Option<u64>| t.map_or("-".to_owned(), |t| t.to_string());
+            println!(
+                "space player={} clusters={} systems_before_galactic={} galactic_tick={} \
+                 left_home_cluster_tick={}",
+                p.player.0,
+                p.space.clusters.len(),
+                p.space.systems_before.len(),
+                tick(p.space.galactic),
+                tick(p.space.left_home)
+            );
+        }
     }
     for p in &result.players {
         for (reason, count) in &p.rejections {
@@ -771,6 +882,42 @@ mod tests {
         Arc::new(Rules::load(&db).unwrap())
     }
 
+    /// Task 163: computer players in the Starfaring Age (the interstellar tier) keep to their
+    /// home's star cluster: no voyage they ask for is refused for crossing to another cluster,
+    /// and none of their cities or ships stands outside it.
+    #[test]
+    fn computer_players_keep_to_their_cluster_before_the_galactic_tier() {
+        let rules = rules();
+        let request = Request {
+            seed: 3,
+            players: vec![
+                ("balanced".into(), "moderate".into()),
+                ("balanced".into(), "moderate".into()),
+            ],
+            ticks: 3000,
+            universe: true,
+            trace: 0,
+            side: 0,
+            map_seed: None,
+            universe_style: Some("map.sector".into()),
+            start_placement: None,
+            city_area: CityArea::default(),
+            pace: EconomyPace {
+                research_time: 2000,
+                ..EconomyPace::default()
+            },
+            start_age: Some("age.expansion".into()),
+        };
+        let result = run_match(&rules, &request).unwrap();
+        let closed = rom_sim::SimError::ClusterClosed.to_string();
+        for p in &result.players {
+            assert!(!p.rejections.contains_key(&closed), "{:?}", p.rejections);
+            assert_eq!(p.space.galactic, None);
+            assert_eq!(p.space.left_home, None);
+            assert_eq!(p.space.clusters.len(), 1);
+        }
+    }
+
     #[test]
     fn players_are_parsed_with_a_default_difficulty() {
         assert_eq!(
@@ -802,6 +949,7 @@ mod tests {
             start_placement: None,
             city_area: CityArea::default(),
             pace: EconomyPace::default(),
+            start_age: None,
         };
         let (world, _) = build_world(&rules, &request).unwrap();
         for player in [PlayerId(1), PlayerId(2)] {

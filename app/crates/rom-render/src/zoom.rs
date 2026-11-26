@@ -53,6 +53,8 @@ pub const DEFAULT_ELEVATION: f32 = 12.0;
 pub const HANDOVER_SPAN: f32 = 1.0;
 /// Log-distance over which a pan away from an anchored body fades in above the hand-over.
 const PAN_FADE_SPAN: f32 = 0.6;
+/// How far short of the disk a camera capped at the cluster view stops, in log units.
+const CLUSTER_CAP_MARGIN: f32 = 0.01;
 /// Log-distance change per wheel step near the ground (a factor of 1.2).
 const WHEEL_LOG: f32 = 0.182_321_56;
 /// Log-distance change per wheel step in space (a factor of 1.4), where the distances are
@@ -288,6 +290,9 @@ impl ZoomScale {
         match level {
             Level::Surface | Level::Globe => self.globe_max.max(MIN_DISTANCE).ln(),
             Level::System => self.l_system_map - FADE_HALF,
+            // Just short of the disk, so a camera capped at the cluster view (task 163) stays in
+            // it: at `l_cluster` itself the quadrant view begins.
+            Level::Cluster if self.has_disk() => self.l_cluster - CLUSTER_CAP_MARGIN,
             Level::Cluster => self.l_cluster,
             Level::Quadrant => self.l_quadrant,
             Level::Galaxy => self.l_end,
@@ -2477,10 +2482,57 @@ impl ZoomCamera {
         }
     }
 
+    /// Whether the cap lets the camera into cluster group `group` (task 163): below the quadrant
+    /// view (the interstellar tier, whose jumps stay inside the home's star cluster) only the
+    /// home's own cluster, the celestial home and systems without a cluster.
+    pub fn reaches_group(&self, group: usize) -> bool {
+        if self.cap >= Level::Quadrant {
+            return true;
+        }
+        let Some(g) = self.layout.groups.get(group) else {
+            return false;
+        };
+        let home = self
+            .home_body
+            .and_then(|b| self.scene.system_index(self.scene.bodies[b].system))
+            .and_then(|i| self.layout.group.get(i).copied());
+        g.celestial
+            || home.is_none_or(|h| h == group)
+            || g.members
+                .iter()
+                .all(|&i| self.scene.systems[i].cluster.is_none())
+    }
+
+    /// Whether the cap lets the camera into the system of index `index` ([`Self::reaches_group`]).
+    pub fn reaches_system(&self, index: usize) -> bool {
+        self.layout
+            .group
+            .get(index)
+            .is_some_and(|&g| self.reaches_group(g))
+    }
+
+    /// Whether a double click on `target` may fly there under the cap.
+    pub fn reaches_target(&self, target: Target) -> bool {
+        match target {
+            Target::Cluster(group) => self.reaches_group(group),
+            Target::System(index) => self.reaches_system(index),
+            Target::Body(index) => self
+                .scene
+                .bodies
+                .get(index)
+                .and_then(|b| self.scene.system_index(b.system))
+                .is_some_and(|i| self.reaches_system(i)),
+        }
+    }
+
     /// Flies to a planet, a star or a system found by a double click and zooms in to the next
     /// level. A planet without a generated surface is shown as a plain sphere: the zoom stops at
-    /// the system level until its globe is loaded.
+    /// the system level until its globe is loaded. Nothing happens for a place beyond the cap
+    /// ([`Self::reaches_target`]).
     pub fn fly_to_target(&mut self, target: Target, orbit: &mut OrbitCamera) {
+        if !self.reaches_target(target) {
+            return;
+        }
         match target {
             Target::Cluster(group) => {
                 let Some(index) = self.lead_system(group) else {
@@ -2602,7 +2654,7 @@ impl ZoomCamera {
                     .ok_or(FocusRefused::Unknown)?;
                 let mut legs = Vec::new();
                 if system != self.system {
-                    if self.cap < Level::Cluster {
+                    if self.cap < Level::Cluster || !self.reaches_system(system) {
                         return Err(FocusRefused::BeyondReach);
                     }
                     let at = self
@@ -2645,7 +2697,7 @@ impl ZoomCamera {
                     ];
                     self.fly(legs, orbit);
                 } else {
-                    if self.cap < Level::Cluster {
+                    if self.cap < Level::Cluster || !self.reaches_system(index) {
                         return Err(FocusRefused::BeyondReach);
                     }
                     let legs = [
@@ -2672,7 +2724,7 @@ impl ZoomCamera {
                 if system == self.system {
                     self.fly_to_target(Target::Body(index), orbit);
                 } else {
-                    if self.cap < Level::Cluster {
+                    if self.cap < Level::Cluster || !self.reaches_system(system) {
                         return Err(FocusRefused::BeyondReach);
                     }
                     let at = self
@@ -3000,11 +3052,11 @@ impl ZoomCamera {
             return false;
         }
         match self.target_at(view, x, y) {
-            Some(target) => {
+            Some(target) if self.reaches_target(target) => {
                 self.fly_to_target(target, orbit);
                 true
             }
-            None => false,
+            _ => false,
         }
     }
 }
@@ -3982,6 +4034,67 @@ mod tests {
             ),
             Err(FocusRefused::BeyondReach)
         );
+    }
+
+    /// Task 163: at the interstellar tier (cap: the cluster view) the camera stays with the
+    /// home's star cluster: flights and double clicks into another cluster are refused, its own
+    /// cluster is in reach; at the galactic tier (cap: the galaxy view) every cluster is.
+    #[test]
+    fn the_cluster_view_cap_keeps_the_camera_in_the_home_cluster() {
+        let mut scene = sample_scene();
+        // Systems 1 and 2 in cluster 10, system 3 in cluster 20.
+        for (system, cluster) in scene.systems.iter_mut().zip([10, 10, 20]) {
+            system.cluster = Some(cluster);
+        }
+        scene.clusters = vec![
+            crate::universe::ClusterView {
+                id: 10,
+                name: "Home group".into(),
+                x: 0,
+                y: 0,
+            },
+            crate::universe::ClusterView {
+                id: 20,
+                name: "Far group".into(),
+                x: 400,
+                y: 0,
+            },
+        ];
+        let (zoom, _) = camera_in(scene.clone(), Level::Cluster);
+        let group = |i: usize| zoom.layout().group[i];
+        assert_ne!(group(0), group(2));
+        assert!(zoom.reaches_system(0) && zoom.reaches_system(1));
+        assert!(!zoom.reaches_system(2));
+        assert!(!zoom.reaches_target(Target::Cluster(group(2))));
+        assert!(zoom.reaches_target(Target::Cluster(group(0))));
+        let (mut zoom, mut orbit) = camera_in(scene.clone(), Level::Cluster);
+        assert_eq!(
+            zoom.focus(
+                FocusPlace::System {
+                    system: 3,
+                    at: [0.0; 3]
+                },
+                &mut orbit
+            ),
+            Err(FocusRefused::BeyondReach)
+        );
+        zoom.fly_to_target(Target::System(2), &mut orbit);
+        run(&mut zoom, &mut orbit, 400);
+        assert_eq!(zoom.system(), 0, "no flight into the other cluster");
+        assert!(
+            zoom.focus(
+                FocusPlace::System {
+                    system: 2,
+                    at: [0.0; 3]
+                },
+                &mut orbit
+            )
+            .is_ok()
+        );
+        run(&mut zoom, &mut orbit, 400);
+        assert_eq!(zoom.system(), 1);
+        let (zoom, _) = camera_in(scene, Level::Galaxy);
+        assert!((0..3).all(|i| zoom.reaches_system(i)));
     }
 
     /// Runs a flight and checks every frame for a cut: the log-distance and the star-map focus

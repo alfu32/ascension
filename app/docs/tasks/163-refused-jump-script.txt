@@ -1,0 +1,14 @@
+# Task 163, shot as img/163-refused-jump.png: in the Starfaring Age (interstellar tier, rank 2)
+# a fleet of player one's home system is sent to the nearest system of another star cluster; the
+# simulation refuses the jump and the help line says why: "Other clusters open in the Age of
+# Abundance". Run with
+#   --universe --style map.sector --seed 1 --ai none --size 1280x800
+#   --script docs/tasks/163-refused-jump-script.txt --screenshot <file> --after 12
+0 grant-age age.expansion
+0 place-space 1 unit.corvette -238,-166
+0 place-space 1 unit.corvette -238,-162
+0 place-space 1 unit.space_frigate -230,-164
+2 ships
+4 cam focus
+60 cam wheel 4 640,360
+200 travel outside1
