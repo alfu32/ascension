@@ -18,6 +18,18 @@ line's orientation; down when the field is off), model files (pylon, shield gate
 (hum, field up/down; `app/tools/sounds/README.md`, "Baking only new types"), `rom-ai` (uses them
 as it uses walls after 147b). Implementer: Claude (Opus). Starts after 147b and 155 merge.
 
+**Before you start (orchestrator, 2026-11-26):**
+- The owner confirmed the order (156 after 163) and did not correct the reading above.
+- Ages are counted from 0: Spacefaring is ordinal 10 (`age.starfaring`), and the last age is
+  now 14, the Galactic Federation (task 164). Shield emitters run from 10 to 14.
+- Task 157 (city shields, merged) already draws a shield dome. Reuse its shader and material
+  for the energy wall rather than writing a second one.
+- The new models (pylon, shield gate) are not locked. Every model in
+  `app/docs/art/approved.toml` must keep its fingerprint; the approved-models test enforces
+  this.
+- Task 165 (queued) will later add dragging for gates and turning buildings before placement.
+  Do not build that here: the shield gate only has to work the way 147b's gates do.
+
 ## What changes
 
 - Defensive lines standing when the player reaches the Spacefaring age become shield emitters
@@ -40,7 +52,8 @@ as it uses walls after 147b). Implementer: Claude (Opus). Starts after 147b and 
 
 Read first: `AGENTS.md`, `CLAUDE.md`, `app/docs/tasks/147-fortifications.md` (both parts and
 their reports in `STATUS.md`), `app/docs/database.md` ("Fortifications and minefields (task
-147)"), `app/crates/rom-sim/src/fortification.rs`, `app/docs/models-in-meshcraft.md`.
+147)"), `app/crates/rom-sim/src/fortification.rs`, `app/docs/models-in-meshcraft.md`,
+`app/docs/tasks/157-city-shields.md`.
 
 Memory rules: `CARGO_BUILD_JOBS=4`; check `free -g`; big runs under
 `systemd-run --user --scope -q -p MemoryMax=6G -p MemorySwapMax=0`. Never `xdotool`, `wmctrl` or
