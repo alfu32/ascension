@@ -149,7 +149,8 @@ per-city limits). Page = command-palette page.
 | Ground Battery | military | 10 | — | fires on enemy ships and craft in the orbit above (14 tiles to their ground point) |
 | Palisade, Palisade Gate | fortification | 0 | Military 1 | a line of one-tile segments with three-tile gates (tasks 147, 147b), turned along the line; becomes the Stone Wall at age 1 |
 | Stone Wall, Wall Gate | fortification | 1–4 | — | the same, stronger each age; becomes the Defensive Line at age 5 |
-| Defensive Line, Checkpoint | fortification | 5–9 | — | trench, wire and tank traps; stronger each age |
+| Defensive Line, Checkpoint | fortification | 5–9 | — | trench, wire and tank traps; stronger each age; becomes the Shield Emitter at age 10 |
+| Shield Emitter, Shield Gate | fortification | 10–14 | — | an emitter every third tile with an energy field between (task 156) that blocks every walker while the emitters' energy upkeep is paid; stronger each age |
 | Minefield | fortification | 5 | — | one hidden mine a tile, spent on the first enemy over it (Mine Detectors at the barracks find them) |
 
 City growth. Each Civic level multiplies the city's `border_radius` and

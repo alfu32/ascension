@@ -3121,3 +3121,70 @@ table, four stats, one save table; both lint views stay empty and the seed loads
   Shields; shot-down rockets burst three quarters of the way) and `img/157-dome.png`
   (`tasks/157-dome-script.txt`: fusion tanks attack a citadel standing in its city's area; its
   Energy Shield dome flares on the side facing them).
+
+## Shield emitters (task 156)
+
+Owner (chat, 2026-11-25): "it would be interesting if later after the fusion age we get a shield
+emitter." The fortification line of task 147 continues from the Spacefaring age (10) to the
+last (14): emitters laid along a dragged line like walls, an energy field between neighbouring
+emitters, and a three-tile shield gate. **Schema change (authorised by the card):** one component
+table; no save table and no save-format bump. Both lint views stay empty and the seed loads.
+
+- **`et_field_emitter(entity_type_id, gap, upkeep_period_ticks, upkeep_resource_id, upkeep)`**:
+  a fortification (a segment or a gate, `et_fortification`) that raises an energy field. The
+  rules loader puts it in `EntityType::field_emitter`; validation refuses it on anything but a
+  fortification, a gap outside 0 to 16, a period below two ticks and an upkeep without a
+  resource.
+- **The content** (`db/content/generate.py`, `shield_emitters()`, written after every other
+  definition so every earlier id stays), page `fortification` of the builders' palette, the
+  next free places:
+
+  | Type | Ages | Hit points | Armour | Build ticks | Price | Upkeep |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | Shield Emitter `bld.shield_emitter` | spacefaring to federation | 4 000, +300 an age | 12, +1 an age | 120, +10 an age | 45 metal | 2 energy every 600 ticks |
+  | Shield Gate `bld.shield_gate` (3 × 1) | the same | 6 000, +450 an age | 12, +1 an age | 240, +20 an age | 135 metal | 6 energy every 600 ticks |
+
+  The gate has 150 % of the emitter's hit points, three times its price and upkeep and twice its
+  build time, as the earlier gates. Both are `structure` armour, so artillery, siege and orbital
+  bombardment (`explosive` at 200 %) break them; the field itself has no hit points. The
+  **Advance to Spacefaring** carries an `upgrade_type` from the defensive line to the emitter
+  and from the checkpoint to the shield gate: the standing ones change in place, keeping their
+  facing and their health's share, and the defensive line leaves the build menu. An emitter
+  covers three tiles of line for 45 metal, where the defensive line paid 8 timber and 14 metal a
+  tile.
+- **The field** (`rom-sim/src/fields.rs`). From the tile at an emitter's forward end (its
+  footprint's end along its facing: its own tile, or a gate's end tile) the field runs along the
+  facing over at most `gap` (**2**) tiles to the first tile of a standing, finished emitter of
+  the same owner (another owner's emitter cuts it). Those tiles block every walker as a
+  segment does (`Pathing::block_tile`, one count a tile in the path occupancy); flyers pass.
+  The owner's team passes the shield gate as any gate (147b); the gate stays a gate when the
+  field is down. A stretch stands while **both** its emitters are powered and not neutralised.
+- **Upkeep.** At the end of every tick, each finished emitter in id order whose paid time has
+  run out pays its `upkeep` from its owner's store and is powered for `upkeep_period_ticks`
+  more (**600**, an income period); without that much in store it stays unpowered and tries
+  again the next tick. A store short of the whole line's upkeep powers the emitters of lowest id.
+  The tick an emitter is paid until is kept in its `Entity::energy` (an emitter has no
+  `et_energy` row), which every save and state hash already holds: no new state.
+- **Derived, not hashed.** The stretches (`World::field_links`, each with its ends, its tiles
+  and whether it stands) and the field tiles are rebuilt from the entities as the very last step
+  of a tick (after the upkeep) and after a restore, so a restored world blocks the same tiles
+  (the occupancy is in the state hash).
+- **Laying a line.** `World::line_sites` keeps an emitter every `gap` + 1 tiles where the line
+  runs straight, each facing the next, and keeps the turns, the line's ends and the tiles beside
+  a gate; a shallow line, whose tiles turn often, keeps more. A line dragged across the full
+  width of 24 tiles with its gate in the middle is nine emitters and the gate: 12 tiles of field.
+  The interface and the computer player lay them as any line.
+- **Views** (`rom-app`, `rom-render`): every standing stretch the player sees an end of is
+  drawn (`HudField`, `overlay/fields.rs`) as a translucent wall from 0.28 to 1.84 tiles above
+  the ground between the two emitters, with the shield domes' glass (task 157: drawn without
+  writing depth), their colour, densest at its foot and top, bands of light running along it
+  and bright lines at its foot and top. A stretch that is down is not drawn. Sounds:
+  `docs/sound.md`.
+- **Computer players**: nothing new; `rom-ai/src/fortify.rs` takes the newest segment type it
+  may build, which from the Spacefaring age is the emitter, so a town's nine-tile line becomes
+  four emitters and the shield gate with a tile of field either side.
+- **Test setup**: the script line `drain <resource key>` empties player one's store before the
+  first tick (`World::drain`), for the picture of a line without energy.
+- **Screenshots** (the game's own paths, `--script`): `img/156-up.png`
+  (`tasks/156-up-script.txt`) and `img/156-down.png` (`tasks/156-down-script.txt`, the same line
+  without energy); the model sheets `img/156-models-emitters.png` and `img/156-models-gates.png` (`--model <id>`, the three looks of each).

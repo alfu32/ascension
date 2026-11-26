@@ -19,7 +19,7 @@ except the global cues under `ui.` and the ambience under `ambient.`.
 | `bld.<building>.<event>[.<n>]` | a building's acknowledgment, work loop and cues | mono 44.1 kHz, q3 |
 | `ui.…` | interface cues and the announcer (`ui.announcer.*`, spoken) | mono, q3 (announcer as voices) |
 | `ambient.…` | ambience beds: 24 s loops | stereo 44.1 kHz, q3 |
-| `act.…` | shared activity: soft footsteps on grass, work at gather sites, impacts, a rotor (task 119), shields (task 157) | mono 44.1 kHz, q3 |
+| `act.…` | shared activity: soft footsteps on grass, work at gather sites, impacts, a rotor (task 119), shields (task 157), energy fields (task 156) | mono 44.1 kHz, q3 |
 
 `<n>` numbers the variations of a sound heard often (shots, blows): play one at random. The
 mixer counts variations of one sound together for its limits.
@@ -231,6 +231,13 @@ camera, panned by screen position; a zoomed-out view hears a tenth at most):
   hums (`act.shield_hum`, an 8 s loop in an activity slot, the loudest of each shield type).
   Synthesised in `tools/sounds/synth.py` (`shield_zap`, `shield_hit`, `shield_hum`) and baked
   alone ("Baking only new types").
+- Energy fields (task 156): a field rising between two shield emitters sweeps up and closes with a
+  thump (`act.field_up`, two variations), a field dropping sags and fizzles (`act.field_down`,
+  two), heard at the emitter it runs from, the nearest two a pass; an emitter whose field stands
+  hums (`act.field_hum`, an 8 s loop, lower and buzzier than the dome's, the loudest of each
+  type in an activity slot). Synthesised in `tools/sounds/synth.py` (`field_up`, `field_down`,
+  `field_hum`); the shield emitter's and shield gate's own sounds (acknowledgment, work loop,
+  build done) come from the plan as any building's. Baked alone ("Baking only new types").
 
 **Ambience** follows the camera, cross-fading every 0.1 s: each `ambience` bed at the square
 root of its share of the 25 ground points (the fields: points within 7 tiles of a food gather

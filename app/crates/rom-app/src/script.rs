@@ -36,7 +36,8 @@
 //! resource body of the home system, `systemN` the N-th nearest neighbouring system,
 //! `outsideN` the N-th nearest system of another star cluster, task 163), `speed <percent>` sets
 //! the game speed. Test-only setup lines take effect before the match starts, whatever their tick:
-//! `grant-age <age key>`, `grant <resource key> <amount>` for player one,
+//! `grant-age <age key>`, `grant <resource key> <amount>` and `drain <resource key>` (none of
+//! it, task 156) for player one,
 //! `place <owner id> <entity key> @dx,dy` to place a test scene before tick one, and
 //! `place-space <owner id> <entity key> dx,dy` to place a ship in the plane of player one's home
 //! system, `dx`, `dy` tiles from its star, and `place-orbit <owner id> <entity key> @dx,dy` to
@@ -243,7 +244,7 @@ impl Script {
                 (
                     Some(_),
                     Some(
-                        "grant-age" | "grant" | "grant-tech" | "place" | "place-space"
+                        "grant-age" | "grant" | "drain" | "grant-tech" | "place" | "place-space"
                         | "place-orbit" | "colony" | "colony-far" | "auto-colony"
                         | "ascension-ready" | "research-all" | "jump-in",
                     ),

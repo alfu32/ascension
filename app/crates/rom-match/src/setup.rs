@@ -462,6 +462,13 @@ pub fn build_universe_match(
             .ok_or_else(|| SetupError::Setup(format!("unknown resource {key:?}")))?;
         world.grant(PLAYER_ONE, resource, *amount)?;
     }
+    for key in &setup.drains {
+        let resource = rules
+            .id_of(key)
+            .filter(|id| rules.resources.contains_key(id))
+            .ok_or_else(|| SetupError::Setup(format!("unknown resource {key:?}")))?;
+        world.drain(PLAYER_ONE, resource)?;
+    }
     setup
         .apply_placements(&mut world, starts[0].city_pos)
         .map_err(SetupError::Setup)?;

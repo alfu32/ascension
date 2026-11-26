@@ -10,6 +10,8 @@ pub struct ScriptSetup {
     pub age: Option<String>,
     /// Resources granted to player one: key and amount.
     pub grants: Vec<(String, i64)>,
+    /// Resources player one starts without, by key (`drain <resource key>`, task 156).
+    pub drains: Vec<String>,
     /// Test scene entities: owner, type key and milli-tile offsets from player one's city.
     pub placements: Vec<(u32, String, i64, i64)>,
     /// Test ships: owner, type key and milli-tile offsets from the star of player one's home
@@ -56,6 +58,15 @@ impl ScriptSetup {
                 .ok_or_else(|| format!("unknown resource {key:?}"))?;
             world
                 .grant(PLAYER_ONE, resource, *amount)
+                .map_err(|e| e.to_string())?;
+        }
+        for key in &self.drains {
+            let resource = world
+                .rules()
+                .id_of(key)
+                .ok_or_else(|| format!("unknown resource {key:?}"))?;
+            world
+                .drain(PLAYER_ONE, resource)
                 .map_err(|e| e.to_string())?;
         }
         self.apply_space_placements(world)?;
@@ -338,6 +349,14 @@ impl ScriptSetup {
                         words
                             .get(2)
                             .ok_or_else(|| format!("{}: grant-age needs an age key", at()))?
+                            .to_string(),
+                    );
+                }
+                Some("drain") => {
+                    setup.drains.push(
+                        words
+                            .get(2)
+                            .ok_or_else(|| format!("{}: drain needs a resource key", at()))?
                             .to_string(),
                     );
                 }
