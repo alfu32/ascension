@@ -1494,7 +1494,7 @@ fn catalogue_position(star: &rom_rules::Star) -> [f64; 3] {
 fn star_catalogue_is_curated() {
     let rules = seed();
     let stars: Vec<_> = rules.stars.values().collect();
-    assert_eq!(stars.len(), 741, "745 catalogue rows, 4 merged");
+    assert_eq!(stars.len(), 740, "745 catalogue rows, 5 merged");
     // No two star systems on top of each other.
     for (i, a) in stars.iter().enumerate() {
         for b in &stars[i + 1..] {
@@ -1534,22 +1534,34 @@ fn star_catalogue_is_curated() {
             );
         }
     }
-    for kept in [
-        "Alpha Centauri",
-        "Proxima Centauri",
-        "Secunda Hyadum",
-        "Delta Gruis",
-    ] {
+    for kept in ["Alpha Centauri", "Secunda Hyadum", "Delta Gruis"] {
         assert!(names.contains(kept), "{kept}");
     }
     for dropped in [
         "Alpha2 Centauri",
+        "Proxima Centauri",
         "Delta3 Tauri",
         "Theta1 Tauri",
         "Delta2 Gruis",
     ] {
         assert!(!names.contains(dropped), "{dropped}");
     }
+    // Proxima Centauri, a known companion, is one system with Alpha Centauri, which keeps its
+    // catalogue place.
+    let alpha = stars.iter().find(|s| s.name == "Alpha Centauri").unwrap();
+    let p = catalogue_position(alpha);
+    assert_eq!(
+        (alpha.x, alpha.y, alpha.z),
+        (
+            p[0].round() as i64,
+            p[1].round() as i64,
+            p[2].round() as i64
+        )
+    );
+    assert!(
+        stars.iter().all(|s| s.hip != 70890),
+        "Proxima Centauri has no row"
+    );
     // Every figure line joins two different stars of the catalogue.
     assert!(!rules.constellation_lines.is_empty());
     for line in &rules.constellation_lines {

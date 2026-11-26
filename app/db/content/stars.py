@@ -22,7 +22,8 @@ generator read integers only.
 
 Curation (task 161, owner 2026-11-26): the map positions are curated so that no two star systems
 lie on top of each other. Components of one physical multiple ("Alpha1 Centauri" and "Alpha2
-Centauri") closer than `MIN_SPACING` are one system; every other star closer than that to a star
+Centauri") closer than `MIN_SPACING`, and the known companions in `COMPANIONS` (Proxima
+Centauri), are one system; every other star closer than that to a star
 placed before it moves along its line of sight (only its map radius changes), or, failing that,
 to the nearest free point. Right ascension, declination and distance stay the catalogue's; only
 x, y, z move. `curate()` does it and `curation_summary()` reports it; the result is recorded
@@ -916,18 +917,21 @@ MIN_SPACING = 60
 # A star that cannot be cleared by changing its map radius within this share (percent) of it
 # moves to the nearest free point instead.
 RADIAL_SLACK_PCT = 25
+# Known physical companions that are one system with their primary whatever their designation
+# and distance: Hipparcos number of the companion -> that of the primary. Proxima Centauri is
+# gravitationally bound to Alpha Centauri AB (Kervella, Thevenin and Lovis 2017, A&A 598, L7).
+COMPANIONS = {70890: 71683}
 
 # What curate() does to the catalogue at MIN_SPACING 60 (`curation_summary()` prints it when the
 # seed is generated; docs/database.md "Star catalogue" lists the same):
-# - 4 rows merged, 745 -> 741 systems: Alpha2 Centauri into Alpha Centauri, Delta3 Tauri into
-#   Secunda Hyadum, Theta1 Tauri into Chamukuy, Delta2 Gruis into Delta Gruis (the Delta1 row);
-# - 26 stars moved, in map units, along their line of sight unless marked: Kappa Phoenicis 17,
-#   Gamma Persei 2, Iota Persei 29, Taygeta 48, Maia 6, Merope 56, Alcyone 119, Atlas 119,
-#   Secunda Hyadum 16, Upsilon Tauri 59, Ain 21, Chamukuy 36, Phi1 Orionis 39, Rho Geminorum 5,
-#   Gamma Centauri 53, Alcor 38, Arcturus 27, Alpha Centauri 51 (to the nearest free point,
-#   14 degrees off its direction: Proxima Centauri, named and earlier in Hipparcos order, keeps
-#   its place, and no radius within 25 % clears it), Kappa Centauri 47, Epsilon Serpentis 26,
-#   Beta Apodis 49, Shaula 44, Eta Sagittarii 8, Iota2 Cygni 23, Beta Sagittae 22, Eta Cephei 20.
+# - 5 rows merged, 745 -> 740 systems: Alpha2 Centauri and Proxima Centauri (a known companion)
+#   into Alpha Centauri, which keeps its catalogue place; Delta3 Tauri into Secunda Hyadum,
+#   Theta1 Tauri into Chamukuy, Delta2 Gruis into Delta Gruis (the Delta1 row);
+# - 25 stars moved, all along their line of sight, in map units: Kappa Phoenicis 17, Gamma
+#   Persei 2, Iota Persei 29, Taygeta 48, Maia 6, Merope 56, Alcyone 119, Atlas 119, Secunda
+#   Hyadum 16, Upsilon Tauri 59, Ain 21, Chamukuy 36, Phi1 Orionis 39, Rho Geminorum 5, Gamma
+#   Centauri 53, Alcor 38, Arcturus 27, Kappa Centauri 47, Epsilon Serpentis 26, Beta Apodis 49,
+#   Shaula 44, Eta Sagittarii 8, Iota2 Cygni 23, Beta Sagittae 22, Eta Cephei 20.
 
 
 def component_base(designation):
@@ -956,7 +960,7 @@ def _shell_directions(count=512):
 
 
 def curate(stars=None, spacing=MIN_SPACING):
-    """The curated catalogue (task 161): a list of (hip, name, designation, abbr, ra, dec, dist,
+    """The curated catalogue (task 161; components and `COMPANIONS` merged): a list of (hip, name, designation, abbr, ra, dec, dist,
     x, y, z) in Hipparcos order, a map from each dropped Hipparcos number to the one kept in its
     place, and the moves as (hip, name, how, change, distance moved) in placement order: `how` is
     'radius' (`change` the radius step, + farther) or 'point' (`change` the shell's radius)."""
@@ -1003,6 +1007,17 @@ def curate(stars=None, spacing=MIN_SPACING):
         for h in members:
             if h != keep:
                 merged[h] = keep
+    # Known companions join their primary's system, which keeps its own place and name.
+    for companion, primary in sorted(COMPANIONS.items()):
+        if companion not in by_hip or primary not in by_hip:
+            continue
+        keep = merged.get(primary, primary)
+        kept_name.setdefault(keep, by_hip[keep][1] if proper(keep) else component_base(by_hip[keep][2]))
+        for h, into in list(merged.items()):
+            if into == companion:
+                merged[h] = keep
+        merged[companion] = keep
+        kept_name.pop(companion, None)
 
     # 2. Every other close pair moves apart: named stars first, then by Hipparcos number.
     order = sorted((h for h in by_hip if h not in merged), key=lambda h: (not proper(h), h))

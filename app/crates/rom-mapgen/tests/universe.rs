@@ -884,8 +884,8 @@ fn solar_holds_every_home_in_one_system() {
 fn galaxy_takes_every_catalogue_star() {
     let r = rules();
     let all: BTreeSet<u32> = r.stars.keys().copied().collect();
-    // 745 catalogue rows, four merged into the systems they belong to (task 161).
-    assert_eq!(all.len(), 741);
+    // 745 catalogue rows, five merged into the systems they belong to (task 161).
+    assert_eq!(all.len(), 740);
     for seed in 0..3 {
         let u = plan(&r, "map.galaxy", seed, &FOUR);
         let systems: BTreeSet<u32> = star_systems(&u).iter().filter_map(|s| s.star).collect();

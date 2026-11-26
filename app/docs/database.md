@@ -2371,9 +2371,9 @@ are curated so that no two systems lie on top of each other (task 161, below):
   name keep it; the others are called by their Bayer name ("Iota Aurigae",
   "Zeta1 Lyrae") or Flamsteed name ("61 Cygni"). Two rows are renamed:
   Alpha Centauri (the IAU name of the A component is Rigil Kentaurus) and
-  Epsilon Eridani (IAU name Ran). Toliman, the B component (the Hipparcos row
-  Alpha2 Centauri, merged by task 161), shares
-  Alpha Centauri's place and has no row.
+  Epsilon Eridani (IAU name Ran). Toliman, the B component (the Hipparcos
+  row Alpha2 Centauri), and Proxima Centauri, the C component, are merged
+  into Alpha Centauri by task 161 (below) and have no row of their own.
 - **Map coordinates.** Computed once in the generator, in `position()`:
   `r = 100 * sqrt(distance in light-years)`, then
   `x = r cos(dec) cos(ra)`, `y = r cos(dec) sin(ra)`, `z = r sin(dec)`,
@@ -2387,11 +2387,17 @@ are curated so that no two systems lie on top of each other (task 161, below):
     by the component number (a bare letter counts as one: "Alpha1 Centauri",
     "Alpha2 Centauri") and that lie closer than D are one row: the one with an
     IAU proper name, else the lowest Hipparcos number, named by its proper
-    name or by its designation without the number. A figure line to a dropped
-    row goes to the kept one; a line from a star to itself is dropped. Four
-    rows are merged, 745 to 741 systems: Alpha2 Centauri into Alpha Centauri,
-    Delta3 Tauri into Secunda Hyadum, Theta1 Tauri into Chamukuy, Delta2 Gruis
-    into Delta Gruis (the Delta1 row). Xamidimura and Pipirima (Mu1 and Mu2
+    name or by its designation without the number. Known physical companions
+    (`COMPANIONS` in `stars.py`) join their primary whatever their designation
+    and distance; the primary keeps its place and name. The list holds one:
+    Proxima Centauri (HIP 70890) into Alpha Centauri (HIP 71683), since
+    Proxima is gravitationally bound to Alpha Centauri AB (P. Kervella,
+    F. Thévenin and C. Lovis, "Proxima's orbit around Alpha Centauri",
+    A&A 598, L7, 2017). A figure line to a dropped row goes to the kept one;
+    a line from a star to itself is dropped. Five rows are merged, 745 to 740
+    systems: Alpha2 Centauri and Proxima Centauri into Alpha Centauri, Delta3
+    Tauri into Secunda Hyadum, Theta1 Tauri into Chamukuy, Delta2 Gruis into
+    Delta Gruis (the Delta1 row). Xamidimura and Pipirima (Mu1 and Mu2
     Scorpii) lie 60.6 apart and stay two systems.
   - *Every other close pair moves apart.* Stars are placed in a fixed order,
     the named ones (name differs from designation) first, then by Hipparcos
@@ -2402,17 +2408,15 @@ are curated so that no two systems lie on top of each other (task 161, below):
     point, searched on growing shells of 512 fixed directions about its
     catalogue place. `ra_mdeg`, `dec_mdeg`, `dist_cly` and `glon_mdeg` keep
     the catalogue values; only `x`, `y`, `z` move.
-  - *Moved* (26 stars, map units, along the line of sight unless marked):
-    Kappa Phoenicis 17, Gamma Persei 2, Iota Persei 29, Taygeta 48, Maia 6,
-    Merope 56, Alcyone 119, Atlas 119, Secunda Hyadum 16, Upsilon Tauri 59,
-    Ain 21, Chamukuy 36, Phi1 Orionis 39, Rho Geminorum 5, Gamma Centauri 53,
-    Alcor 38, Arcturus 27, Alpha Centauri 51 (to the nearest free point,
-    14 degrees off its true direction: Proxima Centauri, named and earlier in
-    Hipparcos order, keeps its place, and no radius within 25 % clears it),
-    Kappa Centauri 47, Epsilon Serpentis 26, Beta Apodis 49, Shaula 44,
-    Eta Sagittarii 8, Iota2 Cygni 23, Beta Sagittae 22, Eta Cephei 20.
+  - *Moved* (25 stars, map units, all along the line of sight): Kappa
+    Phoenicis 17, Gamma Persei 2, Iota Persei 29, Taygeta 48, Maia 6, Merope
+    56, Alcyone 119, Atlas 119, Secunda Hyadum 16, Upsilon Tauri 59, Ain 21,
+    Chamukuy 36, Phi1 Orionis 39, Rho Geminorum 5, Gamma Centauri 53, Alcor
+    38, Arcturus 27, Kappa Centauri 47, Epsilon Serpentis 26, Beta Apodis 49,
+    Shaula 44, Eta Sagittarii 8, Iota2 Cygni 23, Beta Sagittae 22, Eta
+    Cephei 20.
   - *Nearest-neighbour distances*, before and after: smallest 4.9 and 60.0,
-    5th percentile 50.3 and 60.8, median 204.7 and 205.2; stars with a
+    5th percentile 50.3 and 60.9, median 204.7 and 205.7; stars with a
     neighbour within 40 units, 28 and none; within 60, 51 and none.
   - A saved universe keeps the systems it was made with.
 - **Galactic longitude** (task 89). Computed once in the generator, in
@@ -2422,7 +2426,7 @@ are curated so that no two systems lie on top of each other (task 161, below):
   `l = 122.932 - atan2(cos(dec) sin(ra - 192.859), sin(dec) cos(27.128) -
   cos(dec) sin(27.128) cos(ra - 192.859))`, in `glon_mdeg` (milli-degrees,
   0..359 999). It numbers the galactic quadrants as astronomers do: I 0-90,
-  II 90-180, III 180-270, IV 270-360 degrees (173, 162, 183 and 223 stars). Hand
+  II 90-180, III 180-270, IV 270-360 degrees (173, 162, 183 and 222 stars). Hand
   checks against the published galactic coordinates: Sirius 227.230 (published
   l = 227.23), Vega 67.449 (67.45), Deneb 84.285 (84.28); and the galactic
   centre's own position, RA 266.405 Dec -28.936, gives 0.000.
@@ -2435,7 +2439,7 @@ are curated so that no two systems lie on top of each other (task 161, below):
   | Sirius | 101.287, -16.716, 379.21 mas | 8.60 ly | -55, 275, -84 | BSC 06h45m08.9s -16d42m58s (= 101.287, -16.716); BSC parallax 0.375" |
   | Vega | 279.235, +38.784, 130.23 mas | 25.04 ly | 63, -385, 313 | BSC 18h36m56.3s +38d47m01s; BSC parallax 0.123" |
   | Betelgeuse | 88.793, +7.407, 6.55 mas | 497.95 ly | 47, 2212, 288 | BSC 05h55m10.3s +07d24m25s; BSC parallax 0.005" |
-  | Alpha Centauri | 219.902, -60.834, 754.81 mas | 4.32 ly | -99, -107, -160 (catalogue -78, -65, -181; moved by task 161) | IAU-CSN 219.902066, -60.833975; BSC parallax 0.751" |
+  | Alpha Centauri | 219.902, -60.834, 754.81 mas | 4.32 ly | -78, -65, -181 | IAU-CSN 219.902066, -60.833975; BSC parallax 0.751" |
 
   For Sirius: r = 100 sqrt(8.60) = 293, z = 293 sin(-16.716) = -84, x = 293
   cos(-16.716) cos(101.287) = -55.
