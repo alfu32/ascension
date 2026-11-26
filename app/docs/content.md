@@ -41,11 +41,13 @@ The content is too large to type by hand row by row. It is **generated**:
 | 10 | Spacefaring (called Starfaring until task 155) | `age.starfaring` | interplanetary |
 | 11 | Starfaring (called Expansion until task 155) | `age.expansion` | interstellar (jumps) |
 | 12 | Abundance | `age.abundance` | interstellar |
-| 13 | Galactic Empires | `age.galactic` | interstellar |
+| 13 | Galactic War (called Galactic Empires until task 164) | `age.galactic` | interstellar |
+| 14 | Galactic Federation (task 164; the last age) | `age.federation` | interstellar |
 
-**The Library** researches four tracks of 13 levels each, and the age advances.
+**The Library** researches four tracks of 14 levels each (one for every age after the first),
+and the age advances.
 
-- Track level *L* (1–13) requires age *L − 1* and level *L − 1* of the same track.
+- Track level *L* (1–14) requires age *L − 1* and level *L − 1* of the same track.
 - Advancing from age *k* to *k + 1* (`tech.age.<next>`) requires age *k* and all
   four track techs of level *k + 1* (Military, Civic, Commerce, Science), one
   prerequisite group each. In the Ancient age a player researches the four
@@ -60,24 +62,24 @@ The content is too large to type by hand row by row. It is **generated**:
 | Track | Effect per level (modifier rows on the track tech) | Also unlocks |
 | --- | --- | --- |
 | Military | `pop_cap` +25 | military buildings (section 4) |
-| Civic | `city_limit` +1; city `border_radius` and `economic_radius` ×1.06 (`mul` 106; levels compound, 13 levels ≈ ×2.13) | Temple, Fort |
+| Civic | `city_limit` +1; city `border_radius` and `economic_radius` ×1.06 (`mul` 106; levels compound, 14 levels ≈ ×2.26) | Temple, Fort |
 | Commerce | `commerce_cap` +40; `caravan_limit` +1 | Market, Dock |
 | Science | `research_time` −4 %; the first level reveals the University | University, enhancers |
 
-Track tech names (level 1 → 13) are listed in the generator; examples:
+Track tech names (level 1 → 14) are listed in the generator; examples:
 Military — Militia, Drill, Standing Army, Conscription, Professional Army,
 Combined Arms, Mechanised Warfare, Network Warfare, Autonomous Command,
-Orbital Doctrine, Fleet Doctrine, Grand Strategy, Total Defence. Civic —
+Orbital Doctrine, Fleet Doctrine, Grand Strategy, Total Defence, Collective Security. Civic —
 Chiefdom, City State, Kingdom, Charter, Constitution, Nation State,
 Federation, Information Society, Planned Society, Continental Union*,
-Interplanetary Law, Commonwealth, Galactic Charter (*the existing
+Interplanetary Law, Commonwealth, Galactic Charter, Federal Compact (*the existing
 `tech.continental_union` stays a separate project tech). Commerce — Barter,
 Coinage, Trade Routes, Banking, Joint Stock, Industry, Mass Production,
 Globalisation, Automated Logistics, Fusion Economy, Trade Lanes,
-Post-scarcity Markets, Galactic Exchange. Science — Writing, Mathematics,
+Post-scarcity Markets, Galactic Exchange, Common Market. Science — Writing, Mathematics,
 Astronomy, Optics, Natural Philosophy, Electricity, Electronics, Computing,
 Machine Learning, Fusion Power, Spacetime Theory, Matter Synthesis,
-Unified Theory.
+Unified Theory, Cosmic Engineering.
 
 ## 3. Resources
 
@@ -296,7 +298,7 @@ units ride starships; workers landed on a planet found its colony).
 4. **Playthrough check** (`rom playthrough`): a deterministic headless bot
    that, using only orders, builds each building type once it is available,
    researches toward the next age, and trains one unit of each newly unlocked
-   type, must reach the Galactic Empires age on a flat map with generous
+   type, must reach the last age (the Galactic Federation since task 164) on a flat map with generous
    starting resources. It prints the tick at which each age is reached.
 
 ## 8. Stat formulas (first pass)

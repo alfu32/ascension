@@ -68,6 +68,10 @@ pub(super) const BUNDLED: &[(&str, &str)] = &[
         include_str!("../../../../assets/scripts/rich-start-13-galactic.txt"),
     ),
     (
+        "rich-start-14-federation",
+        include_str!("../../../../assets/scripts/rich-start-14-federation.txt"),
+    ),
+    (
         "research-all",
         include_str!("../../../../assets/scripts/research-all.txt"),
     ),

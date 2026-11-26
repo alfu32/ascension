@@ -149,7 +149,7 @@ INSERT INTO def(kind,key,name,sort) VALUES
  ('age','age.modern','Modern Age',6), ('age','age.information','Freedom Age',7),
  ('age','age.automation','Automation Age',8), ('age','age.fusion','Fusion Age',9),
  ('age','age.starfaring','Spacefaring Age',10), ('age','age.expansion','Starfaring Age',11),
- ('age','age.abundance','Age of Abundance',12), ('age','age.galactic','Galactic Empires',13);
+ ('age','age.abundance','Age of Abundance',12), ('age','age.galactic','Age of Galactic War',13);
 INSERT INTO age(id,ordinal,era,map_scale)
  SELECT id, sort,
    CASE WHEN sort<=7 THEN 'history' WHEN sort<=9 THEN 'near_future' WHEN sort<=12 THEN 'stellar'
@@ -352,7 +352,7 @@ UPDATE map_style_feature SET coverage_pct=v.pct
  WHERE map_style_feature.feature_def_id=d.id AND region_kind='planet';
 
 INSERT INTO match_option VALUES
- ('start_age','Start Age','age.ancient'), ('end_age','End Age','age.galactic'),
+ ('start_age','Start Age','age.ancient'), ('end_age','End Age','age.federation'),
  ('pop_limit','Population Limit','200'), ('game_speed','Game Speed (%)','100'),
  ('start_resources','Starting Resources','standard'), ('tech_pace','Technology Cost & Speed','normal'),
  ('reveal','Reveal Map','normal'), ('rush_rule','Rush Rule','none'),
@@ -2384,6 +2384,8 @@ INSERT INTO et_container(entity_type_id,capacity,accept_tag_id) VALUES ((SELECT 
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),(SELECT id FROM def WHERE key='unit.transport_ship'),'train','units',0,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.transport_ship'),(SELECT id FROM def WHERE key='res.metal'),600,12);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.transport_ship'),(SELECT id FROM def WHERE key='res.energy'),200,4);
+INSERT INTO def(kind,key,name,sort) VALUES ('age','age.federation','Galactic Federation',14);
+INSERT INTO age(id,ordinal,era,map_scale,view_range,free_colonisation) SELECT (SELECT id FROM def WHERE key='age.federation'),14,era,map_scale,view_range,free_colonisation FROM age WHERE id=(SELECT id FROM def WHERE key='age.galactic');
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.military.1','Militia');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.military.1'),'track','military',1,400);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.military.1'),(SELECT id FROM def WHERE key='res.food'),200,0);
@@ -2449,6 +2451,11 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.military.13'),(SELECT id FROM def WHERE key='res.food'),1400,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.military.13'),(SELECT id FROM def WHERE key='res.knowledge'),1400,0);
 INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.military.13'),'pop_cap','add',25);
+INSERT INTO def(kind,key,name) VALUES ('tech','tech.military.14','Collective Security');
+INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.military.14'),'track','military',14,1700);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.military.14'),(SELECT id FROM def WHERE key='res.food'),1500,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.military.14'),(SELECT id FROM def WHERE key='res.knowledge'),1500,0);
+INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.military.14'),'pop_cap','add',25);
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.civic.1','Chiefdom');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.civic.1'),'track','civic',1,400);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.1'),(SELECT id FROM def WHERE key='res.food'),200,0);
@@ -2540,6 +2547,13 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.civic.13'),'city_limit','add',1);
 INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.13'),'border_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
 INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.13'),'economic_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO def(kind,key,name) VALUES ('tech','tech.civic.14','Federal Compact');
+INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.civic.14'),'track','civic',14,1700);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.14'),(SELECT id FROM def WHERE key='res.food'),1500,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.14'),(SELECT id FROM def WHERE key='res.knowledge'),1500,0);
+INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.civic.14'),'city_limit','add',1);
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.14'),'border_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.14'),'economic_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.commerce.1','Barter');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.commerce.1'),'track','commerce',1,400);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.commerce.1'),(SELECT id FROM def WHERE key='res.food'),200,0);
@@ -2618,6 +2632,12 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.commerce.13'),(SELECT id FROM def WHERE key='res.knowledge'),1400,0);
 INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.commerce.13'),'commerce_cap','add',40);
 INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.commerce.13'),'caravan_limit','add',1);
+INSERT INTO def(kind,key,name) VALUES ('tech','tech.commerce.14','Common Market');
+INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.commerce.14'),'track','commerce',14,1700);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.commerce.14'),(SELECT id FROM def WHERE key='res.food'),1500,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.commerce.14'),(SELECT id FROM def WHERE key='res.knowledge'),1500,0);
+INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.commerce.14'),'commerce_cap','add',40);
+INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.commerce.14'),'caravan_limit','add',1);
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.science.1','Writing');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.science.1'),'track','science',1,400);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.science.1'),(SELECT id FROM def WHERE key='res.food'),200,0);
@@ -2683,6 +2703,11 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.science.13'),(SELECT id FROM def WHERE key='res.food'),1400,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.science.13'),(SELECT id FROM def WHERE key='res.knowledge'),1400,0);
 INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.science.13'),'research_time','pct',-4);
+INSERT INTO def(kind,key,name) VALUES ('tech','tech.science.14','Cosmic Engineering');
+INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.science.14'),'track','science',14,1700);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.science.14'),(SELECT id FROM def WHERE key='res.food'),1500,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.science.14'),(SELECT id FROM def WHERE key='res.knowledge'),1500,0);
+INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.science.14'),'research_time','pct',-4);
 INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.military.2'),'los','add',1000,(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.science.2'),'range','add',1000,(SELECT id FROM tag WHERE key='tower'));
 INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.science.2'),'los','add',1500,(SELECT id FROM tag WHERE key='tower'));
@@ -2751,9 +2776,12 @@ INSERT INTO tech_effect(tech_id,effect,target_def_id) VALUES ((SELECT id FROM de
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.age.abundance','Advance to Abundance');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.age.abundance'),'age','',12,2800);
 INSERT INTO tech_effect(tech_id,effect,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.age.abundance'),'set_age',(SELECT id FROM def WHERE key='age.abundance'));
-INSERT INTO def(kind,key,name) VALUES ('tech','tech.age.galactic','Advance to Galactic');
+INSERT INTO def(kind,key,name) VALUES ('tech','tech.age.galactic','Advance to Galactic War');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.age.galactic'),'age','',13,3000);
 INSERT INTO tech_effect(tech_id,effect,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.age.galactic'),'set_age',(SELECT id FROM def WHERE key='age.galactic'));
+INSERT INTO def(kind,key,name) VALUES ('tech','tech.age.federation','Advance to Galactic Federation');
+INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.age.federation'),'age','',14,3200);
+INSERT INTO tech_effect(tech_id,effect,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.age.federation'),'set_age',(SELECT id FROM def WHERE key='age.federation'));
 INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.abundance'),'cost.all','mul',0);
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.agriculture','Agriculture');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.agriculture'),'upgrade','',0,350);
@@ -3936,9 +3964,14 @@ INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_ro
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.age.galactic'),'research','research_5',0,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),(SELECT id FROM def WHERE key='tech.interstellar_trade'),'research','research',0,1);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.city'),(SELECT id FROM def WHERE key='tech.auto_colonies'),'research','research',1,0);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.military.14'),'research','research_5',1,1);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.civic.14'),'research','research_5',2,1);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.commerce.14'),'research','research_5',3,1);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.science.14'),'research','research_5',4,1);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.age.federation'),'research','research_5',0,1);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),(SELECT id FROM def WHERE key='tech.automated_route_survey'),'research','research',1,1);
-INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.ascension'),'research','projects',2,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.jump_detector'),(SELECT id FROM def WHERE key='tech.total_network'),'research','research',0,0);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.ascension'),'research','projects',2,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='tech.mine_detectors'),'research','research_2',0,2);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.city'),(SELECT id FROM def WHERE key='tech.missile_shield'),'research','research',2,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.city'),(SELECT id FROM def WHERE key='tech.laser_shield'),'research','research',3,0);
@@ -4366,6 +4399,8 @@ INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FR
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.military.12'),(SELECT id FROM def WHERE key='tech.military.11'),1);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.military.13'),(SELECT id FROM def WHERE key='age.abundance'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.military.13'),(SELECT id FROM def WHERE key='tech.military.12'),1);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.military.14'),(SELECT id FROM def WHERE key='age.galactic'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.military.14'),(SELECT id FROM def WHERE key='tech.military.13'),1);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.civic.1'),(SELECT id FROM def WHERE key='age.ancient'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.civic.2'),(SELECT id FROM def WHERE key='age.classical'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.civic.2'),(SELECT id FROM def WHERE key='tech.civic.1'),1);
@@ -4391,6 +4426,8 @@ INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FR
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.civic.12'),(SELECT id FROM def WHERE key='tech.civic.11'),1);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.civic.13'),(SELECT id FROM def WHERE key='age.abundance'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.civic.13'),(SELECT id FROM def WHERE key='tech.civic.12'),1);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.civic.14'),(SELECT id FROM def WHERE key='age.galactic'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.civic.14'),(SELECT id FROM def WHERE key='tech.civic.13'),1);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.commerce.1'),(SELECT id FROM def WHERE key='age.ancient'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.commerce.2'),(SELECT id FROM def WHERE key='age.classical'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.commerce.2'),(SELECT id FROM def WHERE key='tech.commerce.1'),1);
@@ -4416,6 +4453,8 @@ INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FR
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.commerce.12'),(SELECT id FROM def WHERE key='tech.commerce.11'),1);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.commerce.13'),(SELECT id FROM def WHERE key='age.abundance'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.commerce.13'),(SELECT id FROM def WHERE key='tech.commerce.12'),1);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.commerce.14'),(SELECT id FROM def WHERE key='age.galactic'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.commerce.14'),(SELECT id FROM def WHERE key='tech.commerce.13'),1);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.science.1'),(SELECT id FROM def WHERE key='age.ancient'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.science.2'),(SELECT id FROM def WHERE key='age.classical'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.science.2'),(SELECT id FROM def WHERE key='tech.science.1'),1);
@@ -4441,6 +4480,8 @@ INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FR
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.science.12'),(SELECT id FROM def WHERE key='tech.science.11'),1);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.science.13'),(SELECT id FROM def WHERE key='age.abundance'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.science.13'),(SELECT id FROM def WHERE key='tech.science.12'),1);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.science.14'),(SELECT id FROM def WHERE key='age.galactic'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.science.14'),(SELECT id FROM def WHERE key='tech.science.13'),1);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.age.classical'),(SELECT id FROM def WHERE key='age.ancient'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.age.classical'),(SELECT id FROM def WHERE key='tech.military.1'),1);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.age.classical'),(SELECT id FROM def WHERE key='tech.civic.1'),2);
@@ -4506,6 +4547,11 @@ INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FR
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.age.galactic'),(SELECT id FROM def WHERE key='tech.civic.13'),2);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.age.galactic'),(SELECT id FROM def WHERE key='tech.commerce.13'),3);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.age.galactic'),(SELECT id FROM def WHERE key='tech.science.13'),4);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.age.federation'),(SELECT id FROM def WHERE key='age.galactic'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.age.federation'),(SELECT id FROM def WHERE key='tech.military.14'),1);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.age.federation'),(SELECT id FROM def WHERE key='tech.civic.14'),2);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.age.federation'),(SELECT id FROM def WHERE key='tech.commerce.14'),3);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.age.federation'),(SELECT id FROM def WHERE key='tech.science.14'),4);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.agriculture'),(SELECT id FROM def WHERE key='age.classical'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.crop_rotation'),(SELECT id FROM def WHERE key='age.gunpowder'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.crop_rotation'),(SELECT id FROM def WHERE key='tech.agriculture'),1);
@@ -4588,7 +4634,7 @@ INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FR
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='bld.auto_farm'),(SELECT id FROM def WHERE key='tech.auto_colonies'),1);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='bld.auto_woodcutter_camp'),(SELECT id FROM def WHERE key='tech.auto_colonies'),1);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='bld.auto_lab'),(SELECT id FROM def WHERE key='tech.auto_colonies'),1);
-INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.ascension'),(SELECT id FROM def WHERE key='age.galactic'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.ascension'),(SELECT id FROM def WHERE key='age.federation'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.up.vehicle_plant'),(SELECT id FROM def WHERE key='age.industrial'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='bld.vehicle_plant'),(SELECT id FROM def WHERE key='tech.up.vehicle_plant'),1);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.up.factory'),(SELECT id FROM def WHERE key='age.industrial'),0);

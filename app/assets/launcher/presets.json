@@ -38,8 +38,8 @@
       "icon": "cmd_build",
       "picture": "tiles/sandbox",
       "fields": {
-        "style": "map.many_worlds", "opponents": "0", "age": "13",
-        "script": "rich-start-13-galactic"
+        "style": "map.many_worlds", "opponents": "0", "age": "14",
+        "script": "rich-start-14-federation"
       }
     },
     {

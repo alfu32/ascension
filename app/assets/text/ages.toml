@@ -109,8 +109,18 @@ story = """Nothing costs anything any more. Food, metal, energy: there is enough
 
 [[age]]
 ordinal = 13
-name = "Galactic Empires"
+name = "Galactic War"
+subtitle = "humanity divided among the stars"
+theme = "galactic.theme"
+interlude = "galactic.interlude"
+story = """Humanity rules the stars, and humanity is divided again. Rival empires span whole systems, raise wonders that can be seen from other worlds and send their fleets jumping against one another. Every colony is a front line and every trade lane a road for an invader. Rome rose and fell; so will they. Win the war, or outlast it."""
+
+# Task 164: the Galactic Federation reuses the Age of Galactic War's music until the owner
+# gives it its own (docs/ages-story.md, section 14).
+[[age]]
+ordinal = 14
+name = "Galactic Federation"
 subtitle = "the finale, and ascension"
 theme = "galactic.theme"
 interlude = "galactic.interlude"
-story = """Humanity rules the stars, and humanity is divided again. Empires span whole systems and raise wonders that can be seen from other worlds. Rome rose and fell; so will they. But for those who have learned everything there is to learn, there is another way: ascend, leave it all behind, and begin again."""
+story = """The wars are over. Worn out by them, the human worlds have bound themselves into one federation under common laws, and fleets that fought each other now keep the peace together. Humanity has done everything it can do with matter. But for those who have learned everything there is to learn, there is another way: ascend, leave it all behind, and begin again."""

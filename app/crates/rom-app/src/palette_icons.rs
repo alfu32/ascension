@@ -149,11 +149,15 @@ fn tech_icon(
         let typed = target.filter(|t| rules.entity_type(*t).is_some());
         match effect.effect {
             TechEffectKind::SetAge => {
-                if let Some(age) = target.and_then(|t| rules.ages.get(&t)) {
-                    let name = format!("icons/age_{}", age.ordinal);
-                    if has_art(&name) {
-                        return ProductIcon::art(name, IconMark::None);
-                    }
+                // The age's emblem, or the latest earlier age's while it has none of its own
+                // (task 164: the Galactic Federation borrows the Galactic War's).
+                if let Some(age) = target.and_then(|t| rules.ages.get(&t))
+                    && let Some(name) = (0..=age.ordinal)
+                        .rev()
+                        .map(|ordinal| format!("icons/age_{ordinal}"))
+                        .find(|name| has_art(name))
+                {
+                    return ProductIcon::art(name, IconMark::None);
                 }
             }
             TechEffectKind::UpgradeType => {
@@ -368,8 +372,16 @@ mod tests {
                 assert_eq!(icon.mark, IconMark::Upgrade);
             }
         }
+        // One emblem per age advance, but the Galactic Federation's, which borrows the Galactic
+        // War's until it has its own (task 164).
         let ages = rules.techs.values().filter(|t| t.kind == TechKind::Age);
-        assert_eq!(emblems.len(), ages.count(), "one emblem per age advance");
+        assert_eq!(
+            emblems.len(),
+            ages.count() - 1,
+            "one emblem per age advance"
+        );
+        let emblem = |key: &str| product_icon(&rules, Some(&book), faction, age, id(key)).art;
+        assert_eq!(emblem("tech.age.federation"), emblem("tech.age.galactic"));
         // Income upgrades show the resource; the ascension its emblem.
         let farming = product_icon(&rules, Some(&book), faction, age, id("tech.agriculture"));
         assert_eq!(

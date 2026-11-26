@@ -27,7 +27,7 @@ ladder under their own names. Ages 8–9 (continental blocs) are humanity's alon
 **Status of the music** (from the owner's first session, 2026-11-22): the Classical, Medieval,
 Enlightenment, Industrial, Modern and Freedom pieces exist as sketches (scores in code,
 synthesised, with General MIDI files). The owner accepted them. The Ancient and Discovery (called Gunpowder until task 155) ages
-of the game's ladder, and ages 8–13, are new here. A heroic, age-less statement of the theme
+of the game's ladder, and ages 8–13, are new here (age 14, task 164, borrows age 13's music). A heroic, age-less statement of the theme
 (the sketch: solo trumpet, then brass over galloping strings) is the **main title** of the game
 and plays in the launcher.
 
@@ -453,19 +453,23 @@ for everyone. What is left to want? Time still passes, buildings still take time
 rivals still have ambitions. Plenty has not ended history. It has only changed what history is
 about."
 
-## 13. Galactic Empires — the finale, and ascension
+## 13. Galactic War — humanity divided among the stars
+
+Called Galactic Empires, and the last age, until task 164 (owner, 2026-11-26: "rename 13 to age
+of galactic war"). Its music was written as the finale and keeps that shape; the Galactic
+Federation (14) borrows it for now.
 
 **Forces.** *Social:* humanity everywhere and divided again, into rival empires spanning stars.
-*Economic:* empire-scale wonders, the wealth of whole systems. *Political:* empire against
-empire: the cycle of the Classical age repeated across the galaxy. At the end, one way out:
-**ascension**, leaving everything behind.
+*Economic:* empire-scale wonders, the wealth of whole systems poured into fleets. *Political:*
+empire against empire: the cycle of the Classical age repeated across the galaxy, with every
+colony a front line.
 
-**Outcome.** Grandeur and its limit: humanity has done everything it can do with matter, and
-some choose to go beyond.
+**Outcome.** Grandeur and its price: humanity has done everything it can do with matter, and
+turns it on itself.
 
 **Perception.** *Bright:* glory, the summit of history, humanity's greatest works. *Dark:* the
-fall of empires, Rome again on a galactic scale. Over both stands ascension: the one exit from
-the cycle. The music sums up everything and then lets it go.
+fall of empires, Rome again on a galactic scale. The music sums up everything and then lets it
+go.
 
 **Art form.** The grand symphonic finale: everything that came before, in one movement.
 
@@ -484,10 +488,45 @@ Ancient age's distant reed-pipe call.
 **Interlude.** Low strings and horns in a slow, majestic version of the theme, with fragments
 of the earlier ages' colours drifting through, like a memory.
 
-*Story:* "Humanity rules the stars, and humanity is divided again. Empires span whole systems
-and raise wonders that can be seen from other worlds. Rome rose and fell; so will they. But
-for those who have learned everything there is to learn, there is another way: ascend, leave
-it all behind, and begin again."
+*Story:* "Humanity rules the stars, and humanity is divided again. Rival empires span whole
+systems, raise wonders that can be seen from other worlds and send their fleets jumping against
+one another. Every colony is a front line and every trade lane a road for an invader. Rome rose
+and fell; so will they. Win the war, or outlast it."
+
+## 14. Galactic Federation — the finale, and ascension
+
+Added by task 164 (owner, 2026-11-26: "add age 14 the galactic federation, reuse models and
+sounds from the galactic empire, well think about media individualisation later").
+
+**Forces.** *Social:* the wars are over; the human worlds live under common laws. *Economic:* a
+common market of whole systems. *Political:* federation instead of empire, collective security
+instead of conquest. At the end, one way out: **ascension**, leaving everything behind.
+
+**Outcome.** Peace among the stars, and the limit of matter: some choose to go beyond.
+
+**Perception.** *Bright:* the long war ended, humanity one people at last. *Dark:* a peace of
+the exhausted, and the stillness of having nothing left to do. Over both stands ascension: the
+one exit from the cycle.
+
+**Media (to come).** For now the age borrows everything from the Age of Galactic War: its music
+(`galactic.theme`, `galactic.interlude` in `assets/text/ages.toml`), the looks of its buildings
+and units (the latest look at or before the age, `rom-app/src/looks.rs`) and their sounds (by
+unit and building type, `tools/sounds/assignment.json`), and the emblem of its advance at the
+library (the latest age emblem at or before it, `rom-app/src/palette_icons.rs`). The owner will
+individualise them later. Where each would go:
+
+- music: `tools/music/scores/federation_theme.py` and `federation_interlude.py`, rendered to
+  `assets/music/federation.theme.ogg` and `federation.interlude.ogg`, the interlude's fragments
+  in `assets/music/cues.json`, and the age's entry in `ages.toml` naming them;
+- looks: model files `db/models/<type>@federation.sql` (rows of `entity_visual` with
+  `age.federation`, as `unit.battleship@galactic.sql` is for age 13);
+- sounds: new keys in `tools/sounds/assignment.json` only if age 14 gets units of its own;
+- emblem: `assets/hud/icons/age_14.svg`, listed in `rom-render/src/hud_atlas.rs` beside `age_13`.
+
+*Story:* "The wars are over. Worn out by them, the human worlds have bound themselves into one
+federation under common laws, and fleets that fought each other now keep the peace together.
+Humanity has done everything it can do with matter. But for those who have learned everything
+there is to learn, there is another way: ascend, leave it all behind, and begin again."
 
 ---
 

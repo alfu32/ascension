@@ -1,0 +1,13 @@
+# Task 164, shot as img/164-top-bar.png: a universe match (seed 1, --sun fixed, 1280 x 800,
+# --players 2 --ai none) started in the last age; the top bar reads
+# "AGE 15 OF 15 · GALACTIC FEDERATION" over the clock, and the library's research overview
+# (its fourth data tab) shows fourteen levels on each track and fifteen ages. Run with
+#   --universe --seed 1 --players 2 --ai none --sun fixed --size 1280x800
+#   --script docs/tasks/164-top-bar-script.txt --screenshot <file> --after 8
+0 grant-age age.federation
+0 research-all 1
+0 place 1 bld.library @9,0
+1 speed 100
+5 researchers
+6 hud tab 3
+7 hud data 4

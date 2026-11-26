@@ -64,7 +64,7 @@ the right, the minimap to the bottom centre. Rectangles are `x, y, w, h`.
 | Research block | 990, 10, 325, 110 | up to three rows: icon, tech name, progress bar (cyan), percent; empty rows hidden |
 | Clock | 1352, 38, 62, 62 | game time `mm:ss` (or `h:mm:ss`) |
 | Buttons | 1432, 42, 50, 50 · 1486 · 1540 · 1594 (same size) | diplomacy, chat, menu, pause; menu opens the game menu (Esc too), pause holds or releases the simulation |
-| Age | 1342, 13, 306, 24 | the person's age over the clock and the buttons, gold: `AGE 10 OF 14 · FUSION AGE` (task 160) |
+| Age | 1342, 13, 306, 24 | the person's age over the clock and the buttons, gold: `AGE 10 OF 15 · FUSION AGE` (task 160; the count from the rules) |
 
 ### Bottom left (x 0–612)
 
@@ -411,7 +411,7 @@ rankings", "realtime mini stat rankings of all the players in the game on the hu
 indication "to also show what it improves".
 
 - **The age.** The top bar names the person's age in gold over the clock and the four buttons
-  (design 1342, 13, 306 × 24, the empty band of that block above them): "AGE 10 OF 14 · FUSION
+  (design 1342, 13, 306 × 24, the empty band of that block above them): "AGE 10 OF 15 · FUSION
   AGE", counted from one as the new-age dialog counts, the age's name from the rules
   (`HudSnapshot::age`, `rom-app/src/ranking_view.rs`). The snapshot is rebuilt every tick, so it
   changes the tick an advance completes.

@@ -1,7 +1,7 @@
 # Timeline: ages, space, identities
 
 A proposal that turns the brief's future history into data. Ages 0–7 follow
-the reference game's span; 8–13 are new. Names are working titles.
+the reference game's span; 8–14 are new. Names are working titles.
 
 | # | Age | Era | Map | What it introduces |
 | --- | --- | --- | --- | --- |
@@ -18,7 +18,8 @@ the reference game's span; 8–13 are new. Names are working titles.
 | 10 | Spacefaring | stellar | home system | the whole fleet, the resource worlds of the home system claimed — the second age of discovery; blocs unite as **Humanity** |
 | 11 | Starfaring | stellar | **interstellar** | the jump to other stars along routes; colonies on their worlds, trade lanes, fleets |
 | 12 | Abundance | stellar | interstellar | **all costs are zero**, production still takes time |
-| 13 | Galactic Empires | galactic | interstellar | rival human empires; empire-scale wonders |
+| 13 | Galactic War (called Galactic Empires until task 164) | galactic | interstellar | rival human empires at war; empire-scale wonders |
+| 14 | Galactic Federation | galactic | interstellar | the wars end in a federation of the human worlds; the last age, and ascension |
 
 ## The discovery template, used twice
 

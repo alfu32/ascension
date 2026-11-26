@@ -351,6 +351,41 @@ mod tests {
         }
     }
 
+    /// Task 164: the Galactic Federation has no looks of its own yet; everything in it is drawn
+    /// as in the Age of Galactic War before it (the latest look at or before the age).
+    #[test]
+    fn the_federation_shows_the_galactic_war_looks() {
+        let rules = load_rules().unwrap();
+        let book = ModelBook::new(&rules);
+        let id = |key: &str| rules.id_of(key).unwrap();
+        let (war, federation) = (id("age.galactic"), id("age.federation"));
+        let index = |m: Option<ModelRef>| m.map(|m| m.index);
+        let battleship = book.resolve(id("unit.battleship"), id("race.human"), federation);
+        assert_eq!(
+            battleship.map(|m| book.entries[usize::from(m.index)].id.as_str()),
+            Some("unit.battleship@galactic")
+        );
+        let mut drawn = 0;
+        for faction in [
+            "race.human",
+            "race.avian",
+            "race.reptilian",
+            "nation.romans",
+        ] {
+            for entity in rules.entity_types.keys() {
+                let then = book.resolve(*entity, id(faction), war);
+                assert_eq!(
+                    index(book.resolve(*entity, id(faction), federation)),
+                    index(then),
+                    "{} of {faction}",
+                    rules.key(*entity)
+                );
+                drawn += usize::from(then.is_some());
+            }
+        }
+        assert!(drawn > 100, "{drawn}");
+    }
+
     #[test]
     fn looks_resolve_by_faction_then_age() {
         // A row of the avian race's own for the city, for every age.

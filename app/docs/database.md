@@ -304,7 +304,9 @@ and restored by `rom-save` (see "Saving a match" below).
 
 ### 7. Ages, nations and races
 
-`age.ordinal` orders the 14 ages (0–13); `age.map_scale` says which kind of map that
+`age.ordinal` orders the 15 ages (0–14). The seed writes ages 0–13; the content generator adds
+age 14, the Galactic Federation (task 164, `LATER_AGES` in `db/content/generate.py`), with the
+era, map scale, view and colonisation of age 13; `age.map_scale` says which kind of map that
 age is played on. Advancing is an ordinary `tech` of kind `age` with a
 `set_age` effect.
 
@@ -676,7 +678,8 @@ does not exist, add the stat to `stat` and implement that one stat in code.
   (`faction_alias`, `entity_visual`), and meets the others only in space.
   Races differ through substitutes (`replaces_id`), `availability` and
   `modifier` rows, not through separate rule sets.
-- Galactic Empires (13) is the last age, but the match has no end: a player that has
+- The Galactic Federation (14, task 164) is the last age, after the Age of Galactic War (13,
+  called Galactic Empires until then), but the match has no end: a player that has
   researched everything at the library may ascend (task 76, `docs/ascension.md`); a victory is
   a notice, not an end. Travel between galaxies stays parked.
 - Fixed 20-tick simulation; game speed is a user-settable percentage.
@@ -1483,7 +1486,8 @@ Schema and seed (deliberate; both lint views stay empty, the seed loads), all ge
 - **PART A.** `tech_effect.effect` takes **`ascend`**: completing the tech takes its player out
   of the material plane; it may be researched only once every other technology its producer
   offers is researched. `tech.ascension` (kind `project`, nominal 7 500 ticks, 10 000 knowledge
-  and 10 000 wealth) at the library's projects page, age Galactic Empires. `order_kind`
+  and 10 000 wealth) at the library's projects page, in the last age (Galactic Empires until
+  task 164, now the Galactic Federation). `order_kind`
   **`descend`** (target a point, no executor). `body_kind` **`black_hole`** and **`celestial`**
   (the celestial home's centre and its mythical planet; neither has a surface). Constants:
   `ascension.duration_pct` 250, `ascension.descent_research_pct` 90,

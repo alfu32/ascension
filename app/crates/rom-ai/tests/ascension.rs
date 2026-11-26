@@ -28,18 +28,15 @@ fn rules() -> Arc<Rules> {
 /// age; player two, already beaten (nothing left in a conquest match).
 fn world(rules: &Arc<Rules>) -> World {
     let roman = rules.id_of("nation.romans").unwrap();
+    // The first and the last age by ordinal (task 164: never by key).
+    let first = rules.ages.values().min_by_key(|a| a.ordinal).unwrap().id;
+    let last = rules.ages.values().max_by_key(|a| a.ordinal).unwrap().id;
     let players = (0..=2)
         .map(|n| Player {
             id: PlayerId(n),
             team: n,
             faction: roman,
-            age: rules
-                .id_of(if n == 1 {
-                    "age.galactic"
-                } else {
-                    "age.ancient"
-                })
-                .unwrap(),
+            age: if n == 1 { last } else { first },
             resources: if n == 1 {
                 rules.resources.keys().map(|r| (*r, 100_000)).collect()
             } else {
