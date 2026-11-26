@@ -1563,7 +1563,14 @@ them as lines, by data (`et_fortification`, `et_minefield`) and as keenly as the
   leaves them out.
 
 Measured (20 seeds, balanced:moderate against balanced:easiest): 20–0, mean tick 46979 (main
-before 147b: 20–0, 47463). A first version that laid a line as soon as an enemy building was
+before 147b: 20–0, 47463).
+
+**Shield emitters (task 156)** need no code: `kinds` takes the newest segment type the builders
+may lay, which from the Spacefaring age is the shield emitter, and `World::line_sites` thins its
+nine tiles to four emitters and the shield gate. Their energy upkeep (2 an emitter, 6 the gate,
+every 600 ticks) is paid from the store like any price; without energy the field drops and the
+line is open between its emitters, so a player short of energy is never walled in by it either.
+A rom-ai test (`tests/fortify.rs`) sees the line laid and its field standing. A first version that laid a line as soon as an enemy building was
 known lost seed 19 (19–1, mean 54099): lines are now a response to enemies come near.
 Tests: `crates/rom-ai/tests/fortify.rs` (a line with its gate across the way in, turned along
 it, twice alike; mines before the gate).

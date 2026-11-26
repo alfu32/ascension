@@ -511,6 +511,28 @@
    "bld.refinery.select"
   ]
  },
+ "bld.shield_emitter": {
+  "active": [
+   "bld.shield_emitter.active"
+  ],
+  "build_done": [
+   "bld.shield_emitter.build_done"
+  ],
+  "select": [
+   "bld.shield_emitter.select"
+  ]
+ },
+ "bld.shield_gate": {
+  "active": [
+   "bld.shield_gate.active"
+  ],
+  "build_done": [
+   "bld.shield_gate.build_done"
+  ],
+  "select": [
+   "bld.shield_gate.select"
+  ]
+ },
  "bld.siege_workshop": {
   "active": [
    "bld.siege_workshop.active"

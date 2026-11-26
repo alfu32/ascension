@@ -14,6 +14,7 @@ mod construction;
 mod drones;
 mod economy;
 mod entity;
+mod fields;
 mod formation;
 mod fortification;
 mod gathering;
@@ -70,6 +71,7 @@ pub use combat::{BLAST_MEMORY_TICKS, Blast, Wreck};
 pub use construction::{snap_facing, turned_footprint};
 pub use drones::{Cloud, Joining, TURN_PER_TICK};
 pub use entity::{Entity, EntityId, Player, PlayerId};
+pub use fields::FieldLink;
 pub use fortification::{LineSite, MAX_LINE_SITES};
 pub use geometry::Topology;
 pub use income::Income;
@@ -428,6 +430,8 @@ mod ascension_tests;
 mod city_names_tests;
 #[cfg(test)]
 mod cluster_jumps_tests;
+#[cfg(test)]
+mod fields_tests;
 #[cfg(test)]
 mod fortification_tests;
 #[cfg(test)]

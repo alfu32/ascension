@@ -12944,5 +12944,101 @@
   },
   "recipe": "bld.build_done",
   "seed": 747908
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "bed.shield_emitter.select",
+  "params": {
+   "active": "post_future",
+   "age": 10,
+   "pitch": 1.057,
+   "size": 0.125
+  },
+  "recipe": "bld.select",
+  "seed": 938224
+ },
+ {
+  "fx": "machine",
+  "kind": "voice",
+  "name": "bld.shield_emitter.select",
+  "over": "bed.shield_emitter.select",
+  "speed": 0.98,
+  "text": "Shield Emitter online. Scanning.",
+  "voice": "af_sky"
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "bld.shield_emitter.active",
+  "params": {
+   "active": "post_future",
+   "age": 10,
+   "pitch": 1.057,
+   "size": 0.125
+  },
+  "recipe": "active.post_future",
+  "seed": 663282
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "bld.shield_emitter.build_done",
+  "params": {
+   "active": "post_future",
+   "age": 10,
+   "pitch": 1.057,
+   "size": 0.125
+  },
+  "recipe": "bld.build_done",
+  "seed": 456784
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "bed.shield_gate.select",
+  "params": {
+   "active": "post_future",
+   "age": 10,
+   "pitch": 0.998,
+   "size": 0.375
+  },
+  "recipe": "bld.select",
+  "seed": 835737
+ },
+ {
+  "fx": "machine",
+  "kind": "voice",
+  "name": "bld.shield_gate.select",
+  "over": "bed.shield_gate.select",
+  "speed": 0.957,
+  "text": "Defences active.",
+  "voice": "am_adam"
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "bld.shield_gate.active",
+  "params": {
+   "active": "post_future",
+   "age": 10,
+   "pitch": 0.998,
+   "size": 0.375
+  },
+  "recipe": "active.post_future",
+  "seed": 614619
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "bld.shield_gate.build_done",
+  "params": {
+   "active": "post_future",
+   "age": 10,
+   "pitch": 0.998,
+   "size": 0.375
+  },
+  "recipe": "bld.build_done",
+  "seed": 12552
  }
 ]

@@ -468,6 +468,22 @@ CREATE TABLE et_shield (
   CHECK (recharge_cost = 0 OR recharge_resource_id IS NOT NULL)
 ) STRICT;
 
+-- Task 156: a fortification (a segment or a gate with an `et_fortification` row) that raises an
+-- energy field. From the tile at its forward end (its footprint's end along its facing) the field
+-- runs along its facing over at most `gap` tiles to the nearest standing emitter of its owner;
+-- those tiles then block every walker, as a segment does. The field stands while both emitters
+-- are powered: an emitter pays `upkeep` of `upkeep_resource_id` from its owner's store for every
+-- `upkeep_period_ticks` it stands finished; without that much in store it is not powered until
+-- it can pay. A line of emitters is laid with one every `gap` + 1 tiles where it runs straight.
+CREATE TABLE et_field_emitter (
+  entity_type_id      INTEGER PRIMARY KEY REFERENCES entity_type(id),
+  gap                 INTEGER NOT NULL DEFAULT 0 CHECK (gap BETWEEN 0 AND 16),
+  upkeep_period_ticks INTEGER NOT NULL DEFAULT 600 CHECK (upkeep_period_ticks > 1),
+  upkeep_resource_id  INTEGER REFERENCES resource(id),
+  upkeep              INTEGER NOT NULL DEFAULT 0 CHECK (upkeep >= 0),
+  CHECK (upkeep = 0 OR upkeep_resource_id IS NOT NULL)
+) STRICT;
+
 CREATE TABLE et_inhibitor (            -- jump inhibitor (task 70): holds enemy ships where it stands
   entity_type_id INTEGER PRIMARY KEY REFERENCES entity_type(id),
   reach          TEXT NOT NULL DEFAULT 'system' CHECK (reach IN ('system')),

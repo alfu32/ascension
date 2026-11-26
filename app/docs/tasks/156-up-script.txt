@@ -1,0 +1,26 @@
+# Task 156: a shield line south of the city in the Spacefaring age. Eight shield emitters, an
+# emitter every third tile, and a shield gate in the middle; the field stands between them, paid
+# for with player one's energy. Player one's marines behind the line, player two's beyond it.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun fixed --size 1600x900 \
+#     --script app/docs/tasks/156-up-script.txt --after 8 --screenshot app/docs/img/156-up.png
+0 grant-age age.starfaring
+0 place 1 bld.shield_emitter @-11,7
+0 place 1 bld.shield_emitter @-8,7
+0 place 1 bld.shield_emitter @-5,7
+0 place 1 bld.shield_emitter @-2,7
+0 place 1 bld.shield_gate @0,7
+0 place 1 bld.shield_emitter @2,7
+0 place 1 bld.shield_emitter @5,7
+0 place 1 bld.shield_emitter @8,7
+0 place 1 bld.shield_emitter @11,7
+0 place 1 unit.marine @-4,4
+0 place 1 unit.marine @-1,4
+0 place 1 unit.marine @1,4
+0 place 1 unit.marine @4,4
+0 place 2 unit.marine @-9,15
+0 place 2 unit.marine @-6,15
+0 place 2 unit.marine @-3,15
+0 place 2 unit.marine @3,15
+0 place 2 unit.marine @6,15
+0 place 2 unit.marine @9,15
+100 cam wheel 3 800,440

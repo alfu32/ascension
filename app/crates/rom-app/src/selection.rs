@@ -1568,6 +1568,40 @@ impl Controller {
             }));
     }
 
+    /// The energy fields standing between shield emitters on the planet shown, where the player
+    /// sees either end (task 156). A field across a face edge is left out.
+    fn fields(&self, world: &World, hud: &mut rom_render::HudSnapshot) {
+        let me = self.me();
+        let body = self.view.planet;
+        let sees = |pos: Pos| {
+            world.is_visible_on_body(
+                me,
+                pos.body,
+                pos.face,
+                pos.x.div_euclid(1000),
+                pos.y.div_euclid(1000),
+            )
+        };
+        hud.fields.clear();
+        hud.fields.extend(
+            world
+                .field_links()
+                .iter()
+                .filter(|l| {
+                    l.up && l.start.body == body
+                        && l.end.body == body
+                        && l.start.face == l.end.face
+                        && (sees(l.start) || sees(l.end))
+                })
+                .map(|l| rom_render::HudField {
+                    id: l.from.0,
+                    face: l.start.face,
+                    from: (l.start.x, l.start.y),
+                    to: (l.end.x, l.end.y),
+                }),
+        );
+    }
+
     /// The patrols of the selected units on the planet shown: between their ends on the ground,
     /// all the way round the great circle through them in orbit.
     fn patrols(&self, world: &World) -> Vec<rom_render::HudPatrol> {
@@ -4079,6 +4113,7 @@ impl Controller {
         let tick = world.tick();
         self.bombardment(world, hud);
         self.shields(world, hud);
+        self.fields(world, hud);
         hud.markers = self
             .markers
             .iter()

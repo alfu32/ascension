@@ -1322,6 +1322,8 @@ pub struct EntityType {
     pub minefield: Option<Minefield>,
     /// Attached `et_shield` row: a shield its owner's researches give it (task 157).
     pub shield: Option<Shield>,
+    /// Attached `et_field_emitter` row: a fortification that raises an energy field (task 156).
+    pub field_emitter: Option<FieldEmitter>,
     /// Attached `et_colony` row and its `et_colony_site` rows: an automated colony.
     pub colony: Option<Colony>,
     /// Attached `et_market` row: its owner trades resources here (task 107).
@@ -1639,6 +1641,21 @@ pub struct Shield {
     pub recharge_resource_id: Option<DefId>,
     /// Of that resource per 100 points restored.
     pub recharge_cost: i64,
+}
+/// One `et_field_emitter` row: a fortification that raises an energy field to the next emitter
+/// of its owner along its facing, powered by an upkeep (task 156).
+#[derive(Debug, Clone)]
+pub struct FieldEmitter {
+    /// The `entity_type_id` column.
+    pub entity_type_id: DefId,
+    /// Most tiles of field between it and the next emitter.
+    pub gap: i64,
+    /// Ticks one payment of its upkeep powers it.
+    pub upkeep_period_ticks: i64,
+    /// What its upkeep draws; `None` when it is free.
+    pub upkeep_resource_id: Option<DefId>,
+    /// Of that resource per period.
+    pub upkeep: i64,
 }
 /// One `et_detector` row: a jump detector (task 118).
 #[derive(Debug, Clone)]

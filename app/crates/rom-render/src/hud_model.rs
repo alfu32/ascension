@@ -285,6 +285,20 @@ pub struct HudShield {
     pub charge: u16,
 }
 
+/// A stretch of energy field standing between two shield emitters on the shown surface (task
+/// 156): a translucent, softly glowing wall along the line between them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HudField {
+    /// The emitter it runs from; varies the shimmer.
+    pub id: u32,
+    /// Surface face of both ends.
+    pub face: u8,
+    /// Centre of the tile it leaves from, milli-tiles.
+    pub from: (i32, i32),
+    /// Centre of the tile it reaches, milli-tiles.
+    pub to: (i32, i32),
+}
+
 /// A blow a shield's dome took on the shown surface (task 157): it flares where it was struck.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HudShieldHit {

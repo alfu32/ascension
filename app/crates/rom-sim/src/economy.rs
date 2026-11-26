@@ -26,6 +26,20 @@ impl World {
         Ok(())
     }
 
+    /// Empties a player's store of a resource, for scenario setup (task 156: a scene without
+    /// energy).
+    pub fn drain(&mut self, player: PlayerId, resource: DefId) -> Result<(), SimError> {
+        if !self.rules.resources.contains_key(&resource) {
+            return Err(SimError::UnknownResource(resource));
+        }
+        self.players
+            .get_mut(&player)
+            .ok_or(SimError::UnknownPlayer(player))?
+            .resources
+            .insert(resource, 0);
+        Ok(())
+    }
+
     /// Evaluates the player's current population cap.
     pub fn population_cap(&self, player: PlayerId) -> i64 {
         self.rules.player_stat(

@@ -744,6 +744,52 @@ def shield_hum(seed=31, seconds=8.0):
     return out + whine + crackle
 
 
+def field_hum(seed=47, seconds=8.0):
+    """A standing energy field between shield emitters (task 156): a lower, buzzier drone than the
+    dome's, its odd harmonics pulsing slowly along the line, with a dry crackle."""
+    r = rng(seed)
+    n = n_of(seconds)
+    t = np.arange(n) / SR
+    out = np.zeros(n)
+    for f, a in [(50, 1.0), (50.25, 0.6), (150, 0.5), (250, 0.3), (350.5, 0.18), (450, 0.1)]:
+        out += a * np.sin(2 * np.pi * qf(f, seconds) * t + r.uniform(0, 6))
+    pulse = 0.75 + 0.25 * np.sin(2 * np.pi * qf(0.75, seconds) * t)
+    out *= pulse * (0.85 + 0.15 * wander(r, n, 6))
+    buzz = cfilter(np.sign(np.sin(2 * np.pi * qf(100, seconds) * t)), lo=600, hi=3000) * 0.05
+    crackle = cnoise(r, n, 3000, 9000) * 0.04 * wander(r, n, 11, 0.1, 1.0)
+    return out + buzz * pulse + crackle
+
+
+def field_up(r):
+    """An energy field rising between two emitters (task 156): a rising electric sweep, a
+    capacitor's thump as it closes, then the hum settling in."""
+    n = n_of(1.3)
+    t = np.arange(n) / SR
+    f = r.uniform(90, 110) + r.uniform(500, 650) * np.minimum(t / 0.45, 1) ** 2
+    ph = 2 * np.pi * np.cumsum(f) / SR
+    sweep = (np.sin(ph) + 0.35 * np.sin(3 * ph)) * np.minimum(t / 0.4, 1) * env_ad(n, 0.45, 0.35) * 0.5
+    thump = np.sin(2 * np.pi * (70 - 20 * np.minimum(t, 0.3)) * t) * env_ad(n, 0.003, 0.15)
+    thump = np.roll(thump, n_of(0.42)) * (t >= 0.42)
+    crackle = bandpass(r.standard_normal(n), 2500, 8000) * env_ad(n, 0.4, 0.25) * 0.12
+    hum = sum(np.sin(2 * np.pi * k * 50 * t) / k for k in (1, 3, 5)) * np.clip((t - 0.4) / 0.3, 0, 1) \
+        * np.exp(-np.maximum(t - 0.7, 0) / 0.35) * 0.3
+    return sweep + thump + crackle + hum
+
+
+def field_down(r):
+    """An energy field dropping (task 156): the hum sags and stutters, a falling sweep and a
+    last fizzle."""
+    n = n_of(1.2)
+    t = np.arange(n) / SR
+    f = r.uniform(520, 620) * np.exp(-t / 0.3) + r.uniform(45, 60)
+    ph = 2 * np.pi * np.cumsum(f) / SR
+    stutter = 0.6 + 0.4 * np.sign(np.sin(2 * np.pi * (14 - 8 * np.minimum(t, 1)) * t))
+    fall = (np.sin(ph) + 0.3 * np.sin(3 * ph)) * stutter * env_ad(n, 0.01, 0.35) * 0.55
+    fizzle = highpass(r.standard_normal(n), 3000) * env_ad(n, 0.02, 0.12) * 0.15
+    pop = lowpass(r.standard_normal(n), 1200) * env_ad(n, 0.002, 0.04) * 0.3
+    return fall + np.roll(fizzle, n_of(0.25)) * (t >= 0.25) + pop
+
+
 def crossbow(r):
     """A crossbow: the trigger, a hard snap of the short bow and the bolt away."""
     n = n_of(0.7)
@@ -1270,6 +1316,10 @@ def main():
     variants("act.shield_zap", shield_zap, 44, 3)
     variants("act.shield_hit", shield_hit, 45, 2)
     save("act.shield_hum", shield_hum(), "loop", peak=0.85, rms=0.12)
+    # Task 156: the fields of shield emitters.
+    save("act.field_hum", field_hum(), "loop", peak=0.85, rms=0.12)
+    variants("act.field_up", field_up, 46, 2)
+    variants("act.field_down", field_down, 48, 2)
 
     ui = dict(peak=0.6)
     variants("ui.click", click, 70, 3, **ui)

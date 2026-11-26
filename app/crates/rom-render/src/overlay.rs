@@ -7,6 +7,7 @@ use crate::entities::{EntityView, FlatGround, Footing, building_height, owner_co
 use crate::hud::{HudSnapshot, MarkerKind};
 
 mod effects;
+mod fields;
 mod shields;
 
 /// A coloured line segment.
@@ -455,6 +456,7 @@ pub fn build_overlays_on(
     }
     effects::bombardment(out, ground, right, views, hud);
     shields::domes(out, ground, right, views, hud);
+    fields::walls(out, ground, hud);
     for id in &hud.selected {
         let Ok(index) = views.binary_search_by_key(id, |v| v.id) else {
             continue;

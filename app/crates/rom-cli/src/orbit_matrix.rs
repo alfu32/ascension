@@ -847,7 +847,9 @@ fn town_research(rules: &Rules, age: i64) -> Vec<DefId> {
 
 /// The buildings of a town of `age`, the city first: the city type, then one of every other
 /// building its builders construct in that age (the newest of each line), biggest first;
-/// cities, gather sites and defences that reach the orbit left out.
+/// cities, gather sites and defences that reach the orbit left out, and fortification lines and
+/// minefields too (task 156): they are laid across the way beyond a town, not in it, and do not
+/// count as a town's buildings (task 147).
 pub fn town(world: &World, setup: &Setup, age: i64) -> Vec<DefId> {
     let rules = world.rules();
     let Some(city) = world.city_type(PlayerId(1)) else {
@@ -867,6 +869,8 @@ pub fn town(world: &World, setup: &Setup, age: i64) -> Vec<DefId> {
             && et.class == EntityClass::Building
             && et.territory.as_ref().is_none_or(|t| !t.is_city)
             && !reaches_orbit(rules, b)
+            && et.fortification.is_none()
+            && et.minefield.is_none()
             && b != city
     });
     others.sort_by_key(|b| {

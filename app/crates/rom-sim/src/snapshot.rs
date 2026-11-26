@@ -1677,6 +1677,8 @@ impl World {
                 request.side = side;
             }
         }
+        // Derived: the energy fields standing between powered emitters (task 156).
+        world.refresh_fields();
         Ok(world)
     }
 }

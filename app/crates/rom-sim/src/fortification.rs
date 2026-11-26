@@ -44,7 +44,9 @@ impl World {
     /// The sites of a fortification line of `segment` (a type with an `et_fortification` row
     /// that is no gate) along the polyline `points`: the tiles each straight stretch crosses,
     /// eight-connected (a unit cannot slip between two diagonal neighbours), each once, in
-    /// order. The site nearest each of `gates` takes the segment's gate type. Each site says
+    /// order. The site nearest each of `gates` takes the segment's gate type. A segment that
+    /// raises a field (task 156) keeps one every `gap` + 1 tiles where the line runs straight.
+    /// Each site says
     /// whether the player may place it now (the check `construct` makes, without the price);
     /// an interface orders a `construct` for each one it keeps.
     pub fn line_sites(
@@ -145,8 +147,43 @@ impl World {
             }
         }
         let covered = |pos: Pos| gates_laid.iter().any(|(_, _, b)| inside(*b, pos));
+        let segment_at =
+            |i: usize| !covered(centres[i]) && !gates_laid.iter().any(|(g, _, _)| *g == i);
+        // A line of field emitters (task 156) keeps an emitter every `gap` + 1 tiles where it
+        // runs straight, each facing the next, so the field spans the tiles left between; a
+        // turn, a gate and the line's ends keep theirs.
+        let gap = et.field_emitter.as_ref().map_or(0, |f| f.gap.clamp(0, 16)) as usize;
+        let mut kept = vec![true; n];
+        if gap > 0 {
+            let step = |i: usize| geo.vector(centres[i], centres[i + 1]);
+            let mut i = 0;
+            while i < n {
+                if !segment_at(i) {
+                    i += 1;
+                    continue;
+                }
+                let mut end = i;
+                while end + 1 < n && segment_at(end + 1) {
+                    end += 1;
+                }
+                let mut at = i;
+                while at < end {
+                    let way = step(at);
+                    let mut next = at + 1;
+                    while next < end && next - at <= gap && step(next) == way {
+                        next += 1;
+                    }
+                    kept[at + 1..next].fill(false);
+                    at = next;
+                }
+                i = end + 1;
+            }
+        }
         let mut out = Vec::with_capacity(n);
         for (i, &pos) in centres.iter().enumerate() {
+            if !kept[i] {
+                continue;
+            }
             if let Some(&(_, facing, _)) = gates_laid.iter().find(|(g, _, _)| *g == i) {
                 let gate = gate_type.expect("a gate was laid");
                 out.push(LineSite {
@@ -157,7 +194,7 @@ impl World {
                         .placement_turned(player, gate, pos, facing, false)
                         .map(|_| ()),
                 });
-            } else if !covered(pos) {
+            } else if segment_at(i) {
                 out.push(LineSite {
                     subject: segment,
                     pos,

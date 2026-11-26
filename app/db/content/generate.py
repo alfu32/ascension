@@ -743,6 +743,7 @@ def generate():
     militia(definition, row, tag, need, weapon)
     fortifications(definition, row, tag, need, produce, cost, modifier)
     shields(definition, row, tag, need, cost, modifier, sql.append)
+    shield_emitters(definition, row, tag, need, produce, cost)
     # Library grid: one row per age, the advance in column 0 and the tracks in 1-4,
     # three ages per page. Other research is listed by the age it needs.
     grid_columns = ['age'] + list(TRACKS)
@@ -1734,6 +1735,62 @@ def shields(definition, row, tag, need, cost, modifier, emit):
                 modifier(key, 'intercept.' + dc, pct, 'add', target)
             if pool:
                 modifier(key, 'shield_pool', pool, 'add', target)
+
+
+# Task 156 (owner, 2026-11-25): "it would be interesting if later after the fusion age we get a
+# shield emitter." The fortification line after the defensive line, from the Spacefaring age to
+# the last: emitters laid along a dragged line like walls, an energy field between neighbouring
+# emitters that blocks every walker, and a shield gate (3 tiles wide) that lets the owner's team
+# through. Each emitter pays an energy upkeep every period; unpaid, its field drops and only the
+# emitters block. The advance into the Spacefaring age changes the defensive lines and
+# checkpoints standing into emitters and shield gates, keeping their line and facing.
+# segment key, name, gate key, gate name, first age, last age, hit points, more a later age,
+# armour, prices of an emitter, build ticks, the kind before (segment, gate)
+SHIELD_EMITTERS = ('shield_emitter', 'Shield Emitter', 'shield_gate', 'Shield Gate', 'starfaring', 'federation',
+                   3800, 300, 12, {'metal': 45}, 120, ('defensive_line', 'checkpoint'))
+# Tiles of field between two emitters: a straight line has an emitter every FIELD_GAP + 1 tiles.
+FIELD_GAP = 2
+# Energy an emitter pays every FIELD_UPKEEP_PERIOD ticks (an income period); a gate pays
+# GATE_PRICE_PCT of it, as it costs.
+FIELD_UPKEEP = 2
+FIELD_UPKEEP_PERIOD = 600
+
+
+def shield_emitters(definition, row, tag, need, produce, cost):
+    """Task 156: the shield emitter, the shield gate and their field. Written after every other
+    definition so earlier ids stay."""
+    seg, name, gate, gate_name, first, last, hp, more, armour, prices, ticks, (old_seg, old_gate) = SHIELD_EMITTERS
+    first, last = AGES.index(first), AGES.index(last)
+    definition('entity_type', 'bld.' + seg, name)
+    definition('entity_type', 'bld.' + gate, gate_name)
+    for full, pct, price_pct, ticks_pct, old, width in (
+            ('bld.' + seg, 100, 100, 100, old_seg, 1),
+            ('bld.' + gate, GATE_HP_PCT, GATE_PRICE_PCT, GATE_TICKS_PCT, old_gate, GATE_WIDTH)):
+        row('entity_type', id=Ref(full), **{'class': 'building'}, ui_group='fortification', hp=hp * pct // 100,
+            armor=armour, armor_class_id=Ref('structure', 'armor_class'), los=FORTIFICATION_SIGHT, footprint_w=width,
+            footprint_h=1, build_ticks=ticks * ticks_pct // 100, ramp_mode='none', limit_scope='none', limit_count=0,
+            upgrades_from_id=Ref('bld.' + old), first_age_id=Ref('age.' + AGES[first]))
+        need(full, 'age.' + AGES[first])
+        for builder in ('citizen', 'worker_drone'):
+            produce('unit.' + builder, full, 'construct', 'fortification')
+        row('placement_rule', entity_type_id=Ref(full), rule='in_own_territory')
+        row('placement_rule', entity_type_id=Ref(full), rule='on_terrain', ref_def_id=Ref('ter.plain'))
+        tag(full, 'building', 'mechanical', 'fortification')
+        cost(full, {r: n * price_pct // 100 for r, n in prices.items()})
+        # The advance into the first age changes the standing ones of the kind before.
+        row('tech_effect', tech_id=Ref('tech.age.' + AGES[first]), effect='upgrade_type',
+            from_def_id=Ref('bld.' + old), target_def_id=Ref(full))
+        for age in range(first + 1, last + 1):
+            advance = 'tech.age.' + AGES[age]
+            row('modifier', source_def_id=Ref(advance), target_def_id=Ref(full), stat_key='hp', op='add',
+                value=more * pct // 100)
+            row('modifier', source_def_id=Ref(advance), target_def_id=Ref(full), stat_key='armor', op='add', value=1)
+            row('modifier', source_def_id=Ref(advance), target_def_id=Ref(full), stat_key='build_time', op='add',
+                value=FORTIFICATION_TICKS_PER_AGE * ticks_pct // 100)
+        row('et_field_emitter', entity_type_id=Ref(full), gap=FIELD_GAP, upkeep_period_ticks=FIELD_UPKEEP_PERIOD,
+            upkeep_resource_id=Ref('res.energy'), upkeep=FIELD_UPKEEP * price_pct // 100)
+    row('et_fortification', entity_type_id=Ref('bld.' + gate), gate=1)
+    row('et_fortification', entity_type_id=Ref('bld.' + seg), gate=0, gate_type_id=Ref('bld.' + gate))
 
 
 # Automated sites whose key and name are not "auto_<site>" / "Automated <Site>"
