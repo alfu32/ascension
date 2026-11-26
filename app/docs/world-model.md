@@ -9,8 +9,9 @@ set in open space" model (`database.md` section 6, `research/03-timeline.md`
 - Every planet is a **sphere**. A planetary-tier player's camera stays around
   the home planet, limited by `age.view_range`; zero allows the whole globe.
 - Interplanetary-tier players can zoom continuously from their planet to the
-  home star system. Interstellar-tier players can also reach the star map,
-  visit known systems and zoom in on their planets. Each player unlocks these
+  home star system. Interstellar-tier players can also reach the levels beyond
+  a system (the cluster, quadrant and galaxy views, task 162), visit known
+  systems and zoom in on their planets. Each player unlocks these
   tiers separately through `age.map_scale`, using the tier's numeric rank.
 - Ground, sea and air play happen on planet surfaces. Space play happens in
   star-system space and on the routes between systems.
@@ -78,7 +79,7 @@ skirmish maps and the existing scenarios.
 
 | Level | Contents | Coordinates |
 | --- | --- | --- |
-| Star map | star systems, routes between them | 3D system positions (real stars, integers) |
+| Star map (cluster, quadrant and galaxy views) | star systems, routes between them | 3D system positions (real stars, integers); star clusters on the galactic disk |
 | Star system | a star, habitable planets, resource bodies (moons, asteroids, small planets) | continuous integer plane per system |
 | Orbit | ships and stations near a body | body + slot |
 | Surface | tiles of one habitable planet | `(face, x, y)` |
@@ -269,7 +270,7 @@ was not opened, its order is tested).
 | --- | --- | --- |
 | 0, planetary | home planet, positive `view_range` limits ground half-width; zero shows the globe | ancient; fusion has zero range |
 | 1, interplanetary | home system seen from fusion (task 138); since task 155 ships move and orbit within it from fusion too: the space frigate and the transport, which founds colonies on its other planets | fusion |
-| 2, interstellar | star map and route travel (jumps) between systems | expansion (shown as the Starfaring Age since task 155) |
+| 2, interstellar | the star map (since task 162 the cluster, quadrant and galaxy views) and route travel (jumps) between systems | expansion (shown as the Starfaring Age since task 155) |
 
 Research updates the existing camera's limit immediately without moving it.
 Starting zoom-out and mouse-wheel zoom obey the same limits. The code reads
@@ -753,6 +754,95 @@ flies the camera down to that planet.
   pays), the state `World::body_claim`. The event line says "Tar Moon
   claimed: Oil +42 / 30 s", "Tar Moon lost" or "Tar Moon contested", and the
   card of a ship holding a claim says "Holds Tar Moon: Oil +42 / 30 s".
+
+### Five zoom levels (task 162)
+
+The owner (2026-11-26): "zooms are in order of magnitude of the coverage: planet / system /
+cluster -> we see individual stars / quadrant -> we see individual clusters / galaxy -> we see
+individual clusters", and in the system view "we cant even glimpse at 2 solar systems with inner
+plannets ... on the same screen". The catalogue's stars are grouped into star clusters of a few
+systems each (`database.md` "Star catalogue", "Star clusters"), and beyond a system the zoom
+shows them in three more levels, each nested in the next as before ("Rendering notes"). The
+code is `rom-render` `galaxy.rs` (where systems stand) and `zoom.rs` (the ladder).
+
+| Level | Shows | Positions |
+| --- | --- | --- |
+| Planet (surface, globe) | the surface and the globe | as before |
+| System | one system's star, planets and bodies | as before |
+| Cluster view | the systems of one cluster, as stars, and their routes | the stars' true 3D offsets from the cluster's centre, spread (below) |
+| Quadrant view | the clusters of one galactic quadrant, each a small labelled group of stars | the galactic disk |
+| Galaxy view | every cluster of the match, the four quadrants marked | the galactic disk |
+
+These are zoom levels. The map styles Cluster, Sector, Quadrant and Galaxy are map sizes (how
+much of the catalogue a match takes, "Map styles"); a Cluster match of 10–15 systems usually
+spans two to four star clusters, so it has a galaxy view of its own.
+
+- **The cluster view.** The previous star map, limited to the anchored cluster's systems; the
+  3D turns, flying and the level key (F4) work as before. Each cluster is spread about its
+  centre so that its closest pair stands `system_view_clearance()` = 73 500 map units apart,
+  measured from the system view: at the hand-over its camera is 5 000 map units from the
+  focus, which pans up to twice the system's radius (2 500 map units) from the star, so the eye
+  is at most 7 500 from it; another system's own detail (planets, rings, ships) is gone below
+  0.02 rad (`SYSTEM_DETAIL_GONE`), so its 1 250-unit disc of orbits must lie 62 500 units
+  from any such eye; and in the plane of the focus it must lie beyond the corner of the widest
+  picture (45 degrees high, 2.4 wide: 5 385 units) plus both discs and the pan. The first
+  rule decides; five percent to spare. Every cluster of a match is spread to the same radius
+  (the one its most crowded cluster needs: 740 000 map units for the whole catalogue, the
+  Sham group with a pair 60 apart and a radius of 606), so one zoom frames any of them: the
+  cluster view's widest is four radii (a system on the near side stays in the picture). Other clusters' systems are not drawn there; a route
+  that leaves the cluster runs to its exit, 1.3 radii from the centre toward the other
+  cluster on the disk, where that cluster is named ("to Pleiades"); a double click there flies
+  into it. A ship on such a route is drawn along it, leaving toward the exit.
+- **The disk.** A cluster stands at `star_cluster.x, y` (its centre's galactic longitude at its
+  map distance from the Sun, the latitude dropped), 2 000 map units per catalogue unit, in the
+  frame's `y = 0` plane (galactic north up). It is drawn as its stars, their offsets from the
+  centre flattened onto the plane and shrunk to a fifth, with its name; its footprint (those
+  stars plus 25 catalogue units of room) overlaps no other's, which the generator ensures.
+  Routes between clusters are lines between their systems' places on the disk; ships ride
+  them. Past the whole cluster the anchored cluster flattens onto the disk over 1.2 log units
+  (about two wheel notches) while the others fade in, and the space camera's elevation eases up
+  to 55 degrees (unless it is steeper), so the disk is seen from above; turning and flying stay
+  free. The galaxy view draws faint lines from the Sun along longitudes 0, 90, 180 and 270
+  degrees and names the quadrants I to IV.
+- **Skipped levels.** A level that would show one item is skipped: a match of one system (the
+  Planet and Solar styles) has the planet and the system only; a match whose systems are all in
+  one cluster ends at the cluster view; a match inside one quadrant goes from the cluster view
+  to the galaxy view.
+- **Widest zooms** (map units): the cluster view four cluster radii; the quadrant view 2.6
+  times the reach about its middle that holds nine in ten of the widest quadrant's clusters
+  (the few far out are seen by panning); the galaxy view 2.6 times the reach that holds every
+  cluster. Each level spans at least 0.7 log units (the disk 1.2 more). For the whole catalogue:
+  3.0 million, 20 million and 43 million. A wheel notch beyond a system is a factor of 1.65 (was
+  1.4), reached over one log unit past the system's hand-over: whole system to whole cluster 14
+  notches, to the quadrant 4 more, to the galaxy 2 more
+  (`the_wheel_crosses_the_levels_in_a_few_notches`).
+- **Clicks and flights.** Double-clicking a cluster on the disk (or the exit toward it) flies
+  into its cluster view, centred on it; double-clicking a system in the cluster view flies into
+  it; the wheel in over a cluster enters the one whose footprint lies nearest the focus, then
+  the system nearest it. Home returns to the home planet. On the disk a pick takes the cluster
+  whose footprint lies nearest the point of the disk under the pointer (its distance less its
+  room), so it never yields to a neighbour; tested over the whole catalogue at every level
+  (`picking_never_hits_a_neighbour_at_any_level`).
+- **The minimap** shows the level's content: the anchored cluster's systems and its routes' exits
+  in the cluster view, the clusters as dots on the disk.
+- **From the Sun** (F2) every system stands at its true direction and distance again, the
+  constellations as before.
+- `--view` takes `cluster`, `quadrant` and `galaxy` (`starmap` is the galaxy view); the script
+  command `visit star:Alpha_Centauri` flies to a named star's system.
+
+Screenshots (release build, `--universe --zoom-all --ai none`, seed 1, scripts
+`tasks/162-*-script.txt`): `img/162-cluster-view.png` (a Galaxy match, `--view cluster`: the
+Rigel group's five systems, routes leaving to the Meissa and Mintaka groups),
+`img/162-cluster-view-cluster-style.png` (a Cluster-style match: the Algol group's three
+systems), `img/162-quadrant-view.png` (Galaxy, `--view quadrant`: quadrant III about the home
+cluster), `img/162-galaxy-view.png` (Galaxy, `--view galaxy`: every cluster, the quadrants
+marked), `img/162-wheel-strip.png` (0 to 30 notches out from the home system view of a Galaxy
+match: the system, the cluster view, the cluster flattening onto the disk, the galaxy) and
+`img/162-alpha-centauri.png` (Alpha Centauri's system view near its widest, before the hand-over:
+no other system on screen; its bodies are hidden, it is unexplored).
+
+Presentation only: routes, lengths, travel, homes and fairness keep the true 3D positions, and
+no rule reads the clusters yet (task 163 will).
 
 ### Moving between levels (task 53)
 

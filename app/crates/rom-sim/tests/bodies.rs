@@ -78,6 +78,7 @@ fn universe(generated: &[u32]) -> World {
         systems: vec![SystemInfo {
             z: 0,
             constellation: String::new(),
+            cluster: None,
             id: 1,
             name: "Testar".into(),
             x: 0,

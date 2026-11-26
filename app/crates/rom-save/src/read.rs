@@ -892,7 +892,7 @@ fn snapshot(conn: &Connection, rules: &Rules) -> Result<Snapshot, SaveError> {
     };
     let systems = query_vec(
         conn,
-        "SELECT id, name, x, y, z, constellation FROM star_system ORDER BY id",
+        "SELECT id, name, x, y, z, constellation, cluster_id FROM star_system ORDER BY id",
         |r| {
             Ok(SystemInfo {
                 id: uint(r, 0, "system id")?,
@@ -901,6 +901,7 @@ fn snapshot(conn: &Connection, rules: &Rules) -> Result<Snapshot, SaveError> {
                 y: uint(r, 3, "system y")?,
                 z: uint(r, 4, "system z")?,
                 constellation: text(r, 5)?,
+                cluster: ouint(r, 6, "system cluster")?,
             })
         },
     )?;

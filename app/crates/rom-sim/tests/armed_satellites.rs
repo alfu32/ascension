@@ -70,6 +70,7 @@ fn world(rules: &Arc<Rules>) -> World {
         systems: vec![SystemInfo {
             z: 0,
             constellation: String::new(),
+            cluster: None,
             id: 1,
             x: 0,
             y: 0,

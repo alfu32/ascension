@@ -2296,6 +2296,21 @@ pub struct Star {
     /// Galactic longitude seen from the Sun, milli-degrees 0..360000, computed from the
     /// right ascension and declination (task 89: `glon_mdeg / 90000` is the quadrant, 0 for I).
     pub glon_mdeg: i64,
+    /// The `star_cluster` it belongs to (task 162).
+    pub cluster_id: u32,
+}
+/// One `star_cluster` row (task 162): a few stars shown together in the cluster view, placed on
+/// the galactic disk for the quadrant and galaxy views. Display only.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StarCluster {
+    /// The `id` column: clusters in order of their centre's distance from the Sun.
+    pub id: u32,
+    /// "<star> group", or a traditional open-cluster name.
+    pub name: String,
+    /// Place on the galactic disk in map units, toward galactic longitude 0.
+    pub x: i64,
+    /// Place on the galactic disk in map units, toward galactic longitude 90 degrees.
+    pub y: i64,
 }
 /// One `constellation_line` row: a stick-figure line, `star_a < star_b`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2535,6 +2550,8 @@ pub struct Rules {
     pub constellations: BTreeMap<u32, Constellation>,
     /// Loaded `star` rows, keyed by id: the real star catalogue.
     pub stars: BTreeMap<u32, Star>,
+    /// Loaded `star_cluster` rows, keyed by id (task 162).
+    pub star_clusters: BTreeMap<u32, StarCluster>,
     /// Loaded `constellation_line` rows in star order.
     pub constellation_lines: Vec<ConstellationLine>,
     /// Loaded `map_style_feature` rows, keyed by their owning id or key.

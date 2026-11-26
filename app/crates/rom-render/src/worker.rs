@@ -883,7 +883,19 @@ fn render_loop(shared: &Shared) {
             && let Some(body) = lock(&shared.fly_body).take()
             && let Some(index) = zoom_camera.scene().body_index(body)
         {
-            zoom_camera.fly_to_target(crate::zoom::Target::Body(index), orbit_camera);
+            let scene = zoom_camera.scene();
+            let system = scene.bodies[index].system;
+            let star = scene.bodies[index].kind == crate::universe::BodyViewKind::Star;
+            if star && zoom_camera.system_id() != Some(system) {
+                // The star of another system: across to it, the whole system in view.
+                let place = FocusPlace::System {
+                    system,
+                    at: [0.0; 3],
+                };
+                let _ = zoom_camera.focus(place, orbit_camera);
+            } else {
+                zoom_camera.fly_to_target(crate::zoom::Target::Body(index), orbit_camera);
+            }
         }
         if let Some(published) = lock(&shared.universe).take() {
             pending_universe = Some(published);
@@ -1595,13 +1607,18 @@ fn render_loop(shared: &Shared) {
                 if let (Some((hover, (x, y))), Some(_)) = (pointing, zoom.pointer()) {
                     let ratio = size.0 as f32 / layout.0.max(1) as f32;
                     let ships = !hud_snapshot.selected.is_empty();
-                    let (mut name, action) = space_hover_help(
-                        zoom.scene(),
-                        hover,
-                        zoom.surface_body(),
-                        ships,
-                        &space_snapshot,
-                    );
+                    let (mut name, action) = match hover {
+                        SpaceHover::Target(crate::zoom::Target::Cluster(group)) => {
+                            crate::space::cluster_help(zoom.layout(), group)
+                        }
+                        _ => space_hover_help(
+                            zoom.scene(),
+                            hover,
+                            zoom.surface_body(),
+                            ships,
+                            &space_snapshot,
+                        ),
+                    };
                     // A ship is named by the snapshot, in its side's colour (task 151).
                     let mut name_colour = [255, 240, 200, 255];
                     if let SpaceHover::Ship(id) = hover
@@ -1686,6 +1703,9 @@ fn render_loop(shared: &Shared) {
                         now_ms: 0,
                     };
                     let world_help = zoom.as_ref().and_then(|zoom| match pointing {
+                        Some((SpaceHover::Target(crate::zoom::Target::Cluster(group)), _)) => {
+                            Some(crate::space::cluster_help(zoom.layout(), group))
+                        }
                         Some((hover, _)) => Some(space_hover_help(
                             zoom.scene(),
                             hover,
@@ -2045,7 +2065,7 @@ fn apply_orbit_limits(
 /// The farthest level the zoom may reach now.
 fn current_cap(shared: &Shared) -> Level {
     if shared.zoom_all.load(Ordering::Relaxed) {
-        return Level::StarMap;
+        return Level::Galaxy;
     }
     Level::ALL
         .get(usize::from(shared.zoom_cap.load(Ordering::Relaxed)))
@@ -2117,7 +2137,7 @@ fn zoom_event(
             zoom.level_view();
             true
         }
-        InputEvent::KeyDown(Key::CelestialHome) if zoom.cap() >= Level::StarMap => {
+        InputEvent::KeyDown(Key::CelestialHome) if zoom.cap() >= Level::Cluster => {
             if let Some(index) = zoom.scene().systems.iter().position(|s| s.celestial) {
                 zoom.fly_to_target(crate::zoom::Target::System(index), orbit);
             }
@@ -2481,7 +2501,28 @@ fn level_name(zoom: &ZoomCamera) -> String {
             format!("Planet {planet}")
         }
         Level::System => format!("System {system}"),
-        Level::StarMap => "Star map".to_owned(),
+        Level::Cluster => {
+            let anchored = zoom.anchored_group();
+            let name = zoom
+                .layout()
+                .groups
+                .get(anchored)
+                .map_or("", |g| g.name.as_str());
+            format!("Cluster view: {name}")
+        }
+        Level::Quadrant => {
+            let quadrant = zoom
+                .layout()
+                .groups
+                .get(zoom.anchored_group())
+                .map_or(0, |g| g.quadrant);
+            format!(
+                "Quadrant view: {}",
+                ["Quadrant I", "Quadrant II", "Quadrant III", "Quadrant IV"]
+                    [usize::from(quadrant.min(3))]
+            )
+        }
+        Level::Galaxy => "Galaxy view".to_owned(),
     }
 }
 
@@ -2508,11 +2549,12 @@ fn ship_points(
     render_per_canvas: f32,
 ) -> Vec<ShipPoint> {
     let scene = zoom.scene();
-    if zoom.level() >= Level::StarMap {
+    if zoom.level() >= Level::Cluster {
         let view = zoom.map_view(orbit);
         let distance = zoom.scale().map_distance(zoom.l());
         let (_, beside) = crate::space::map_mark_scale(&view, distance);
-        return crate::space::map_ship_marks(scene, zoom.map_positions(), space, beside)
+        let shown = zoom.map_shown();
+        return crate::space::map_ship_marks(scene, &zoom.map_positions(), &shown, space, beside)
             .into_iter()
             .flat_map(|mark| {
                 let at = mark.at;
@@ -2591,7 +2633,7 @@ fn space_context<'a>(
 ) -> OwnedSpaceContext<'a> {
     let size = (canvas.width, canvas.height);
     let centre_y = centre_of(canvas, hud_visible);
-    let star_map = zoom.level() >= Level::StarMap;
+    let star_map = zoom.level() >= Level::Cluster;
     let view = zoom.space_view_at(orbit, size, centre_y);
     OwnedSpaceContext {
         markers: zoom.markers(&view),
@@ -2677,7 +2719,7 @@ mod tests {
             (110_000, Level::Globe),
             (0, Level::Globe),
             (0, Level::System),
-            (0, Level::StarMap),
+            (0, Level::Cluster),
         ] {
             let mut orbit = OrbitCamera::at(0.0, 0.0, HOME_DISTANCE, 0.0, radius, 3.0 * radius);
             let mut zoom = ZoomCamera::new(Arc::clone(&scene), scale, Some(home), cap);
@@ -2846,7 +2888,7 @@ mod tests {
                 body: 2,
                 dir: orbit.dir,
             }),
-            Level::StarMap,
+            Level::Cluster,
         );
         let ship = ShipView {
             id: 40,
@@ -2910,7 +2952,7 @@ mod tests {
             zoom.advance(0.05);
             zoom.sync_orbit(&mut orbit);
         }
-        assert_eq!(zoom.level(), Level::StarMap);
+        assert_eq!(zoom.level(), Level::Cluster);
         let target = zoom.map_target(&orbit);
         assert!((target[0] - middle[0]).hypot(target[2] - middle[2]) < 1.0);
         let follow = steer_to(

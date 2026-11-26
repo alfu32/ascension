@@ -347,6 +347,17 @@ impl Rules {
         for style in self.map_styles.values() {
             self.validate_universe_knobs(style, &mut problems);
         }
+        // Task 162: every catalogue star belongs to a cluster of the catalogue.
+        for star in self.stars.values() {
+            if !self.star_clusters.contains_key(&star.cluster_id) {
+                problems.push(Problem {
+                    message: format!(
+                        "star {} names cluster {}, which does not exist",
+                        star.name, star.cluster_id
+                    ),
+                });
+            }
+        }
         self.validate_handicaps(&mut problems);
         self.validate_reachability(&mut problems);
         self.validate_brushes(&mut problems);

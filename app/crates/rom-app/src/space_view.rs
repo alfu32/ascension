@@ -701,8 +701,8 @@ pub fn reach_hint(rank: i64) -> Option<&'static str> {
              double-click a planet to fly there",
         ),
         2.. => Some(
-            "New reach: the star map. Scroll out past the system to see it; \
-             double-click or scroll in on a system to enter it",
+            "New reach: the stars. Scroll out past the system to the cluster view, then the \
+             quadrant and galaxy views; double-click or scroll in on a system to enter it",
         ),
         _ => None,
     }

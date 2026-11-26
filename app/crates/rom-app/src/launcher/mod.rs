@@ -112,7 +112,7 @@ fn style_line(rules: &Rules, style: &rom_rules::MapStyle) -> String {
             style.resource_bodies_per_system_min, style.resource_bodies_per_system_max
         ),
         StarRegion::Nearest => format!(
-            "{}–{} star systems, routes between them",
+            "{}–{} neighbouring star systems, routes between them",
             style.systems_min, style.systems_max
         ),
         StarRegion::Wedge => {
@@ -236,7 +236,12 @@ impl Catalog {
                 ("age", age_choices),
                 ("gallery", gallery),
                 ("model", models),
-                ("view", choices(&["surface", "globe", "system", "starmap"])),
+                (
+                    "view",
+                    choices(&[
+                        "surface", "globe", "system", "cluster", "quadrant", "galaxy",
+                    ]),
+                ),
                 ("sun", choices(&["orbit", "fixed", "night"])),
                 ("graticule", choices(&["on", "off"])),
                 ("grass", choices(&["on", "off"])),

@@ -1172,6 +1172,17 @@ fn load_star(conn: &Connection) -> Result<Vec<Star>, RulesError> {
             y: row.get("y")?,
             z: row.get("z")?,
             glon_mdeg: row.get("glon_mdeg")?,
+            cluster_id: row.get("cluster_id")?,
+        })
+    })
+}
+fn load_star_cluster(conn: &Connection) -> Result<Vec<StarCluster>, RulesError> {
+    read(conn, "SELECT * FROM star_cluster ORDER BY id", |row| {
+        Ok(StarCluster {
+            id: row.get("id")?,
+            name: row.get("name")?,
+            x: row.get("x")?,
+            y: row.get("y")?,
         })
     })
 }
@@ -1475,6 +1486,10 @@ impl Rules {
             .map(|r| (r.id, r))
             .collect();
         rules.stars = load_star(conn)?.into_iter().map(|r| (r.id, r)).collect();
+        rules.star_clusters = load_star_cluster(conn)?
+            .into_iter()
+            .map(|r| (r.id, r))
+            .collect();
         rules.constellation_lines = load_constellation_line(conn)?;
         rules.map_style_features = group(load_map_style_feature(conn)?, |r| r.map_style_id);
         rules.match_options = load_match_option(conn)?

@@ -27,6 +27,9 @@ pub struct SystemInfo {
     pub z: i32,
     /// Constellation of the system's star, for labels; empty when unknown.
     pub constellation: String,
+    /// The star cluster of the system's star (`star_cluster.id`, task 162), for the cluster,
+    /// quadrant and galaxy views; `None` for the celestial home and a system without a star.
+    pub cluster: Option<u32>,
 }
 
 /// A star, habitable planet or resource body.
@@ -410,6 +413,7 @@ mod tests {
                     y: 0,
                     z: 0,
                     constellation: String::new(),
+                    cluster: None,
                 },
                 SystemInfo {
                     id: 2,
@@ -418,6 +422,7 @@ mod tests {
                     y: 9,
                     z: 4,
                     constellation: "Test".into(),
+                    cluster: None,
                 },
             ],
             bodies: vec![

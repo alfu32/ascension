@@ -1744,6 +1744,7 @@ fn task_30_scripts_reach_the_capture_states_without_a_window() {
                     | ScriptAction::ChatKeys(_)
                     | ScriptAction::ToggleRankings
                     | ScriptAction::Visit(_)
+                    | ScriptAction::VisitStar(_)
                     | ScriptAction::Look(_) => {}
                 }
             }
@@ -2199,6 +2200,7 @@ fn wealth_screenshot_script_reaches_capture_without_a_window() {
                 | ScriptAction::ChatKeys(_)
                 | ScriptAction::ToggleRankings
                 | ScriptAction::Visit(_)
+                | ScriptAction::VisitStar(_)
                 | ScriptAction::Look(_) => {}
             }
         }
@@ -2417,6 +2419,7 @@ fn orbital_review_script_trains_launches_selects_and_bombards_through_picks() {
                 | ScriptAction::ChatKeys(_)
                 | ScriptAction::ToggleRankings
                 | ScriptAction::Visit(_)
+                | ScriptAction::VisitStar(_)
                 | ScriptAction::Look(_) => {}
             }
         }
@@ -2717,6 +2720,7 @@ fn colony_script_run() -> (crate::match_setup::Match, Controller, BodyId, u64) {
                 | ScriptAction::ChatKeys(_)
                 | ScriptAction::ToggleRankings
                 | ScriptAction::Visit(_)
+                | ScriptAction::VisitStar(_)
                 | ScriptAction::PointAt { .. }
                 | ScriptAction::Look(_) => {}
             }
@@ -2897,6 +2901,7 @@ fn orbital_combat_script(
                 | ScriptAction::ChatKeys(_)
                 | ScriptAction::ToggleRankings
                 | ScriptAction::Visit(_)
+                | ScriptAction::VisitStar(_)
                 | ScriptAction::Look(_) => {}
             }
         }

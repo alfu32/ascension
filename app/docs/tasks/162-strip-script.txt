@@ -1,0 +1,7 @@
+# Task 162: the wheel strip (img/162-wheel-strip.png), 30 notches out from the home system view;
+# the other frames change -30 to -0, -5, -10, -15, -20 and -25. Run with --universe --style
+# map.galaxy --seed 1 --zoom-all --view system --ai none --no-hud --size 960x600 --after 10.
+0 grant-age age.galactic
+0 grant-tech tech.automated_route_survey
+1 speed 100
+3 cam wheel -30 640,400

@@ -1228,6 +1228,16 @@ fn run(
                         }
                         ScriptAction::ToggleRankings => bridge.toggle_rankings(),
                         ScriptAction::Visit(body) => bridge.fly_to_body(body),
+                        ScriptAction::VisitStar(name) => {
+                            let star = world
+                                .bodies()
+                                .iter()
+                                .find(|b| b.kind == rom_rules::BodyKind::Star && b.name == name);
+                            match star {
+                                Some(star) => bridge.fly_to_body(star.id.0),
+                                None => eprintln!("script: no star named {name}"),
+                            }
+                        }
                         ScriptAction::Look(at) => bridge.focus_surface(at),
                         ScriptAction::PointAt { target, dx, dy } => {
                             let id = match target.strip_prefix('#') {
@@ -1808,9 +1818,9 @@ fn publish(
 /// Sends the current player's limits before camera setup and after every simulation update.
 pub(crate) fn publish_camera_limits(world: &World, me: PlayerId, bridge: &RenderBridge) {
     if let Some(player) = world.players().find(|p| p.id == me) {
-        // An ascended player moves freely at every level, planet to star map (task 76).
+        // An ascended player moves freely at every level, planet to galaxy (task 76).
         if world.is_ascended(player.id) {
-            bridge.publish_zoom_cap(Level::StarMap);
+            bridge.publish_zoom_cap(Level::Galaxy);
             bridge.publish_view_range(0);
             return;
         }

@@ -143,6 +143,9 @@ pub enum ScriptAction {
     ChatKeys(Vec<crate::chat::ChatKey>),
     /// The camera flies to a body and down to its globe (`visit rockN|planetN|=id`, task 77).
     Visit(u32),
+    /// The camera flies to the star of that name, in its system (`visit star:Alpha_Centauri`,
+    /// underscores for spaces; task 162).
+    VisitStar(String),
     /// The camera turns the planet shown to centre a tile (`look F:x,y`, task 77).
     Look(SurfacePos),
     /// The pointer moves onto an entity as it is drawn, offset by `dx`, `dy` canvas pixels
@@ -336,6 +339,10 @@ impl Script {
                 }
                 (Some(tick), Some("visit")) => {
                     let word = words.get(2).copied().unwrap_or("");
+                    if let Some(name) = word.strip_prefix("star:") {
+                        actions.push((tick, ScriptAction::VisitStar(name.replace('_', " "))));
+                        continue;
+                    }
                     let nth = |prefix: &str, list: &[u32]| {
                         word.strip_prefix(prefix)
                             .and_then(|n| n.parse::<usize>().ok())
