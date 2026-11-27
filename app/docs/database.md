@@ -3654,6 +3654,29 @@ every other definition, so earlier ids stay.
 - **Computer players**: `docs/computer-player.md`, "Buildings that lift off (task 170)".
 - **Counters** (card 71): no weapon changed and no unit's layer, so the fight matrix is unchanged; a
   building in the air is answered by anti-air.
+- **Measured.** `rom playthrough --seed 1` hash `18de088ac92ec4b0`, ascension `d75f72f81ad7b944`
+  (were `1071b06ad10873c5`, `51bf2c638609d395`): the playthrough researches every technology, now
+  222 (was 206: the sixteen Lift-off Engines); every age is reached at the same tick, the
+  playthrough ends 132 ticks later (61 211, was 61 079) and the ascension's resources differ by
+  those ticks of income (timber 738, was 720; metal, wealth, oil, energy 19 870, were 19 867).
+  The same binary on the rules of 0.156.0 gives the old hashes exactly, so nothing else moved.
+  `rom fight-matrix`: `strengths=305 unanswered=0`, unchanged. `rom duel` moderate–easiest,
+  seeds 1–20: 20–0, mean tick 46 393, unchanged (duels end long before the Spacefaring age).
+- **Tests.** `rom-sim/src/airlift_tests.rs` (engines needed and locked before their age; the
+  line's engines only; landing refused on a building, a mountain, across the borders and off the
+  map, abandoned when a building is put there meanwhile, then made turned a quarter; the queue
+  paused in the air and resumed on the ground; units under a landing moved out; anti-air reaches
+  it in the air, ground weapons only on the ground; a world restored mid-flight runs on alike),
+  `rom-save/tests/scenarios.rs` (`buildings_in_the_air`: rising with a queue, flying, settling,
+  saved and loaded), `rom-ai/tests/airlift.rs` (a besieged barracks flies to the safe city),
+  `rom-app` selection tests (Lift off, a right click flies it, the landing ghost turned and
+  checked, a click lands it), `rom-kit` (the engine hangs below the building). Each scenario
+  runs twice and compares state hashes.
+- **Screenshots** (the game's own paths, `--script`, release build): `img/170-barracks-lift-off.png`
+  (`tasks/170-lift-off-script.txt`: a barracks rising on its engines beside the city),
+  `img/170-factory-flying.png` (`tasks/170-factory-flight-script.txt`: a factory flying east over
+  the land), `img/170-landing-ghost.png` (`tasks/170-landing-ghost-script.txt`: the barracks in the
+  air and its landing ghost turned a quarter, green where it fits).
 - **Not yet (170b).** Climbing to orbit and travelling to another planet of the system (from the
   Starfaring age, its owner having a city there or the planet unclaimed), and jumping along
   routes to other stars (from the Age of Galactic War, under the jump rules: charge, inhibitors,
