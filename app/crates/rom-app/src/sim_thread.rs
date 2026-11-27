@@ -2160,6 +2160,10 @@ pub fn snapshot_on(
         let count = held.get(&entity.id).copied().unwrap_or(0);
         view.carrying = !view.building && count > 0;
         view.kept = if view.building { count } else { 0 };
+        // The units aboard an own carrier, as pips above it (task 167).
+        if entity.owner == me && world.is_carrier_type(entity.type_id) {
+            view.aboard = clamp_u8(world.passengers(entity.id).len() as i64);
+        }
         views.push(view);
     }
     for sighting in sightings {
@@ -2193,6 +2197,7 @@ pub fn snapshot_on(
                 carrying: false,
                 kept: 0,
                 capacity: 0,
+                aboard: 0,
                 carry_node: false,
                 under_construction: None,
                 model: model_of(building.owner, building.type_id),
@@ -2245,6 +2250,7 @@ pub fn snapshot_on(
             carrying: false,
             kept: 0,
             capacity: 0,
+            aboard: 0,
             carry_node: false,
             under_construction: Some((left * left).max(0.02)),
             model: model_of(wreck.owner, wreck.type_id),
@@ -2538,6 +2544,7 @@ fn view_of(
         carrying: false,
         kept: 0,
         capacity: et.keeper.as_ref().map_or(0, |k| clamp_u8(k.capacity)),
+        aboard: 0,
         carry_node: et
             .node
             .as_ref()

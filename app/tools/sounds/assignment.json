@@ -1150,6 +1150,20 @@
    "voice.citizen.select"
   ]
  },
+ "unit.cog": {
+  "move": [
+   "voice.cog.move"
+  ],
+  "moving": [
+   "unit.cog.moving"
+  ],
+  "research_done": [
+   "voice.cog.research_done"
+  ],
+  "select": [
+   "voice.cog.select"
+  ]
+ },
  "unit.combat_robot": {
   "attack": [
    "voice.combat_robot.attack"
@@ -1475,6 +1489,20 @@
   ],
   "select": [
    "voice.flak_gun.select"
+  ]
+ },
+ "unit.fluyt": {
+  "move": [
+   "voice.fluyt.move"
+  ],
+  "moving": [
+   "unit.fluyt.moving"
+  ],
+  "research_done": [
+   "voice.fluyt.research_done"
+  ],
+  "select": [
+   "voice.fluyt.select"
   ]
  },
  "unit.freight_wagon": {
@@ -1940,6 +1968,20 @@
   ],
   "select": [
    "voice.lancer.select"
+  ]
+ },
+ "unit.landing_ship": {
+  "move": [
+   "voice.landing_ship.move"
+  ],
+  "moving": [
+   "unit.landing_ship.moving"
+  ],
+  "research_done": [
+   "voice.landing_ship.research_done"
+  ],
+  "select": [
+   "voice.landing_ship.select"
   ]
  },
  "unit.laser_battery": {
@@ -3144,6 +3186,20 @@
   ],
   "select": [
    "voice.trireme.select"
+  ]
+ },
+ "unit.troopship": {
+  "move": [
+   "voice.troopship.move"
+  ],
+  "moving": [
+   "unit.troopship.moving"
+  ],
+  "research_done": [
+   "voice.troopship.research_done"
+  ],
+  "select": [
+   "voice.troopship.select"
   ]
  },
  "unit.war_galley": {

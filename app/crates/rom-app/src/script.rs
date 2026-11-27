@@ -25,7 +25,8 @@
 //! traders, `cityN` = own completed cities, `carrierN` = own claim-tag units,
 //! `traderN` = own route traders, `gatherN` = own completed gather buildings, `shipN` = own orbiting ships, `landedN` = own landed ships, `enemyN` = enemy non-city buildings
 //! on the home planet, `foecityN` = enemy cities there (task 75), `armyN` = own armed units that
-//! do not build and `foeN` = enemy units on the home planet (task 125). `click` and `rclick`
+//! do not build and `foeN` = enemy units on the home planet (task 125), `transportN` = own sea
+//! transports (task 167). `click` and `rclick`
 //! support these names and Shift. `box-near <live name> <tiles> [ctrl]` box-selects whatever
 //! stands within that many tiles of the named entity, as a mouse box would (task 140).
 //! These component-based aliases replace a dependency on the last trained type.
@@ -874,8 +875,24 @@ fn camera_input(words: &[&str]) -> Result<Vec<rom_render::InputEvent>, String> {
 
 fn dynamic_name(word: &str) -> bool {
     [
-        "relic", "temple", "market", "city", "carrier", "trader", "ship", "enemy", "gather",
-        "landing", "colony", "landed", "foecity", "foeship", "aircraft", "army", "foe",
+        "relic",
+        "temple",
+        "market",
+        "city",
+        "carrier",
+        "trader",
+        "ship",
+        "enemy",
+        "gather",
+        "landing",
+        "colony",
+        "landed",
+        "foecity",
+        "foeship",
+        "aircraft",
+        "army",
+        "foe",
+        "transport",
     ]
     .iter()
     .any(|prefix| {
@@ -1013,8 +1030,23 @@ pub fn live_pick(
         });
     }
     let (name, n) = [
-        "relic", "temple", "market", "city", "carrier", "trader", "ship", "enemy", "gather",
-        "craft", "landed", "foecity", "foeship", "aircraft", "army", "foe",
+        "relic",
+        "temple",
+        "market",
+        "city",
+        "carrier",
+        "trader",
+        "ship",
+        "enemy",
+        "gather",
+        "craft",
+        "landed",
+        "foecity",
+        "foeship",
+        "aircraft",
+        "army",
+        "foe",
+        "transport",
     ]
     .iter()
     .find_map(|name| {
@@ -1070,6 +1102,7 @@ pub fn live_pick(
             match name {
                 "ship" => world.orbit(e.id).is_some(),
                 "landed" => world.is_landed(e.id),
+                "transport" => world.is_sea_carrier_type(e.type_id),
                 "craft" => world.is_craft_type(e.type_id),
                 "aircraft" => world.is_aircraft_type(e.type_id),
                 "temple" => et.keeper.is_some(),

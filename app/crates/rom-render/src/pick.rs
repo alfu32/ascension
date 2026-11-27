@@ -1298,6 +1298,7 @@ mod tests {
             carrying: false,
             kept: 0,
             capacity: 0,
+            aboard: 0,
             carry_node: false,
             under_construction: None,
             model: None,

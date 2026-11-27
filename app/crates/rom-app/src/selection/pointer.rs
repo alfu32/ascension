@@ -16,6 +16,8 @@ pub(super) enum RightTarget {
     Ground,
     /// An own carrier that units can board.
     Board(EntityId),
+    /// An own unit that can go aboard a selected sea transport (task 167).
+    Rider(EntityId),
     /// An enemy.
     Enemy(EntityId),
     /// An own construction site.
@@ -44,6 +46,9 @@ pub(super) struct RightOrder {
     pub(super) queue: bool,
     /// What the pointer's badge shows for it; `None` for an order on the ground.
     pub(super) badge: Option<OrderBadge>,
+    /// The unit that takes the order instead of the executor, against the executor: a unit
+    /// right-clicked with a sea transport selected boards it (task 167).
+    pub(super) rider: Option<EntityId>,
 }
 
 impl RightOrder {
@@ -55,6 +60,7 @@ impl RightOrder {
             target_pos: Some(at),
             queue,
             badge: None,
+            rider: None,
         }
     }
 
@@ -66,6 +72,7 @@ impl RightOrder {
             target_pos: None,
             queue,
             badge: Some(badge),
+            rider: None,
         }
     }
 }
@@ -148,9 +155,19 @@ impl Controller {
                         RightTarget::Site(e.id)
                     } else if e.owner == me
                         && world.is_carrier_type(e.type_id)
-                        && (world.is_landed(e.id) || world.orbit(e.id).is_some())
+                        && (world.is_landed(e.id)
+                            || world.orbit(e.id).is_some()
+                            || world.is_sea_carrier_type(e.type_id))
                     {
                         RightTarget::Board(e.id)
+                    } else if e.owner == me
+                        && e.container_id.is_none()
+                        && self.own_selected(world).iter().any(|ship| {
+                            world.is_sea_carrier_type(ship.type_id)
+                                && world.may_ride(ship.type_id, e.type_id)
+                        })
+                    {
+                        RightTarget::Rider(e.id)
                     } else if flyers
                         && e.owner == me
                         && !e.neutralised
@@ -228,9 +245,35 @@ impl Controller {
             RightTarget::Board(ship)
                 if *ship != id
                     && et.class == EntityClass::Unit
-                    && !world.is_spacecraft_type(et.id) =>
+                    && !world.is_spacecraft_type(et.id)
+                    && world
+                        .entity(*ship)
+                        .is_some_and(|s| world.may_ride(s.type_id, et.id)) =>
             {
                 RightOrder::on("enter", *ship, queue, OrderBadge::Board)
+            }
+            // A sea transport selected: the unit clicked goes aboard (task 167).
+            RightTarget::Rider(unit)
+                if world.is_sea_carrier_type(et.id)
+                    && world
+                        .entity(*unit)
+                        .is_some_and(|u| world.may_ride(et.id, u.type_id)) =>
+            {
+                RightOrder {
+                    rider: Some(*unit),
+                    ..RightOrder::on("enter", id, queue, OrderBadge::Board)
+                }
+            }
+            // A sea transport with units aboard sent onto land sails there and sets them
+            // ashore; on the water it moves (task 167).
+            RightTarget::Ground
+                if world.is_sea_carrier_type(et.id)
+                    && !world.passengers(id).is_empty()
+                    && world
+                        .terrain_at(at)
+                        .is_some_and(|t| rules.terrains[&t].layer == rom_rules::Layer::Ground) =>
+            {
+                RightOrder::at("unload", None, at, queue)
             }
             // A ship above this planet moves within its orbit to above the clicked point; it
             // comes down only with the Land button.

@@ -450,6 +450,8 @@ impl Brain {
         );
         army::wishes(&plan.view, &self.weights, memory, &mut wishes);
         navy::wishes(&plan.view, &self.weights, &sea, &mut wishes);
+        let lift = crate::sealift::Lift::new(&plan.view, memory);
+        crate::sealift::wishes(&plan.view, &lift, memory, &mut wishes);
         fleet::wishes(&plan.view, &self.weights, memory, &mut wishes);
         // What the plans spend of energy, and what was lost, are known once everyone wished.
         economy::unattended_wishes(&plan.view, &eco, memory, &mut wishes);
@@ -476,7 +478,8 @@ impl Brain {
         // at most two thirds of the budget, so training and the workers go on.
         let marching = alarmed
             || memory.armies.iter().any(|(role, a)| {
-                !matches!(role, Role::Escort | Role::Navy) && a.phase == Phase::Advance
+                !matches!(role, Role::Escort | Role::Navy | Role::Ferry)
+                    && a.phase == Phase::Advance
             });
         if marching {
             let all = plan.orders_left;
@@ -506,6 +509,7 @@ impl Brain {
             army::command(&mut plan, memory, &command);
         }
         navy::command(&mut plan, memory, &sea, &self.weights, d);
+        crate::sealift::command(&mut plan, memory, &lift, d);
         fleet::command(&mut plan, memory, &self.weights, d);
         economy::update_demand(memory, &plan.shortfall, tick, pace);
         // The governors of its automated colonies stay on.

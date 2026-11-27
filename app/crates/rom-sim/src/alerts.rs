@@ -1,5 +1,6 @@
 //! Alerts (task 118): a player's city or army under attack, and foreign ships jumping into a
-//! star system it watches with a jump detector.
+//! star system it watches with a jump detector; since task 167 also a carrier lost with units
+//! aboard.
 //!
 //! Alerts are computed from what happened in a tick (damage dealt, jump arrivals) and are kept
 //! `alert.marker_ticks` for the views. They are presentation: not hashed and not saved, like
@@ -24,6 +25,15 @@ pub enum AlertKind {
         victim: EntityId,
         /// Whose blow it was.
         attacker: PlayerId,
+    },
+    /// One of the player's carriers was lost with units aboard, who were lost with it (task 167).
+    Sunk {
+        /// The carrier.
+        ship: EntityId,
+        /// Its type.
+        ship_type: rom_rules::DefId,
+        /// How many units were aboard.
+        lost: u32,
     },
     /// Foreign ships jumped into a star system the player watches.
     Arrival {

@@ -13040,5 +13040,157 @@
   },
   "recipe": "bld.build_done",
   "seed": 12552
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.cog.select",
+  "speed": 0.977,
+  "text": "Ship ready.",
+  "voice": "bm_fable"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.cog.move",
+  "speed": 0.977,
+  "text": "Make way.",
+  "voice": "bm_fable"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.cog.research_done",
+  "speed": 0.977,
+  "text": "New rigging, captain.",
+  "voice": "bm_fable"
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "unit.cog.moving",
+  "params": {
+   "age": 2,
+   "figures": 1,
+   "pitch": 1.12,
+   "size": 0.167,
+   "speed": 0.25
+  },
+  "recipe": "move.ship_sail",
+  "seed": 212439
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.fluyt.select",
+  "speed": 0.983,
+  "text": "Fluyts, ready to sail.",
+  "voice": "am_onyx"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.fluyt.move",
+  "speed": 0.983,
+  "text": "Hoist the sails.",
+  "voice": "am_onyx"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.fluyt.research_done",
+  "speed": 0.983,
+  "text": "New rigging, captain.",
+  "voice": "am_onyx"
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "unit.fluyt.moving",
+  "params": {
+   "age": 3,
+   "figures": 1,
+   "pitch": 1.191,
+   "size": 0.167,
+   "speed": 0.283
+  },
+  "recipe": "move.ship_sail",
+  "seed": 55671
+ },
+ {
+  "fx": "radio",
+  "kind": "voice",
+  "name": "voice.troopship.select",
+  "speed": 0.944,
+  "text": "Troopships, all hands ready.",
+  "voice": "bm_george"
+ },
+ {
+  "fx": "radio",
+  "kind": "voice",
+  "name": "voice.troopship.move",
+  "speed": 0.944,
+  "text": "Engines ahead.",
+  "voice": "bm_george"
+ },
+ {
+  "fx": "radio",
+  "kind": "voice",
+  "name": "voice.troopship.research_done",
+  "speed": 0.944,
+  "text": "New rigging, captain.",
+  "voice": "bm_george"
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "unit.troopship.moving",
+  "params": {
+   "age": 5,
+   "figures": 1,
+   "pitch": 1.036,
+   "size": 0.167,
+   "speed": 0.333
+  },
+  "recipe": "move.ship_engine",
+  "seed": 301061
+ },
+ {
+  "fx": "radio",
+  "kind": "voice",
+  "name": "voice.landing_ship.select",
+  "speed": 0.994,
+  "text": "Ship ready.",
+  "voice": "af_aoede"
+ },
+ {
+  "fx": "radio",
+  "kind": "voice",
+  "name": "voice.landing_ship.move",
+  "speed": 0.994,
+  "text": "Making way.",
+  "voice": "af_aoede"
+ },
+ {
+  "fx": "radio",
+  "kind": "voice",
+  "name": "voice.landing_ship.research_done",
+  "speed": 0.994,
+  "text": "New rigging, captain.",
+  "voice": "af_aoede"
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "unit.landing_ship.moving",
+  "params": {
+   "age": 6,
+   "figures": 1,
+   "pitch": 1.059,
+   "size": 0.167,
+   "speed": 0.367
+  },
+  "recipe": "move.ship_engine",
+  "seed": 334289
  }
 ]

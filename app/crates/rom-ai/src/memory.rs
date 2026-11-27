@@ -18,7 +18,8 @@ use std::collections::{BTreeMap, BTreeSet};
 /// clock, without the measured defences, the enemy peak and the rally moves (task 67);
 /// version 4 ends after the rally moves, without the buildings standing and lost, the militia
 /// and the raided cities (task 152). All still read. The navy (task 97) is one more role code
-/// in the same layout.
+/// in the same layout, and so are the units of the sea lift (task 167), whose transports' errands
+/// are one more job code.
 pub(crate) const VERSION: u32 = 5;
 
 /// What an army is for.
@@ -36,17 +37,21 @@ pub enum Role {
     Escort,
     /// Ships at sea: guard the coast, hunt enemy ships and shell the shore (task 97).
     Navy,
+    /// Units the sea lift carries over the water and leads ashore (task 167); its target is
+    /// the enemy building they are carried to, its goal the land they are put ashore on.
+    Ferry,
 }
 
 impl Role {
     /// Every role, in the order armies are served.
-    pub const ALL: [Role; 6] = [
+    pub const ALL: [Role; 7] = [
         Role::Defend,
         Role::Attack,
         Role::Raid,
         Role::Scout,
         Role::Escort,
         Role::Navy,
+        Role::Ferry,
     ];
 
     fn code(self) -> u8 {
@@ -115,6 +120,9 @@ pub enum Job {
     Claim,
     /// Carry builders and troops to a planet, land them and found a city.
     Colonise,
+    /// Carry the main army over the water to an enemy it cannot walk to, on the same planet
+    /// (task 167); the voyage's body is then that enemy building's entity id.
+    Ferry,
 }
 
 /// One ship's errand: the job, the body it is for, the stage reached and since when.
@@ -124,7 +132,8 @@ pub struct Voyage {
     pub job: Job,
     /// The body it is for.
     pub body: u32,
-    /// How far it has got: for a colony 0 loading, 1 flying, 2 landing, 3 landed.
+    /// How far it has got: for a colony 0 loading, 1 flying, 2 landing, 3 landed; for the sea
+    /// lift 0 loading at the harbour, 1 sailing to put them ashore, 2 coming home.
     pub stage: u8,
     /// Tick the stage began.
     pub since: u64,
@@ -470,6 +479,7 @@ impl Memory {
                 let job = match r.u8()? {
                     0 => Job::Claim,
                     1 => Job::Colonise,
+                    2 => Job::Ferry,
                     _ => return Err(AiError::CorruptState),
                 };
                 Ok(Voyage {

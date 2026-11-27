@@ -518,7 +518,7 @@ impl Director {
         let fresh: Vec<_> = world.alerts_of(me).filter(|a| a.tick > heard).collect();
         let attack = fresh
             .iter()
-            .any(|a| matches!(a.kind, AlertKind::Attack { .. }));
+            .any(|a| matches!(a.kind, AlertKind::Attack { .. } | AlertKind::Sunk { .. }));
         let arrival = fresh
             .iter()
             .any(|a| matches!(a.kind, AlertKind::Arrival { .. }));

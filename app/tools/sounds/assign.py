@@ -32,7 +32,7 @@ OVERRIDES = {
 # they take their voices after every other type and every earlier batch, so every earlier type
 # keeps the voice (and the file) the owner listened to.
 ADDED_LATER = {"rotorcraft": 1, "drone_operator": 1, "space_probe": 2, "bld.nuclear_reactor": 3, "militia": 4,
-               "fortification": 5}
+               "fortification": 5, "sea_transport": 6}
 HISTORY_LAST_MELEE_BLADE = 2   # sword before gunpowder, bayonet from age 3
 RADIO_FROM_AGE = 5             # crews talk over the radio from the industrial age
 FUTURE_FROM_AGE = 8            # near-future troopers, drones, energy weapons

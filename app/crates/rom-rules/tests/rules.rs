@@ -1133,8 +1133,8 @@ fn every_line_has_one_first_step_and_continuous_ages() {
     // 27 since task 73 gave the survey ship a line of its own; 33 since task 92 made four
     // classes of the warships and four of the starships; 34 since task 119 added the rotorcraft;
     // 35 since task 120 added the drone operator; 36 since task 130 added the space probe; 37
-    // since task 141 added the militia.
-    assert_eq!(lines.len(), 37);
+    // since task 141 added the militia; 38 since task 167 added the sea transport.
+    assert_eq!(lines.len(), 38);
     for (line, steps) in lines {
         let roots: Vec<_> = steps
             .iter()

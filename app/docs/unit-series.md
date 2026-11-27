@@ -61,6 +61,7 @@ industrial age (age 5). Role tags as generated (`infantry`, `mounted`, `vehicle`
 | survey | Survey Ship (10) | spaceport | a line of its own since task 73 |
 | **starship** | Corvettes (10), Space Frigates (11), Space Cruisers (12), Battleships (13) | spaceport | **every** warship role in space in one chain |
 | transport | Transport Ships (10) | spaceport | carries 20 population |
+| sea_transport | Cogs (2), Fluyts (3), Troopships (5), Landing Ships (6) | dock | task 167: one class, each replaces the one before; unarmed, carries 10 / 15 / 20 / 25 population of land units across water |
 | civilian | Citizens (0), Worker Drones (8) | city | builds and gathers |
 | scholar, merchant, priest | one member each | university / market / temple | |
 | caravan | Caravans (1), Freight Wagons (4), Lorries (6), Cargo Drones (8) | market | land trade |

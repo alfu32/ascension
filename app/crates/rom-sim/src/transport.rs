@@ -1,5 +1,6 @@
 //! Carrying units in ships: boarding at a spaceport or beside a landed ship, landing on open
-//! ground below an orbit, unloading, and lifting off again.
+//! ground below an orbit, unloading, and lifting off again; at sea (task 167), boarding from the
+//! shore beside a ship and stepping ashore from it onto land in reach.
 //!
 //! A carrier is any entity type with both a container and a movement component; its capacity
 //! is the container's, in population, after `garrison_capacity` modifiers. Passengers keep
@@ -9,6 +10,7 @@
 use crate::construction::footprint;
 use crate::{
     Command, Entity, EntityId, Order, OrderStatus, Pos, SimError, World, avoidance::Motion,
+    movement::Walk,
 };
 use rom_rules::{DefId, EntityClass, Layer, ProductionMode};
 
@@ -16,6 +18,15 @@ use rom_rules::{DefId, EntityClass, Layer, ProductionMode};
 const LANDING_SEARCH: i64 = 12_000;
 /// How far around a carrier or a spaceport unloaded units may stand, in milli-tiles.
 const UNLOAD_REACH: i64 = 6_000;
+/// How near a ship at sea land must lie for troops to board it from there or step ashore onto
+/// it, in milli-tiles (task 167).
+pub const SHORE_REACH: i64 = 3_000;
+/// How much farther than `SHORE_REACH` from a ship at sea a unit that walked up to the shore may
+/// stand and still board: crowding pushes units about, in milli-tiles.
+const BOARD_SLACK: i64 = 1_000;
+/// How far around the point it is sent to a ship at sea looks for water to sail to before it
+/// unloads, in milli-tiles.
+const COAST_SEARCH: i64 = 16_000;
 
 impl World {
     /// Whether entities of this type carry units: a container that moves.
@@ -23,6 +34,13 @@ impl World {
         self.rules
             .entity_type(type_id)
             .is_some_and(|et| et.container.is_some() && et.movement.is_some())
+    }
+
+    /// Whether entities of this type carry units over a planet's surface: a carrier that does
+    /// not fly through space (a sea transport, task 167). Troops board it from the shore beside
+    /// it and step ashore from it onto land in reach.
+    pub fn is_sea_carrier_type(&self, type_id: DefId) -> bool {
+        self.is_carrier_type(type_id) && !self.is_spacecraft_type(type_id)
     }
 
     /// Whether this type moves through space (its movement class crosses a space terrain).
@@ -136,24 +154,62 @@ impl World {
         self.orbit(id).is_none() && !self.is_landed(id)
     }
 
-    /// Whether a unit is aboard a carrier that is not standing on a planet.
+    /// Whether a unit is aboard a carrier it cannot step out of now: one that is not standing
+    /// on a planet, or a ship at sea with no land in reach the unit could stand on.
     pub(crate) fn aboard_in_space(&self, e: &Entity) -> bool {
         e.container_id.is_some_and(|carrier| {
             self.rules.entity_types[&e.type_id].class == EntityClass::Unit
                 && !self.is_landed(carrier)
+                && self.ashore_tile(carrier, e.type_id).is_none()
         })
     }
 
     /// Whether ships of this type can land on a planet: carriers and route traders that fly
     /// through space (not a satellite).
     pub fn can_land_type(&self, type_id: DefId) -> bool {
-        self.is_carrier_type(type_id)
-            || (self.is_spacecraft_type(type_id)
-                && self
+        self.is_spacecraft_type(type_id)
+            && (self.is_carrier_type(type_id)
+                || self
                     .rules
                     .entity_type(type_id)
                     .and_then(|et| et.trader.as_ref())
                     .is_some_and(|t| t.runs_routes))
+    }
+
+    /// The movement class of a type, if it moves.
+    fn movement_class(&self, type_id: DefId) -> Option<u32> {
+        self.rules
+            .entity_type(type_id)
+            .and_then(|et| et.movement.as_ref())
+            .map(|m| m.movement_class_id)
+    }
+
+    /// Where a unit of type `unit` steps ashore from the ship `ship` at sea, or stands to board
+    /// it: the centre of the tile within [`SHORE_REACH`] of the ship nearest it that the unit's
+    /// movement class can stand on, ties to the lower tile index (task 167). `None` when no
+    /// such tile lies in reach, or `ship` is not a sea carrier standing on a surface.
+    pub fn ashore_tile(&self, ship: EntityId, unit: DefId) -> Option<Pos> {
+        let e = self.entity(ship)?;
+        if !self.is_sea_carrier_type(e.type_id) || !self.walks(ship) {
+            return None;
+        }
+        let class = self.movement_class(unit)?;
+        let surface = self.surface(e.pos.body)?;
+        let geo = &surface.geo;
+        geo.disc(e.pos, SHORE_REACH)
+            .flatten()
+            .filter(|&i| surface.pathing.passable(class, geo.tile_at(i), None))
+            .filter_map(|i| Some((geo.distance_squared(e.pos, geo.index_centre(i))?, i)))
+            .min()
+            .map(|(_, i)| geo.index_centre(i))
+    }
+
+    /// Whether some passenger of the ship at sea `ship` could step ashore now (task 167).
+    pub fn shore_in_reach(&self, ship: EntityId) -> bool {
+        self.passengers(ship)
+            .into_iter()
+            .filter_map(|id| self.entity(id))
+            .any(|p| self.ashore_tile(ship, p.type_id).is_some())
     }
 
     /// Radius in milli-tiles of the ground a landed ship covers (task 72): its stat
@@ -287,7 +343,7 @@ impl World {
 
     /// Whether `unit` may ever ride in a carrier of type `carrier`: a unit that does not fly
     /// through space itself, with the tag the carrier asks for, if any.
-    fn may_ride(&self, carrier: DefId, unit: DefId) -> bool {
+    pub fn may_ride(&self, carrier: DefId, unit: DefId) -> bool {
         let et = &self.rules.entity_types[&unit];
         let Some(container) = self.rules.entity_types[&carrier].container.as_ref() else {
             return false;
@@ -369,7 +425,14 @@ impl World {
                 if !self.room_for(ship.id, e.type_id) {
                     return Err(SimError::NoRoomAboard);
                 }
-                if !self.boards_in_orbit(e.id, ship.id) {
+                if self.is_sea_carrier_type(ship.type_id) {
+                    // Troops board a ship at sea from the shore beside it (task 167).
+                    if ship.pos.body != e.pos.body || !self.walks(ship.id) {
+                        return Err(SimError::CannotBoard);
+                    }
+                    self.ashore_tile(ship.id, e.type_id)
+                        .ok_or(SimError::OffShore)?;
+                } else if !self.boards_in_orbit(e.id, ship.id) {
                     // Troops board only a ship standing on the ground.
                     if !self.is_landed(ship.id) {
                         return Err(SimError::ShipNotLanded);
@@ -398,6 +461,21 @@ impl World {
             "unload" if self.orbit(e.id).is_some() && self.launches_craft(e.id) => {
                 if self.passengers(e.id).is_empty() {
                     return Err(SimError::CannotUnload);
+                }
+            }
+            "unload" if self.is_sea_carrier_type(e.type_id) => {
+                if self.passengers(e.id).is_empty() || !self.walks(e.id) {
+                    return Err(SimError::CannotUnload);
+                }
+                // Sent to a point, it sails there first; otherwise land must lie in reach now.
+                match command.target_pos {
+                    Some(at) if at != e.pos => {
+                        if at.body != e.pos.body {
+                            return Err(SimError::CannotUnload);
+                        }
+                    }
+                    _ if !self.shore_in_reach(e.id) => return Err(SimError::OffShore),
+                    _ => {}
                 }
             }
             "unload" => {
@@ -437,6 +515,7 @@ impl World {
             "land" => self.advance_land(id, order),
             "lift" if craft => self.advance_climb(id, order),
             "lift" => self.advance_lift(id, order),
+            _ if self.is_sea_carrier_type(type_id) => self.advance_sea_unload(id, order),
             _ => self.advance_unload(id, order),
         }
     }
@@ -464,6 +543,10 @@ impl World {
             order.status = OrderStatus::Done;
             return;
         }
+        if self.is_sea_carrier_type(ship.type_id) {
+            self.advance_sea_enter(id, ship_id, order);
+            return;
+        }
         let unit = self.entity(id).expect("boarding unit");
         let Some((at, bounds)) = self.boarding_point(unit, ship) else {
             order.status = OrderStatus::Failed("not_landed".into());
@@ -477,6 +560,54 @@ impl World {
             return;
         }
         let type_id = self.entity(id).expect("boarding unit").type_id;
+        if !self.room_for(ship_id, type_id) {
+            order.status = OrderStatus::Failed("no_room".into());
+            return;
+        }
+        self.board(id, ship_id);
+        order.movement = None;
+        order.status = OrderStatus::Done;
+    }
+
+    /// Boarding a ship at sea (task 167): the unit walks to the land nearest the ship and goes
+    /// aboard once within reach of it; the order fails when the ship lies out of reach of any
+    /// land the unit can stand on, or on another body.
+    fn advance_sea_enter(&mut self, id: EntityId, ship_id: EntityId, order: &mut Order) {
+        let unit = self.entity(id).expect("boarding unit");
+        let (type_id, pos) = (unit.type_id, unit.pos);
+        let ship_pos = self.entity(ship_id).expect("ship").pos;
+        if ship_pos.body != pos.body || !self.walks(ship_id) {
+            order.status = OrderStatus::Failed("not_landed".into());
+            return;
+        }
+        let Some(shore) = self.ashore_tile(ship_id, type_id) else {
+            order.status = OrderStatus::Failed("off_shore".into());
+            return;
+        };
+        if !self
+            .geo(pos.body)
+            .within(pos, ship_pos, SHORE_REACH + BOARD_SLACK)
+        {
+            if order.target_pos != Some(shore) {
+                order.target_pos = Some(shore);
+                order.movement = None;
+            }
+            match self.walk(id, order, shore, None, false) {
+                Walk::Failed => return,
+                Walk::Arrived => {
+                    // Not near enough yet (the ship moved): look again next tick.
+                    order.movement = None;
+                    let here = self.entity(id).expect("boarding unit").pos;
+                    if !self
+                        .geo(here.body)
+                        .within(here, ship_pos, SHORE_REACH + BOARD_SLACK)
+                    {
+                        return;
+                    }
+                }
+                Walk::Underway => return,
+            }
+        }
         if !self.room_for(ship_id, type_id) {
             order.status = OrderStatus::Failed("no_room".into());
             return;
@@ -569,7 +700,12 @@ impl World {
             return true;
         };
         if !self.is_landed(carrier) {
-            return false;
+            // From a ship at sea it steps onto the nearest land in reach (task 167).
+            let Some(pos) = self.ashore_tile(carrier, e.type_id) else {
+                return false;
+            };
+            self.disembark(unit, pos);
+            return true;
         }
         let ship = self.entity(carrier).expect("landed carrier");
         let (at, bounds) = (ship.pos, self.landed_bounds(ship));
@@ -694,15 +830,143 @@ impl World {
         order.status = OrderStatus::Failed("not_landed".into());
     }
 
+    /// Unloading a ship at sea (task 167). Sent to a point, the ship sails to the water nearest
+    /// it unless it is already within `UNLOAD_REACH` of the point with land in reach; then
+    /// everyone aboard who has room steps ashore onto the nearest free tiles they can stand on
+    /// (sent to a point, they walk there). Those for whom no tile is left stay aboard. The order
+    /// fails when the ship ends with no land in reach.
+    fn advance_sea_unload(&mut self, id: EntityId, order: &mut Order) {
+        let here = self.entity(id).expect("carrier").pos;
+        let goal = order
+            .target_pos
+            .filter(|p| *p != here && p.body == here.body);
+        let ready = goal.is_none_or(|g| self.geo(here.body).within(here, g, UNLOAD_REACH))
+            && self.shore_in_reach(id);
+        if !ready {
+            let Some(goal) = goal else {
+                order.status = OrderStatus::Failed("off_shore".into());
+                return;
+            };
+            // Farther inland than the search reaches, it sails as near the point as it can.
+            let water = match order.movement.as_ref() {
+                Some(state) => state.goal,
+                None => self.water_near(id, goal).unwrap_or(goal),
+            };
+            match self.walk(id, order, water, None, false) {
+                Walk::Arrived if self.shore_in_reach(id) => {}
+                Walk::Arrived => {
+                    order.status = OrderStatus::Failed("off_shore".into());
+                    return;
+                }
+                _ => return,
+            }
+        }
+        let out = self.put_ashore(id);
+        if out.is_empty() {
+            order.status = OrderStatus::Failed("off_shore".into());
+            return;
+        }
+        if let Some(goal) = goal {
+            for unit in out {
+                let _ = self.submit(Command {
+                    player: order.player,
+                    executor: unit,
+                    kind: "move".into(),
+                    subject: None,
+                    target_entity: None,
+                    target_pos: Some(goal),
+                    queue: false,
+                    text: None,
+                    facing: None,
+                });
+            }
+        }
+        order.movement = None;
+        order.status = OrderStatus::Done;
+    }
+
+    /// The centre of the tile nearest `at`, within `COAST_SEARCH` of it, that the ship `ship`
+    /// can sail on; ties to the lower tile index.
+    fn water_near(&self, ship: EntityId, at: Pos) -> Option<Pos> {
+        let class = self.movement_class(self.entity(ship)?.type_id)?;
+        let surface = self.surface(at.body)?;
+        let geo = &surface.geo;
+        geo.disc(at, COAST_SEARCH)
+            .flatten()
+            .filter(|&i| surface.pathing.passable(class, geo.tile_at(i), None))
+            .filter_map(|i| Some((geo.distance_squared(at, geo.index_centre(i))?, i)))
+            .min()
+            .map(|(_, i)| geo.index_centre(i))
+    }
+
+    /// Sets the passengers of a ship at sea ashore, in id order, each on the nearest tile within
+    /// `UNLOAD_REACH` of the ship that it can stand on and no other passenger took (ties to the
+    /// lower tile index); returns those set down. A passenger for whom no tile is left stays
+    /// aboard.
+    pub(crate) fn put_ashore(&mut self, ship: EntityId) -> Vec<EntityId> {
+        let at = self.entity(ship).expect("ship").pos;
+        let bounds = footprint(
+            &self.rules.entity_types[&self.entity(ship).expect("ship").type_id],
+            at,
+            self.entity(ship).expect("ship").facing,
+        );
+        let mut used = std::collections::BTreeSet::new();
+        let mut out = Vec::new();
+        for unit in self.passengers(ship) {
+            let type_id = self.entity(unit).expect("passenger").type_id;
+            let Some(class) = self.movement_class(type_id) else {
+                continue;
+            };
+            let surface = self.surf(at.body);
+            let geo = &surface.geo;
+            let tile = geo
+                .footprint_surroundings(at.face, bounds, UNLOAD_REACH)
+                .filter(|i| !used.contains(i))
+                .filter(|&i| surface.pathing.passable(class, geo.tile_at(i), None))
+                .filter_map(|i| {
+                    let d = geo.distance_squared(at, geo.index_centre(i))?;
+                    (d <= (UNLOAD_REACH as u128).pow(2)).then_some((d, i))
+                })
+                .min()
+                .map(|(_, i)| i);
+            let Some(i) = tile else {
+                continue;
+            };
+            used.insert(i);
+            let pos = geo.index_centre(i);
+            self.disembark(unit, pos);
+            out.push(unit);
+        }
+        out
+    }
+
     /// Marks the passengers of the `carriers` that died this tick as dead too, credited to the
     /// same killer, so they are counted and removed with them.
+    /// Its owner hears of a carrier lost with units aboard (task 167).
     pub(crate) fn sink_passengers(&mut self, carriers: &[EntityId]) {
         for &carrier in carriers {
-            let killer = self.entity(carrier).and_then(|c| c.killer);
-            for id in self.passengers(carrier) {
+            let Some(ship) = self.entity(carrier) else {
+                continue;
+            };
+            let (killer, owner, pos, ship_type) = (ship.killer, ship.owner, ship.pos, ship.type_id);
+            let passengers = self.passengers(carrier);
+            for &id in &passengers {
                 let e = self.entities[id.0 as usize].as_mut().expect("passenger");
                 e.hp = 0;
                 e.killer = killer;
+            }
+            if !passengers.is_empty() && owner != crate::PlayerId(0) {
+                self.alert.alerts.push(crate::Alert {
+                    // Blows land before the step counts its tick, as for attack alerts.
+                    tick: self.tick + 1,
+                    player: owner,
+                    pos,
+                    kind: crate::AlertKind::Sunk {
+                        ship: carrier,
+                        ship_type,
+                        lost: passengers.len() as u32,
+                    },
+                });
             }
         }
     }
