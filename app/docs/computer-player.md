@@ -1703,3 +1703,22 @@ the most units aboard them and the most of its riding units standing where they 
 to its first city, sampled every 20 ticks, and the first tick one stood there. There is no island
 map style; on the Planet style (`map.one_world`, every player on one planet) seeds 2 and 8 of the
 first sixteen put two players on separate landmasses.
+
+`rom ai-match --universe --style map.one_world --players balanced:moderate,balanced:moderate
+--ticks 72000` (an hour):
+
+| Seed | Landmasses | Player | Transports | Most aboard | Most carried over | First carried over |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2 | separate | 1 | 2 | 20 | 10 | tick 48 881 |
+| 2 | separate | 2 | 1 | 0 | 0 | — |
+| 8 | separate | 1 | 1 | 0 | 0 | — |
+| 8 | separate | 2 | 0 | 0 | 0 | — |
+
+Seed 2 runs twice to the same hash (`d4588bbe95098995`). There player one reaches the Medieval
+age at tick 33 497, trains a cog, finds player two's coast with it and carries waves of up to
+ten over in two transports; player two's war galleys sink some of them with all aboard (the
+event line's "Lost with all aboard"; seen in a traced run while this was built), and the waves
+that land attack the buildings in reach. Player two's searching transport never found player
+one, nor did either player on seed 8 within the hour: the eight search points are a coarse net
+on a planet of 192-tile faces, and a long voyage whose path search gives up moves on to the next
+point.
