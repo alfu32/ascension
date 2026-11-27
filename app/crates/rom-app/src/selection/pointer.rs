@@ -322,6 +322,8 @@ impl Controller {
                 RightOrder::on("harvest", *site, queue, OrderBadge::Gather)
             }
             _ if can_move => walk(),
+            // A building in the air flies to the clicked point and hovers there (task 170).
+            _ if world.airborne(id) => RightOrder::at("fly", None, at, false),
             _ => {
                 if !et.producer.as_ref().is_some_and(|p| p.has_rally) {
                     return None;

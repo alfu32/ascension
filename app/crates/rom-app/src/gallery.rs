@@ -259,6 +259,7 @@ fn place(
             swimming: false,
             lift: 0.0,
             pod: 0.0,
+            engines: false,
             carry_node: false,
             under_construction: None,
             model: Some(rom_render::ModelRef {

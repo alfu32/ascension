@@ -166,7 +166,7 @@ impl World {
         self.refresh_entity_stats(id);
         self.refresh_site(id);
         let e = self.entity(id).expect("transferred entity");
-        if self.is_building(e.type_id) {
+        if self.is_building(e.type_id) && !self.airborne(id) {
             self.index_building(id, e.pos, true);
         }
         self.economy.dirty.insert(id);

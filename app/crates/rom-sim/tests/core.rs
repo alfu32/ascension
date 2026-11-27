@@ -1004,6 +1004,16 @@ fn every_vocabulary_kind_validates_its_component_and_target() {
                     assert_eq!(kind.key, "drop");
                     needs_space = true;
                 }
+                // A building lifts off only with its lift-off engines, and flies and lands
+                // only in the air (task 170, `airlift_tests`); this player has researched
+                // nothing.
+                Err(SimError::CannotLiftOff | SimError::NotAirborne) => {
+                    assert!(matches!(
+                        kind.key.as_str(),
+                        "lift_off" | "fly" | "touch_down"
+                    ));
+                    needs_space = true;
+                }
                 other => panic!("unexpected result for {}: {other:?}", kind.key),
             }
         }

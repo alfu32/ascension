@@ -200,8 +200,9 @@ impl World {
         if self.is_grounded(id) {
             return Layer::Ground;
         }
-        // A unit jumping or falling from orbit is in the air (task 169).
-        if self.leaping(id) {
+        // A unit jumping or falling from orbit is in the air (task 169), and so is a building
+        // that lifted off (task 170).
+        if self.leaping(id) || self.airborne(id) {
             return Layer::Air;
         }
         let et = &self.rules.entity_types[&e.type_id];
@@ -385,7 +386,12 @@ impl World {
         // An aircraft fires only in the air (task 123); a swimmer from the water only when its
         // research says so (task 168).
         // Nor does a unit in the air after a jump or a drop (task 169).
-        if self.is_grounded(id) || self.holds_fire_in_water(id) || self.leaping(id) {
+        // A building in the air fires nothing either (task 170).
+        if self.is_grounded(id)
+            || self.holds_fire_in_water(id)
+            || self.leaping(id)
+            || self.airborne(id)
+        {
             return false;
         }
         let e = self.entity(id).expect("attacker");

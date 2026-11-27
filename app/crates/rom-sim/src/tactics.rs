@@ -108,6 +108,7 @@ impl World {
             {
                 Err(SimError::CannotRaze)
             }
+            "raze" if self.airborne(executor.id) => Err(SimError::Airborne),
             "delete" => self.check_delete(executor.id),
             "guard" => {
                 let ward = command

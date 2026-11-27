@@ -511,6 +511,7 @@ impl Brain {
         }
         navy::command(&mut plan, memory, &sea, &self.weights, d);
         crate::sealift::command(&mut plan, memory, &lift, d);
+        crate::airlift::command(&mut plan, memory);
         fleet::command(&mut plan, memory, &self.weights, d);
         economy::update_demand(memory, &plan.shortfall, tick, pace);
         // The governors of its automated colonies stay on.

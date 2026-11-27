@@ -230,6 +230,8 @@ struct Placement {
     wall: Option<u16>,
     /// Where the pointer last was, to aim again after a turn.
     pointer: Option<Pos>,
+    /// The building in the air this ghost lands (task 170); `None` for a construction.
+    landing: Option<EntityId>,
 }
 
 impl Placement {
@@ -246,6 +248,17 @@ impl Placement {
             facing: 0,
             wall: None,
             pointer: None,
+            landing: None,
+        }
+    }
+
+    /// The landing ghost of building `id` of type `et` in the air, turned as it flies (task
+    /// 170).
+    fn landing(id: EntityId, et: &EntityType, facing: u16) -> Self {
+        Self {
+            facing: rom_sim::snap_facing(facing),
+            landing: Some(id),
+            ..Self::new(et.id, et)
         }
     }
 
@@ -450,6 +463,11 @@ fn climbs(world: &World, entity: &Entity) -> bool {
         && world.orbit(entity.id).is_none()
         && entity.container_id.is_none()
         && !in_space(world, entity)
+}
+
+/// Whether `entity` is an own building that can lift off now (task 170).
+fn lifts_building(world: &World, entity: &Entity) -> bool {
+    world.check_lift_off(entity.id).is_ok()
 }
 
 /// Whether `entity` is an aircraft on or near the ground that can take off (task 123).
@@ -711,6 +729,21 @@ pub fn placement_check(
         .map(|_| ())
 }
 
+/// The check behind a ghost: a construction's placement, or where a building in the air would
+/// land (task 170).
+fn ghost_check(
+    world: &World,
+    player: PlayerId,
+    p: &Placement,
+    centre: Pos,
+    facing: u16,
+) -> Result<(), SimError> {
+    match p.landing {
+        Some(building) => world.check_touch_down(building, centre, facing).map(|_| ()),
+        None => placement_check(world, player, p.def, centre, facing),
+    }
+}
+
 impl Controller {
     /// An empty controller for the standalone player.
     #[cfg(test)]
@@ -960,6 +993,13 @@ impl Controller {
             text: None,
             facing: None,
         };
+        self.send(world, command)
+    }
+
+    /// Submits `command`, saying why when it is refused.
+    fn send(&mut self, world: &mut OrderSink<'_>, command: Command) -> bool {
+        let (executor, subject) = (command.executor, command.subject);
+        let kind = command.kind.clone();
         match world.submit(command) {
             Ok(_) => {
                 if kind == "research"
@@ -968,10 +1008,8 @@ impl Controller {
                     self.pending_research.insert(def, world.tick());
                 }
                 self.ordered = true;
-                self.cues.push(crate::sound::UiCue::Ordered {
-                    executor,
-                    kind: kind.to_owned(),
-                });
+                self.cues
+                    .push(crate::sound::UiCue::Ordered { executor, kind });
                 true
             }
             Err(error) => {
@@ -2793,10 +2831,16 @@ impl Controller {
                 .iter()
                 .all(|e| e.owner == me && world.market_currency(e.id).is_some());
         let deletable = self.deletable(world);
-        let orders = can_move || has_workers || has_colony || markets;
+        // A building in the air is given its orders there (task 170).
+        let flying = own.iter().any(|e| e.owner == me && world.airborne(e.id));
+        let liftable = own
+            .iter()
+            .any(|e| e.owner == me && lifts_building(world, e));
+        let orders = can_move || has_workers || has_colony || markets || flying;
         // Delete (task 142) opens the Order tab of any selection, but a building whose only
-        // order is Delete still opens on its own pages unless the person chose Order.
-        let delete_only = !orders && !deletable.is_empty();
+        // orders are Delete and Lift off still opens on its own pages unless the person chose
+        // Order.
+        let delete_only = !orders && (!deletable.is_empty() || liftable);
         let tabs = [
             !build_pages.is_empty(),
             orders || delete_only,
@@ -2905,15 +2949,17 @@ impl Controller {
                 if own.iter().any(|e| !world.passengers(e.id).is_empty()) {
                     actions.push((4, Action::Unload));
                 }
-                if own
-                    .iter()
-                    .any(|e| world.is_landed(e.id) || climbs(world, e) || takes_off(world, e))
+                if liftable
+                    || own
+                        .iter()
+                        .any(|e| world.is_landed(e.id) || climbs(world, e) || takes_off(world, e))
                 {
                     actions.push((5, Action::Lift));
                 }
-                if own
-                    .iter()
-                    .any(|e| lands(world, e) || can_land_aircraft(world, e))
+                if flying
+                    || own
+                        .iter()
+                        .any(|e| lands(world, e) || can_land_aircraft(world, e))
                 {
                     actions.push((6, Action::Land));
                 }
@@ -3189,9 +3235,15 @@ impl Controller {
                 button.icon = "icons/cmd_guard".into();
             }
             Action::Land => {
-                button.name = "Land".into();
+                let landing = self.placement.as_ref().is_some_and(|p| p.landing.is_some());
+                button.name = if own.iter().any(|e| world.airborne(e.id)) {
+                    "Land: pick where it comes down"
+                } else {
+                    "Land"
+                }
+                .into();
                 button.icon = "icons/cmd_hold".into();
-                button.armed = self.land_pick;
+                button.armed = self.land_pick || landing;
             }
             Action::Patrol => {
                 button.name = "Patrol".into();
@@ -3398,6 +3450,31 @@ impl Controller {
                 self.attack_move = false;
                 self.land_pick = false;
             }
+            Action::Land
+                if self
+                    .own_selected(world)
+                    .iter()
+                    .any(|e| world.airborne(e.id)) =>
+            {
+                // A building in the air lands where its ghost is put down, turned with R (task
+                // 170); pressed again, the ghost goes away.
+                if self.placement.as_ref().is_some_and(|p| p.landing.is_some()) {
+                    self.placement = None;
+                    return;
+                }
+                let building = self
+                    .own_selected(world)
+                    .into_iter()
+                    .find(|e| world.airborne(e.id))
+                    .map(|e| (e.id, e.type_id, e.facing));
+                if let Some((id, type_id, facing)) = building {
+                    let et = &rules.entity_types[&type_id];
+                    self.placement = Some(Placement::landing(id, et, facing));
+                    self.attack_move = false;
+                    self.patrol = false;
+                    self.land_pick = false;
+                }
+            }
             Action::Land => {
                 // Aircraft land where the next click says; pressed again, where they are.
                 if self
@@ -3502,14 +3579,21 @@ impl Controller {
             Action::Travel => self.travel_on(world),
             Action::Unload => self.unload_selected(world),
             Action::Lift => {
-                let ids: Vec<EntityId> = self
+                let ids: Vec<(EntityId, bool)> = self
                     .own_selected(world)
                     .iter()
-                    .filter(|e| world.is_landed(e.id) || climbs(world, e) || takes_off(world, e))
-                    .map(|e| e.id)
+                    .filter(|e| {
+                        world.is_landed(e.id)
+                            || climbs(world, e)
+                            || takes_off(world, e)
+                            || lifts_building(world, e)
+                    })
+                    .map(|e| (e.id, lifts_building(world, e)))
                     .collect();
-                for id in ids {
-                    self.submit(world, id, "lift", None, None, None, false);
+                for (id, building) in ids {
+                    // A building lifts off with its queue paused (task 170).
+                    let kind = if building { "lift_off" } else { "lift" };
+                    self.submit(world, id, kind, None, None, None, false);
                 }
             }
             Action::Formation(formation) => self.pick_formation(world, formation),
@@ -3592,7 +3676,9 @@ impl Controller {
     /// wall of its line, on that wall's tile along the wall (task 165).
     fn aim(&self, world: &World, at: Pos) -> Option<(Pos, Option<u16>)> {
         let p = self.placement.as_ref()?;
-        if let Some((centre, facing)) = world.gate_in_line(self.me(), p.def, at) {
+        if p.landing.is_none()
+            && let Some((centre, facing)) = world.gate_in_line(self.me(), p.def, at)
+        {
             return Some((centre, Some(facing)));
         }
         let (w, h) = rom_sim::turned_footprint(p.footprint.0, p.footprint.1, p.facing);
@@ -3669,6 +3755,7 @@ impl Controller {
             Some(lines::LineKind::Gates) => {
                 "Drag to lay gates · R turns · click a wall to put one in"
             }
+            None if p.landing.is_some() => "Click where it lands · R turns it",
             None => "R turns it",
         })
     }
@@ -3693,6 +3780,7 @@ impl Controller {
         let reachable = self
             .placement
             .as_ref()
+            .filter(|p| p.landing.is_none())
             .and_then(|p| p.centre.map(|c| self.builder_can_reach(world, p.def, c)));
         let Some(p) = &mut self.placement else {
             return;
@@ -3704,7 +3792,7 @@ impl Controller {
                 .is_none_or(|at| world.tick() >= at + PLACEMENT_CHECK_TICKS);
         if let (true, true, Some(centre)) = (p.dirty || age_changed, due, p.centre) {
             let facing = p.shown_facing();
-            let result = placement_check(world, me, p.def, centre, facing).and_then(|()| {
+            let result = ghost_check(world, me, p, centre, facing).and_then(|()| {
                 // A site no selected builder can walk to (another planet) is refused too.
                 if reachable == Some(false) {
                     Err(SimError::OtherBody)
@@ -3726,6 +3814,27 @@ impl Controller {
         let Some((centre, wall)) = self.aim(world, at) else {
             return;
         };
+        // A building in the air flies there and lands (task 170).
+        if let Some(building) = p.landing {
+            let command = Command {
+                player: self.me(),
+                executor: building,
+                kind: "touch_down".into(),
+                subject: None,
+                target_entity: None,
+                target_pos: Some(centre),
+                queue: false,
+                text: None,
+                facing: Some(p.facing),
+            };
+            if self.send(world, command) {
+                self.marker(world, centre, MarkerKind::Move);
+                self.placement = None;
+            } else if let Some(active) = &mut self.placement {
+                active.valid = Some(false);
+            }
+            return;
+        }
         let facing = wall.unwrap_or(p.facing);
         let rules = world.rules().clone();
         let mut builders: Vec<(bool, u64, EntityId)> = self
@@ -4130,6 +4239,12 @@ impl Controller {
         {
             hud.help = crate::hud::market_help(world, me);
         }
+        // A building in the air (task 170) says what it can and cannot do there.
+        if hud.help.is_empty() && own.iter().any(|e| world.airborne(e.id)) {
+            hud.help = "In the air: it trains and researches nothing until it lands; \
+                        right-click to fly, Land to come down"
+                .into();
+        }
         if hud.help.is_empty() && own.iter().any(|e| world.jump_charge(e.id).is_some()) {
             hud.help = "Charging a jump: it cannot move or fire until it leaves; \
                         any new order cancels the charge"
@@ -4439,6 +4554,7 @@ impl Controller {
         if let Some(age) = self
             .placement
             .as_ref()
+            .filter(|p| p.landing.is_none())
             .and_then(|p| world.placement_discovery_age(me, p.def))
         {
             detail = Some(rejection_message(
@@ -4451,10 +4567,11 @@ impl Controller {
             && let Some(centre) = p.centre
         {
             // Say why the red footprint is red.
-            let reason = placement_check(world, me, p.def, centre, p.shown_facing())
+            let reason = ghost_check(world, me, p, centre, p.shown_facing())
                 .err()
                 .or_else(|| {
-                    (!self.builder_can_reach(world, p.def, centre)).then_some(SimError::OtherBody)
+                    (p.landing.is_none() && !self.builder_can_reach(world, p.def, centre))
+                        .then_some(SimError::OtherBody)
                 });
             if let Some(reason) = reason {
                 detail = Some(rejection_message(world, self.me(), &reason, Some(p.def)));
@@ -4692,6 +4809,9 @@ fn rejection_message(
     subject: Option<DefId>,
 ) -> String {
     match error {
+        SimError::CannotLiftOff => "It needs its Lift-off Engines first".into(),
+        SimError::NotAirborne => "It is not in the air".into(),
+        SimError::Airborne => "It is in the air: land it first".into(),
         SimError::InvalidCarryTarget => "That relic is no longer available".into(),
         SimError::CannotCarry => "This unit cannot carry that".into(),
         SimError::CarrierFull => "Already carrying".into(),

@@ -4658,3 +4658,97 @@ fn jump_arms_a_pick_and_the_soldiers_take_off() {
         palette.buttons.iter().map(|b| &b.name).collect::<Vec<_>>()
     );
 }
+
+/// Task 170: a barracks with its engines shows Lift off on its Order tab (it still opens on its
+/// own pages); in the air a right click flies it, Land arms its landing ghost, R turns the ghost,
+/// the ghost says where it fits, and a click lands it there.
+#[test]
+fn a_building_lifts_off_flies_and_lands_through_the_palette() {
+    let mut fx = fixture_config(10_000, "age.starfaring", &["tech.lift_engines.barracks"]);
+    let city = fx.key("bld.city");
+    fx.world
+        .place_for_setup(city, PLAYER, at(20, 20))
+        .expect("town");
+    let barracks = fx
+        .world
+        .place_for_setup(fx.key("bld.barracks"), PLAYER, at(30, 20))
+        .expect("barracks");
+    fx.click(barracks, false);
+    let hud = fx.hud_snapshot();
+    let palette = hud.palette.expect("palette");
+    assert_ne!(
+        palette.tab,
+        PaletteTab::Order,
+        "a barracks opens on its pages"
+    );
+    assert!(palette.tabs[PaletteTab::Order.index()]);
+    let (_, actions) = fx.ctl.palette(&fx.world).unwrap();
+    assert!(actions.is_empty() || !actions.contains(&(5, Action::Lift)));
+    fx.hud(HudRegionKind::PaletteTab, 1, PointerButton::Left, false);
+    let (_, actions) = fx.ctl.palette(&fx.world).unwrap();
+    assert!(actions.contains(&(5, Action::Lift)));
+    fx.hud(HudRegionKind::CommandSlot, 5, PointerButton::Left, false);
+    fx.step(2);
+    assert!(fx.world.airborne(barracks));
+    // In the air: the Order tab, Land, and a right click flies it.
+    let (palette, actions) = fx.ctl.palette(&fx.world).unwrap();
+    assert_eq!(palette.tab, PaletteTab::Order);
+    assert!(actions.contains(&(6, Action::Land)));
+    fx.rclick(None, (36.5, 20.5), false);
+    fx.step(1);
+    assert_eq!(
+        fx.world.building_flight(barracks).and_then(|f| f.goal),
+        Some(Pos::flat(36_500, 20_500))
+    );
+    // Land arms the ghost; two steps of R turn it a quarter; over the city it is red, beside it
+    // green.
+    fx.hud(HudRegionKind::CommandSlot, 6, PointerButton::Left, false);
+    assert!(
+        fx.ctl
+            .placement
+            .as_ref()
+            .is_some_and(|p| p.landing == Some(barracks))
+    );
+    fx.ctl.handle(&mut fx.world, PickEvent::Turn { steps: 2 });
+    let hover = |fx: &mut Fx, x: f32, y: f32| {
+        fx.ctl.handle(
+            &mut fx.world,
+            PickEvent::Hover {
+                entity: None,
+                world_point: (x, y),
+                surface: flat_surface((x, y)),
+            },
+        );
+        fx.ctl.placement.as_mut().unwrap().checked = None;
+        fx.ctl.handle(
+            &mut fx.world,
+            PickEvent::Hover {
+                entity: None,
+                world_point: (x, y),
+                surface: flat_surface((x, y)),
+            },
+        );
+        fx.hud_snapshot().placement.expect("ghost")
+    };
+    let red = hover(&mut fx, 20.5, 20.5);
+    assert_eq!(red.valid, Some(false));
+    let green = hover(&mut fx, 40.5, 30.5);
+    assert_eq!((green.valid, green.facing), (Some(true), 90));
+    fx.ctl.handle(
+        &mut fx.world,
+        PickEvent::Click {
+            world_point: (40.5, 30.5),
+            surface: flat_surface((40.5, 30.5)),
+            entity: None,
+            modifiers: Modifiers::default(),
+            double: false,
+            on_screen: Vec::new(),
+        },
+    );
+    assert!(fx.ctl.placement.is_none());
+    fx.step(800);
+    assert!(!fx.world.airborne(barracks));
+    let landed = fx.world.entity(barracks).unwrap();
+    assert_eq!(landed.facing, 90);
+    assert!((38_000..43_000).contains(&landed.pos.x), "{:?}", landed.pos);
+}

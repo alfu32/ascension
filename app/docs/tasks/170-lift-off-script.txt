@@ -1,0 +1,14 @@
+# Task 170: a barracks lifting off. Seed 1, player one in the Spacefaring age with the barracks's
+# Lift-off Engines; a barracks stands north-east of the city; it is selected, its Order tab opened and
+# Lift off (A) pressed; the game is slowed to 5 % while it rises on its four engines.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun fixed --size 1600x900 \
+#     --script app/docs/tasks/170-lift-off-script.txt --after 22 --screenshot app/docs/img/170-barracks-lift-off.png
+0 grant-age age.starfaring
+0 grant-tech tech.lift_engines.barracks
+0 place 1 bld.barracks @12,-8
+4 producers
+5 hud tab 1
+6 hud slot 5
+8 look @12,-8
+9 cam wheel 2 800,450
+36 speed 5

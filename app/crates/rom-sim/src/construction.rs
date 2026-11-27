@@ -172,23 +172,7 @@ impl World {
         }
         let pos = self.snap_turned(subject, pos, facing)?;
         let bounds = footprint(et, pos, facing);
-        let surface = self.surf(pos.body);
-        for tile in surface.geo.footprint_tiles(pos.face, bounds) {
-            let index = surface.geo.index_of(tile).expect("checked bounds");
-            let terrain = surface.map.terrain[index];
-            // Ground cover takes the buildings whose units can all move through it (task 172).
-            if !self.rules.terrains[&terrain].buildable
-                && !self.rules.stands_in_cover(subject, terrain)
-            {
-                return Err(
-                    if self.rules.judged_for_cover(subject) && self.rules.is_cover(terrain) {
-                        SimError::UnfitForCover(terrain)
-                    } else {
-                        SimError::UnbuildableTerrain
-                    },
-                );
-            }
-        }
+        self.footprint_ground(subject, pos, bounds)?;
         // A gate may go into the player's own line, over its segments (task 165).
         let replaced = if self.is_gate_type(subject) {
             self.gate_replaces(player, subject, pos, facing)?
@@ -210,6 +194,34 @@ impl World {
         }
         self.check_placement_rules(player, subject, pos, bounds, ignore_territory)?;
         Ok(pos)
+    }
+
+    /// Whether the ground under footprint `bounds` around `pos` takes a building of type
+    /// `subject`: buildable terrain, or ground cover for a building that may stand in it.
+    pub(crate) fn footprint_ground(
+        &self,
+        subject: DefId,
+        pos: Pos,
+        bounds: [i64; 4],
+    ) -> Result<(), SimError> {
+        let surface = self.surf(pos.body);
+        for tile in surface.geo.footprint_tiles(pos.face, bounds) {
+            let index = surface.geo.index_of(tile).expect("checked bounds");
+            let terrain = surface.map.terrain[index];
+            // Ground cover takes the buildings whose units can all move through it (task 172).
+            if !self.rules.terrains[&terrain].buildable
+                && !self.rules.stands_in_cover(subject, terrain)
+            {
+                return Err(
+                    if self.rules.judged_for_cover(subject) && self.rules.is_cover(terrain) {
+                        SimError::UnfitForCover(terrain)
+                    } else {
+                        SimError::UnbuildableTerrain
+                    },
+                );
+            }
+        }
+        Ok(())
     }
 
     /// Whether a standing building's footprint overlaps `bounds` on the face of `pos`.
@@ -428,6 +440,11 @@ impl World {
         }
         if site.hp <= 0 || site.owner != order.player {
             order.status = OrderStatus::Failed("target_gone".into());
+            return;
+        }
+        // Nobody mends a building in the air (task 170).
+        if self.airborne(site.id) {
+            order.status = OrderStatus::Failed("airborne".into());
             return;
         }
         if site.build_progress.is_none() {

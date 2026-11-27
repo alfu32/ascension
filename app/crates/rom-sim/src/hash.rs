@@ -321,6 +321,32 @@ impl World {
                 hash.u64(*ready);
             }
         }
+        // Hashed only once a building has lifted off, so other worlds keep their hashes
+        // (task 170).
+        if !self.lifted.is_empty() {
+            hash.bytes(b"lifted");
+            hash.u64(self.lifted.len() as u64);
+            for (id, flight) in &self.lifted {
+                hash.u32(id.0);
+                hash.u64(flight.climbed);
+                match flight.goal {
+                    Some(goal) => {
+                        hash.bytes(&[1]);
+                        hash.pos(goal);
+                    }
+                    None => hash.bytes(&[0]),
+                }
+                match flight.landing {
+                    Some((at, facing)) => {
+                        hash.bytes(&[1]);
+                        hash.pos(at);
+                        hash.u32(u32::from(facing));
+                    }
+                    None => hash.bytes(&[0]),
+                }
+                hash.u64(flight.remainder as u64);
+            }
+        }
         // Hashed only once a type change waits for its unit, so other worlds keep their hashes
         // (task 172).
         if !self.retype_waiting.is_empty() {

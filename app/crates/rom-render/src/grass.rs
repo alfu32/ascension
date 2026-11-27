@@ -711,7 +711,7 @@ impl GrassState {
     pub(crate) fn set_buildings(&mut self, globe: &Globe, views: &[crate::entities::EntityView]) {
         let key: Vec<(u8, i32, i32, u8, u8)> = views
             .iter()
-            .filter(|v| v.building && v.altitude <= 0.0)
+            .filter(|v| v.building && v.altitude <= 0.0 && v.lift <= 0.0)
             .map(|v| {
                 (
                     v.face,
@@ -831,7 +831,10 @@ pub(crate) fn block_buildings(
     out: &mut BTreeSet<usize>,
 ) {
     let surface = globe.surface();
-    for view in views.iter().filter(|v| v.building && v.altitude <= 0.0) {
+    for view in views
+        .iter()
+        .filter(|v| v.building && v.altitude <= 0.0 && v.lift <= 0.0)
+    {
         let centre = SurfacePos {
             face: view.face,
             x: (view.x * 1000.0).round() as i64,
@@ -1106,6 +1109,7 @@ mod tests {
             swimming: false,
             lift: 0.0,
             pod: 0.0,
+            engines: false,
             carry_node: false,
             under_construction: None,
             model: None,

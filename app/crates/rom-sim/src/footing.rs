@@ -54,19 +54,26 @@ impl World {
         if pathing.flies(class) || pathing.speed_pct(class, e.pos) > 0 {
             return Footing::Stays;
         }
-        let geo = &surface.geo;
-        geo.disc(e.pos, FOOTING_REACH)
+        self.nearest_footing(e.pos, class)
+            .map_or(Footing::Waits, Footing::Moves)
+    }
+
+    /// The centre of the tile nearest `at` that path class `class` can stand on, with no
+    /// building or field on it, within [`FOOTING_REACH`]: nearest first, ties to the lower tile
+    /// index.
+    pub(crate) fn nearest_footing(&self, at: Pos, class: u32) -> Option<Pos> {
+        let surface = self.surface(at.body)?;
+        let (pathing, geo) = (&surface.pathing, &surface.geo);
+        geo.disc(at, FOOTING_REACH)
             .flatten()
             .filter(|&index| pathing.passable(class, geo.tile_at(index), None))
-            .map(|index| (geo.rank_distance(e.pos, geo.index_centre(index)), index))
+            .map(|index| (geo.rank_distance(at, geo.index_centre(index)), index))
             .min()
-            .map_or(Footing::Waits, |(_, index)| {
-                Footing::Moves(geo.index_centre(index))
-            })
+            .map(|(_, index)| geo.index_centre(index))
     }
 
     /// Moves unit `id` onto `to`; it finds its way again from there.
-    fn step_to(&mut self, id: EntityId, to: Pos) {
+    pub(crate) fn step_to(&mut self, id: EntityId, to: Pos) {
         let unit = self.entities[id.0 as usize].as_mut().expect("unit");
         let from = unit.pos;
         unit.pos = to;

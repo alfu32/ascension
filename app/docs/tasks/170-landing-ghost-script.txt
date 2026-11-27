@@ -1,0 +1,18 @@
+# Task 170: the landing ghost. Seed 1, player one in the Spacefaring age with the barracks's Lift-off
+# Engines; a barracks north-east of the city lifts off, Land (S) is pressed and the pointer rests on
+# open ground east of the city: the barracks's footprint shows where it would come down, turned a
+# quarter with R, green where the placement check passes.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun fixed --size 1600x900 \
+#     --script app/docs/tasks/170-landing-ghost-script.txt --after 14 --screenshot app/docs/img/170-landing-ghost.png
+0 grant-age age.starfaring
+0 grant-tech tech.lift_engines.barracks
+0 place 1 bld.barracks @12,-8
+4 producers
+5 hud tab 1
+6 hud slot 5
+80 hud slot 6
+82 key r
+83 key r
+84 hover @18,2
+86 look @15,-6
+87 cam wheel 2 800,450

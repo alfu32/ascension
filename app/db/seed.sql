@@ -7707,4 +7707,86 @@ INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_ro
  ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='tech.jetpacks'),'research','research_2',2,2),
  ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='tech.orbital_drop'),'research','research_2',3,2);
 
+
+-- ── buildings that lift off (task 170) ───────────────────────────────────────
+-- From the Spacefaring age (ordinal 10) a production or military building may be fitted with
+-- Lift-off Engines, researched at the building, and then lift off, fly across its planet
+-- slowly and land again. Who may is the tag `liftable`: every building that takes production
+-- orders and is not a city, a colony, a gather site, a wall, gate or shield emitter, a minefield
+-- or a building that stands on a deposit (docs/database.md, "Buildings that lift off").
+-- Whether one may lift off now is the stat `lift_off` above 0, which each line's research gives
+-- to every step of that line (a building upgraded in place keeps its engines).
+INSERT INTO tag(key,category) VALUES ('liftable','movement');
+INSERT INTO def_tag(def_id,tag_id)
+ SELECT et.id, (SELECT id FROM tag WHERE key='liftable') FROM entity_type et
+ WHERE et.class='building'
+   AND et.id IN (SELECT entity_type_id FROM et_producer)
+   AND et.id NOT IN (SELECT entity_type_id FROM et_gather_site)
+   AND et.id NOT IN (SELECT entity_type_id FROM et_colony)
+   AND et.id NOT IN (SELECT entity_type_id FROM et_fortification)
+   AND et.id NOT IN (SELECT entity_type_id FROM et_minefield)
+   AND et.id NOT IN (SELECT entity_type_id FROM et_territory WHERE is_city=1)
+   AND et.id NOT IN (SELECT entity_type_id FROM placement_rule WHERE rule='on_node')
+   AND et.id NOT IN (SELECT dt.def_id FROM def_tag dt JOIN tag t ON t.id=dt.tag_id
+                     WHERE t.key IN ('city','gather','fortification','wonder'))
+ ORDER BY et.id;
+INSERT INTO stat(key,scope,note) VALUES
+ ('lift_off','entity','task 170: above 0 = this building has lift-off engines: it lifts off, flies and lands');
+INSERT INTO game_constant(key,value,unit,note) VALUES
+ ('air.building_speed',1000,'milli-tiles/second','task 170: ground a building in flight covers per second'),
+ ('air.building_climb_ticks',60,'ticks','task 170: a building rising to its flight height, and settling from it onto the ground');
+INSERT INTO order_kind(key,needs,target,note,line) VALUES
+ ('lift_off','','none','task 170: a finished building with lift-off engines stops its queue and rises into the air; applied at once, the queue stays',''),
+ ('fly','','point','task 170: a building in the air flies to the point and hovers there; applied at once, the queue stays','move'),
+ ('touch_down','','point','task 170: a building in the air flies to the point and lands there, facing the order''s facing, where its placement check passes; its queue then resumes; applied at once','move');
+-- Each line's first step, for every liftable building.
+CREATE TEMP TABLE lift_line(type_id INTEGER PRIMARY KEY, root_id INTEGER NOT NULL);
+WITH RECURSIVE up(type_id, step_id) AS (
+  SELECT dt.def_id, dt.def_id FROM def_tag dt JOIN tag t ON t.id=dt.tag_id WHERE t.key='liftable'
+  UNION ALL
+  SELECT up.type_id, et.upgrades_from_id FROM up JOIN entity_type et ON et.id=up.step_id
+   WHERE et.upgrades_from_id IS NOT NULL)
+INSERT INTO lift_line(type_id, root_id)
+ SELECT up.type_id, up.step_id FROM up JOIN entity_type et ON et.id=up.step_id
+ WHERE et.upgrades_from_id IS NULL;
+INSERT INTO def(kind,key,name,descr)
+ SELECT 'tech', 'tech.lift_engines.' || substr(d.key, 5), 'Lift-off Engines',
+        'Every ' || d.name || ' can lift off, fly slowly to another place and land there. In the air it trains and researches nothing and anti-air can hit it.'
+ FROM def d WHERE d.id IN (SELECT root_id FROM lift_line) ORDER BY d.id;
+-- Research time: twice the building's own build time; price: a third of its own price.
+INSERT INTO tech(id,kind,track,level,research_ticks)
+ SELECT t.id, 'upgrade', '', 0, 2 * et.build_ticks
+ FROM def d JOIN entity_type et ON et.id=d.id
+ JOIN def t ON t.key='tech.lift_engines.' || substr(d.key, 5)
+ WHERE d.id IN (SELECT root_id FROM lift_line) ORDER BY d.id;
+INSERT INTO cost(def_id,resource_id,amount,ramp)
+ SELECT t.id, c.resource_id, (c.amount + 14) / 15 * 5, 0
+ FROM def d JOIN cost c ON c.def_id=d.id
+ JOIN def t ON t.key='tech.lift_engines.' || substr(d.key, 5)
+ WHERE d.id IN (SELECT root_id FROM lift_line) ORDER BY d.id, c.resource_id;
+INSERT INTO prerequisite(def_id,requires_def_id)
+ SELECT t.id, (SELECT id FROM def WHERE key='age.starfaring')
+ FROM def d JOIN def t ON t.key='tech.lift_engines.' || substr(d.key, 5)
+ WHERE d.id IN (SELECT root_id FROM lift_line) ORDER BY d.id;
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value)
+ SELECT t.id, l.type_id, 'lift_off', 'add', 1
+ FROM lift_line l JOIN def r ON r.id=l.root_id
+ JOIN def t ON t.key='tech.lift_engines.' || substr(r.key, 5)
+ ORDER BY l.type_id;
+-- Offered by every step of the line, at the first free place of its research pages.
+WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < 89),
+ place(i, page, col, row) AS (
+  SELECT i, CASE WHEN i / 15 = 0 THEN 'research' ELSE 'research_' || (i / 15 + 1) END,
+         i % 5, (i % 15) / 5 FROM n)
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row)
+ SELECT l.type_id, t.id, 'research', p.page, p.col, p.row
+ FROM lift_line l JOIN def r ON r.id=l.root_id
+ JOIN def t ON t.key='tech.lift_engines.' || substr(r.key, 5)
+ JOIN place p ON p.i = (
+   SELECT min(q.i) FROM place q WHERE NOT EXISTS (
+     SELECT 1 FROM production pr WHERE pr.producer_type_id=l.type_id AND pr.ui_page=q.page
+       AND pr.ui_col=q.col AND pr.ui_row=q.row))
+ ORDER BY l.type_id;
+DROP TABLE lift_line;
+
 COMMIT;
