@@ -4784,6 +4784,10 @@ fn rejection_message(
         SimError::PlacementOverlap => "Another building occupies this footprint".into(),
         SimError::GateOffLine => "A gate goes into a straight run of your own wall".into(),
         SimError::UnbuildableTerrain => "Cannot build on this terrain".into(),
+        SimError::UnfitForCover(terrain) => format!(
+            "Cannot stand in {}: the units trained here cannot move through it",
+            world.rules().def(*terrain).name
+        ),
         SimError::OutsideMap | SimError::CrossesFaceEdge => {
             "Footprint extends beyond the buildable surface".into()
         }

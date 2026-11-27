@@ -245,6 +245,8 @@ struct Placed {
     tint: f32,
     tile: u32,
     hidden: bool,
+    /// A building stands on its tile (task 172: trees in a forest built over).
+    built_over: bool,
 }
 
 /// The instances of one object chunk.
@@ -268,6 +270,8 @@ pub(super) struct FeatureGpu {
     far_lists: Vec<Vec<Matrix>>,
     /// Crop instances of this frame, per mesh (they also cast shadows).
     pub(super) crops: Vec<Vec<Matrix>>,
+    /// The buildings the instances were last hidden under: face, centre and footprint.
+    built: Vec<(u8, i32, i32, u8, u8)>,
 }
 
 impl FeatureGpu {
@@ -299,7 +303,37 @@ impl FeatureGpu {
             snow: baked.snow.clone(),
             chunks,
             buildings: baked.buildings.clone(),
+            built: Vec::new(),
         })
+    }
+
+    /// Hides the instances standing on the tiles of buildings on the ground (task 172: a
+    /// building in a forest stands over its trees, which stay forest underneath).
+    pub(super) fn set_buildings(&mut self, globe: &Globe, views: &[crate::entities::EntityView]) {
+        let key: Vec<(u8, i32, i32, u8, u8)> = views
+            .iter()
+            .filter(|v| v.building && v.altitude <= 0.0)
+            .map(|v| {
+                (
+                    v.face,
+                    (v.x * 1000.0).round() as i32,
+                    (v.y * 1000.0).round() as i32,
+                    v.footprint.0,
+                    v.footprint.1,
+                )
+            })
+            .collect();
+        if key == self.built {
+            return;
+        }
+        self.built = key;
+        let mut tiles = std::collections::BTreeSet::new();
+        crate::grass::block_buildings(globe, views, &mut tiles);
+        for chunk in &mut self.chunks {
+            for placed in &mut chunk.placed {
+                placed.built_over = tiles.contains(&(placed.tile as usize));
+            }
+        }
     }
 
     /// Tints every instance by the shade of its tile (fog of war and borders).
@@ -341,7 +375,7 @@ impl FeatureGpu {
                 continue;
             }
             let near = distance - chunk.radius < OBJECT_NEAR_DISTANCE;
-            for placed in chunk.placed.iter().filter(|p| !p.hidden) {
+            for placed in chunk.placed.iter().filter(|p| !p.hidden && !p.built_over) {
                 let e = placed.transform;
                 let lists = if near
                     && (e.m12 - eye[0]).powi(2)
@@ -433,7 +467,7 @@ impl FeatureGpu {
                         chunk
                             .placed
                             .iter()
-                            .filter(|p| !p.hidden && usize::from(p.mesh) == index)
+                            .filter(|p| !p.hidden && !p.built_over && usize::from(p.mesh) == index)
                             .map(|p| p.transform),
                     );
                 }
@@ -459,6 +493,7 @@ fn chunk_gpu(chunk: &FeatureChunk) -> ChunkGpu {
                 tint: i.transform[3],
                 tile: i.tile,
                 hidden: false,
+                built_over: false,
             })
             .collect(),
     }

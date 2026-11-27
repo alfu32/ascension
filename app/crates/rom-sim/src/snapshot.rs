@@ -23,7 +23,7 @@ use crate::{
     wealth::RouteState,
 };
 use rom_geo::CubeSurface;
-use rom_rules::{DefId, Rules, VictoryRule};
+use rom_rules::{DefId, EntityClass, Rules, VictoryRule};
 use std::{
     cmp::Reverse,
     collections::{BTreeMap, BTreeSet, BinaryHeap, VecDeque},
@@ -549,6 +549,9 @@ pub struct Snapshot {
     pub leaps: Vec<(EntityId, crate::Leap)>,
     /// The tick each unit that jumped lately may jump again, in id order (task 169).
     pub jump_ready: Vec<(EntityId, u64)>,
+    /// Units whose type change waits until they stand where the new type can, with that type,
+    /// in id order (task 172).
+    pub retype_waiting: Vec<(EntityId, DefId)>,
     /// The grids of drone operators, in operator id order (tasks 120, 128).
     pub clouds: Vec<(EntityId, crate::Cloud)>,
     /// The pools of shields, in id order (task 157).
@@ -1076,6 +1079,7 @@ impl World {
             flight: self.flight.iter().map(|(id, c)| (*id, *c)).collect(),
             leaps: self.leaps().map(|(id, l)| (id, *l)).collect(),
             jump_ready: self.leap.ready.iter().map(|(id, t)| (*id, *t)).collect(),
+            retype_waiting: self.waiting_retypes().collect(),
             clouds: self.clouds.iter().map(|(id, c)| (*id, *c)).collect(),
             shields: self.shield_pools().collect(),
             dormant: self.life.dormant.iter().map(|(b, d)| (*b, *d)).collect(),
@@ -1135,6 +1139,7 @@ impl World {
             flight,
             leaps,
             jump_ready,
+            retype_waiting,
             clouds,
             shields,
             dormant,
@@ -1571,6 +1576,15 @@ impl World {
                 return Err(bad("a jetpack cooldown of an unknown entity"));
             }
             world.leap.ready.insert(id, ready);
+        }
+        for (id, type_id) in retype_waiting {
+            let unit = world.entity(id).is_some_and(|e| {
+                world.rules.entity_types[&e.type_id].class != EntityClass::Building
+            });
+            if !unit || world.rules.entity_type(type_id).is_none() {
+                return Err(bad("a waiting type change of an unknown unit or type"));
+            }
+            world.retype_waiting.insert(id, type_id);
         }
         for (id, pool) in shields {
             let shield = world

@@ -1,7 +1,8 @@
 //! Task 141: workers called up as militia (`call_up`) and stood down again (`stand_down`), at
 //! once and for nothing, while they stand on their owner's territory. Which worker becomes which
 //! militia is data (`et_call_up` and the two upgrade lines); the unit keeps its id and place,
-//! its orders are cleared and its health keeps its share of the maximum.
+//! its orders are cleared and its health keeps its share of the maximum. One that cannot stand
+//! where it is as its new type moves to the nearest tile it can, or waits (task 172).
 
 use crate::{EntityId, Order, PlayerId, SimError, World};
 use rom_rules::DefId;
@@ -93,6 +94,14 @@ impl World {
             return;
         };
         self.cancel_entity_orders(id);
+        // A worker swimming where its militia cannot (task 172) comes ashore first, or the
+        // change waits until it stands on ground the new type can.
+        if !self.make_room(id, target) {
+            self.retype_waiting.insert(id, target);
+            self.stats.orders_done += 1;
+            return;
+        }
+        self.retype_waiting.remove(&id);
         let e = self.entities[id.0 as usize]
             .as_mut()
             .expect("checked executor");

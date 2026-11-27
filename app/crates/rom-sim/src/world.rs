@@ -107,6 +107,9 @@ pub struct World {
     /// Aircraft on or near the ground (task 123): ticks climbed toward their flight height,
     /// 0 when landed. Airborne aircraft have no entry.
     pub(crate) flight: BTreeMap<EntityId, u64>,
+    /// Units whose type change waits until they stand where the new type can, with that type
+    /// (task 172; hashed and saved).
+    pub(crate) retype_waiting: BTreeMap<EntityId, DefId>,
     /// The clouds of drone operators (task 120), by operator.
     pub(crate) clouds: BTreeMap<EntityId, crate::drones::Cloud>,
     /// Legs of space trade routes queued this tick in front of their routes; empty between
@@ -379,6 +382,7 @@ impl World {
             rallies: BTreeMap::new(),
             governors_paused: BTreeSet::new(),
             flight: BTreeMap::new(),
+            retype_waiting: BTreeMap::new(),
             clouds: BTreeMap::new(),
             disbanded: Vec::new(),
             legs: Vec::new(),
@@ -763,6 +767,7 @@ impl World {
         self.rallies.remove(&id);
         self.governors_paused.remove(&id);
         self.flight.remove(&id);
+        self.retype_waiting.remove(&id);
         self.leap.flights.remove(&id);
         self.leap.ready.remove(&id);
         self.shield.pools.remove(&id);
@@ -1184,6 +1189,7 @@ impl World {
         }
         self.acquire_attack_moves();
         self.settle_aircraft();
+        self.settle_waiting_retypes();
         // `avoid.pos` mirrors every entity's position until the first move below.
         if self.has_enemies() {
             self.seen.clone_from(&self.avoid.pos);

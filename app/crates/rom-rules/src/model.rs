@@ -2623,4 +2623,7 @@ pub struct Rules {
     pub ambience: Vec<Ambience>,
     /// Production rows indexed by product.
     pub production_by_product: BTreeMap<DefId, Vec<Production>>,
+    /// Derived (task 172): per building judged by the units it trains, the ground cover
+    /// terrains it may stand in besides buildable ground (`Rules::stands_in_cover`).
+    pub cover_terrains: BTreeMap<DefId, BTreeSet<DefId>>,
 }

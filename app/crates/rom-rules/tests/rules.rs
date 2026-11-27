@@ -1934,3 +1934,63 @@ fn the_galactic_tier_opens_with_the_age_of_abundance() {
     }
     assert_eq!(r.age_rank(DefId(u32::MAX)), None);
 }
+
+/// Task 172: which buildings may stand in the forest is derived from what their lines train.
+#[test]
+fn cover_terrain_follows_what_a_building_trains() {
+    let rules = seed();
+    let id = |key: &str| rules.id_of(key).unwrap();
+    let forest = id("ter.forest");
+    assert_eq!(rules.cover_terrain_ids(), [forest].into_iter().collect());
+    assert!(rules.is_cover(forest));
+    let in_forest = |key: &str| rules.stands_in_cover(id(key), forest);
+    // Foot and air units, research only, nothing at all.
+    for key in [
+        "bld.barracks",
+        "bld.library",
+        "bld.temple",
+        "bld.airfield",
+        "bld.tower",
+        "bld.lumber_mill",
+    ] {
+        assert!(in_forest(key), "{key} stands in the forest");
+    }
+    // Vehicles (the stable's cavalry lines end as vehicles and the stable becomes the vehicle
+    // plant), ships, starships, cities, walls and resource buildings.
+    for key in [
+        "bld.stable",
+        "bld.vehicle_plant",
+        "bld.factory",
+        "bld.siege_workshop",
+        "bld.market",
+        "bld.dock",
+        "bld.spaceport",
+        "bld.city",
+        "bld.auto_colony",
+        "bld.palisade",
+        "bld.wall_gate",
+        "bld.woodcutter_camp",
+        "bld.farm",
+        "bld.mine",
+        "bld.university",
+    ] {
+        assert!(!in_forest(key), "{key} stays out of the forest");
+    }
+    // Only the training keeps the stable and the vehicle plant out; cities, walls and
+    // resource buildings keep their own rules.
+    for key in ["bld.stable", "bld.vehicle_plant", "bld.dock"] {
+        assert!(rules.judged_for_cover(id(key)), "{key}");
+    }
+    for key in [
+        "bld.city",
+        "bld.palisade",
+        "bld.woodcutter_camp",
+        "bld.university",
+    ] {
+        assert!(!rules.judged_for_cover(id(key)), "{key}");
+    }
+    // No other terrain is cover: mountains are entered by nobody, ice feeds no gather site.
+    for key in ["ter.mountain", "ter.ice", "ter.plain", "ter.deep"] {
+        assert!(!rules.is_cover(id(key)), "{key}");
+    }
+}

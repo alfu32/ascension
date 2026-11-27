@@ -15,6 +15,7 @@ mod drones;
 mod economy;
 mod entity;
 mod fields;
+mod footing;
 mod formation;
 mod fortification;
 mod gathering;
@@ -246,6 +247,10 @@ pub enum SimError {
     /// A covered terrain tile cannot support construction.
     #[error("terrain is not buildable")]
     UnbuildableTerrain,
+    /// Ground cover (a forest) where only buildings whose units can all move through it stand,
+    /// and this one trains units that cannot (task 172).
+    #[error("units trained here cannot move through this terrain")]
+    UnfitForCover(DefId),
     /// Resource setup names a nonresource definition.
     #[error("unknown resource {0:?}")]
     UnknownResource(DefId),
@@ -468,6 +473,8 @@ mod city_names_tests;
 mod cluster_jumps_tests;
 #[cfg(test)]
 mod fields_tests;
+#[cfg(test)]
+mod footing_tests;
 #[cfg(test)]
 mod fortification_tests;
 #[cfg(test)]

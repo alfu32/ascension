@@ -123,13 +123,30 @@ impl World {
                     self.players.get_mut(&player).expect("owner").faction = target
                 }
                 TechEffectKind::UpgradeType => {
-                    let mut changed = Vec::new();
-                    for entity in self
-                        .entities
-                        .iter_mut()
-                        .flatten()
+                    // A change still waiting for its unit (task 172) follows the line on.
+                    for (id, waiting) in self.retype_waiting.iter_mut() {
+                        if Some(*waiting) == effect.from_def_id
+                            && self.entities[id.0 as usize]
+                                .as_ref()
+                                .is_some_and(|e| e.owner == player)
+                        {
+                            *waiting = target;
+                        }
+                    }
+                    let ids: Vec<EntityId> = self
+                        .entities()
                         .filter(|e| e.owner == player && Some(e.type_id) == effect.from_def_id)
-                    {
+                        .map(|e| e.id)
+                        .collect();
+                    let mut changed = Vec::new();
+                    for id in ids {
+                        // A unit the new type cannot stand where it is moves first, or waits
+                        // (task 172).
+                        if !self.make_room(id, target) {
+                            self.retype_waiting.insert(id, target);
+                            continue;
+                        }
+                        let entity = self.entities[id.0 as usize].as_mut().expect("unit");
                         changed.push((entity.id, entity.type_id));
                         entity.type_id = target;
                     }

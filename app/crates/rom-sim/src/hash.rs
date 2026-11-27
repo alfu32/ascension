@@ -321,6 +321,16 @@ impl World {
                 hash.u64(*ready);
             }
         }
+        // Hashed only once a type change waits for its unit, so other worlds keep their hashes
+        // (task 172).
+        if !self.retype_waiting.is_empty() {
+            hash.bytes(b"retype");
+            hash.u64(self.retype_waiting.len() as u64);
+            for (id, type_id) in &self.retype_waiting {
+                hash.u32(id.0);
+                hash.u32(type_id.0);
+            }
+        }
         // Hashed only once a drone operator exists, so other worlds keep their hashes (task 120).
         if !self.clouds.is_empty() {
             hash.bytes(b"clouds");

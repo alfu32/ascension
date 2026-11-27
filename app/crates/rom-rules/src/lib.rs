@@ -6,6 +6,7 @@ use rusqlite::{Connection, backup::Backup};
 use thiserror::Error;
 
 mod ascension;
+mod cover;
 mod load;
 mod model;
 mod modifiers;

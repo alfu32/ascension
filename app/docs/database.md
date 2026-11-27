@@ -3481,3 +3481,86 @@ every other definition, so earlier ids stay.
   at 5 %), `img/169-pods-falling.png` (`tasks/169-drop-script.txt`: six pods streaking down with
   their trails, the camera pulled back), `img/169-pods-impact.png`
   (`tasks/169-impact-script.txt`: the moment they strike, close up).
+
+## Buildings in forests; units never stuck after a change of type (task 172)
+
+The owner, issue #175 (2026-11-27): buildings that do research or train foot or flying units may
+stand in forested areas, so a freshly trained unit is never shut in a forest; and cavalry in a
+forest upgraded into an armoured car, a scout car or a light tank was stuck there for good.
+
+- **Who may stand in a forest is derived, not authored** (`rom-rules/src/cover.rs`,
+  `Rules::cover_terrains`, filled at load). A **cover terrain** is ground that is not buildable,
+  that a walking movement class enters (`movement_class_terrain`, `flies` = 0) and that a gather
+  site draws from as its node (`et_gather_site.needs_node_terrain_id`): in the seed only
+  `ter.forest` (mountains are entered by nobody, ice feeds no gather site). A building is
+  **judged by its training** unless it keeps its own rules: a city or colony (`et_territory.is_city`,
+  `et_colony`), a fortification line (`et_fortification`) or a resource building
+  (`et_gather_site`), checked over its whole upgrade line. A judged building may stand on a cover
+  terrain when every unit its line trains (`production` `train` rows of every step of the
+  building's line, with faction substitutes by `replaces_id`) moves on it — the unit flies, or its
+  movement class has a `movement_class_terrain` row there with `speed_pct` above 0. A unit counts
+  by what its upgrade line grows into, its line's final steps: the barracks' infantry lines pass
+  through two wheeled steps (the gun drone, age 7; the combat robot, age 8) and end on foot, so the
+  barracks qualifies; the stable's cavalry lines end as vehicles (and the stable becomes the
+  vehicle plant), so the stable does not. A building that trains nothing qualifies.
+  In the seed: library, granary, lumber mill, temple, smelter, refinery, barracks, tower (bastion,
+  bunker, defence turret), fort (star fort, fortress, citadel), airfield, ground battery, jump
+  inhibitor, jump detector and minefield. Not: stable, vehicle plant, factory, siege workshop,
+  market (wheeled caravans), dock (ships), spaceport (starships); cities, colonies, walls and gates,
+  and every gather site (farm, woodcutter's camp, mine, oil well, university, power plants) keep
+  their rules. No schema or seed change: new buildings follow from their rows.
+- **Placement** (`World::check_placement`, `construct`): a footprint tile of a cover terrain is
+  as good as buildable ground for a building that may stand there, both for `terrain.buildable`
+  and for its `on_terrain` rule; a footprint may lie partly in the forest. A judged building that
+  may not is refused with **`SimError::UnfitForCover(terrain)`** ("Cannot stand in Forest: the units
+  trained here cannot move through it" on the placement preview); any other building on
+  unbuildable ground keeps `UnbuildableTerrain`. Computer players keep to open ground (their site
+  search takes buildable tiles only); nothing else changes for them.
+- **Trees under a building.** The tiles stay forest terrain underneath and the trees are hidden
+  under the building (`rom-render`, `FeatureGpu::set_buildings`, as the grass is): they come back
+  when it is gone. While built over they give no timber: a woodcutter's camp counts no node tile
+  under a standing building or site, other than a minefield, when its slots are reckoned (at its
+  completion and at an upgrade of its line; `World::gather_slots`). A camp finished before the
+  building keeps its count until then.
+- **A trained unit appears where it can move.** The spawn rule is unchanged: a new unit
+  takes the free tile its movement class can enter nearest the gate within 10 tiles of the
+  footprint; foot units come out among the trees, a wheeled unit (a combat robot from a forest
+  barracks) on the nearest open ground; with none in reach the order waits (`no_spawn_tile`).
+- **No unit stuck after its type changes** (`rom-sim/src/footing.rs`). When a unit's type
+  changes — a line upgrade or an age's new look (`tech_effect` `upgrade_type`), a call-up or a
+  stand-down (task 141) — and its new path class (its movement class, widened by shallow water
+  for a swimmer, task 168) cannot stand on its tile, it is first moved to the nearest tile that
+  class can enter with no building or field on it, searching the tile centres within **12 tiles**
+  (`FOOTING_REACH`), nearest first, ties to the lower tile index; its orders find their way again
+  from there. With no such tile in reach the change **waits** for that unit: it keeps its type
+  and is listed in `World::retype_waiting` (unit, new type), and each tick, before units move, the
+  waiting changes are tried again in id order; the change is made once the unit stands where its
+  new type can, or within reach of such a tile. A waiting change follows a later upgrade of its
+  target type. A unit aboard, in orbit, in space or flying stays where it is (it stands on no
+  ground); a unit in the air after a jump or a drop (task 169) waits until it lands. A conversion
+  (`change_owner`) keeps the path class of the new owner (a convert whose new owner cannot swim
+  comes ashore, if a tile is in reach). Hashed only while not empty; **save format 27**, PART B
+  table `entity_retype(entity_id, type_id)`; formats 13 to 26 load with no change waiting.
+- **Measured.** `rom playthrough --seed 1` hash `1071b06ad10873c5`, ascension `51bf2c638609d395`
+  (were `11f026379334122a`, `82f7b9c50c3fd7c8`): the playthrough takes the first site that passes
+  the placement check, and its first library (tick 322) now stands with six tiles in a forest;
+  every age is then reached 23 ticks later and the playthrough ends with the same buildings,
+  units, technologies and ascension resources. With the forest rule switched off in a test build
+  the same code gives the old hashes exactly, so nothing else moved (no unit changed type where
+  it could not stand). `rom fight-matrix`: `strengths=305 unanswered=0`, unchanged. `rom duel`
+  moderate–easiest, seeds 1–20: 20–0, mean tick 46 393, unchanged (computer players keep to open
+  ground).
+- **Tests.** `rom-rules/tests/rules.rs` (which buildings, which terrain); `rom-sim/src/footing_tests.rs`
+  (a barracks and a library placed and built in a forest, a stable and a vehicle plant refused; a
+  spearman trained in a forest barracks walks out; a caravan trained at a market in a forest comes
+  out on open ground; a dragoon in a forest upgraded into an armoured car is moved 7 tiles to the
+  forest's edge and drives off; deep in a forest the change waits, survives a snapshot and is made
+  once the dragoon rides within reach; a swimming citizen called up comes ashore as militia; timber
+  under a building does not count); `rom-save/tests/scenarios.rs` (a waiting change saved and
+  loaded). Each runs twice and compares state hashes.
+- **Screenshots** (the game's own paths, `--script`, release build): `img/172-forest-barracks.png`
+  (`tasks/172-forest-barracks-script.txt`: a barracks in a forest south-west of the city, its trees
+  hidden under it, spearmen coming out to a rally point on open ground), `img/172-vehicle-plant-refused.png`
+  (`tasks/172-vehicle-plant-refused-script.txt`: the red ghost of a vehicle plant over the small
+  forest north-west of the city, "Cannot stand in Forest: the units trained here cannot move through
+  it").
