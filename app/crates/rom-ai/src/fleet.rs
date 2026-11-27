@@ -813,11 +813,13 @@ fn claim(plan: &mut Plan<'_>, memory: &mut Memory, claimers: &[&Entity], systems
                     .iter()
                     .filter(|b| !taken.contains(&b.0))
                     .filter_map(|b| {
-                        let paid = view.world.body_yield(*b, view.me)?.per_period;
+                        // In hundredths, so a body still counts at a 2 % gathering rate,
+                        // where it pays less than a unit a period (task 166).
+                        let paid = view.world.body_yield(*b, view.me)?.hundredths_per_period;
                         let at = view.world.body_position(*b)?;
                         let tiles = (view.distance(ship.pos, at) / 1000).min(1 << 20) as i64;
                         let far = i64::from(system_of(view, *b) != system_of(view, ship.pos.body));
-                        Some((paid * 1000 / (tiles + 50) / (1 + 4 * far), *b))
+                        Some((paid * 10 / (tiles + 50) / (1 + 4 * far), *b))
                     })
                     .max_by_key(|(value, b)| (*value, std::cmp::Reverse(*b)));
                 let Some((_, body)) = best else {

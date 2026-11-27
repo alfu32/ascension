@@ -1369,6 +1369,85 @@ two seeds without an attack in an hour); moderate's first wave comes at 18:33 / 
 --seed 1` (the simulation's own bot): `hash=d20c41789bf78ef0`, ascension `ascended_tick=59544
 hash=388f8f410f80705f`, as on main.
 
+## Slow economies and the automated ages (task 166)
+
+At a slow gathering rate (task 159) two computer players drew, and the moderate one seemed
+never to attack. Paces below are written gathering rate / research speed (10 % / 25 % is a
+research time of 400 %). The computer player now reads the pace from the match setup, which
+every player sees (`World::pace`), as one number: `View::slowness`, how many times longer an income
+takes to pay a price than at the default, in percent (`10 000 / gather_rate`: 100 at 100 %,
+400 at 25 %, 1000 at 10 %). Every rule below is exactly the old one at 100 %, so default
+matches are unchanged.
+
+**What a trace showed** (duel seed 2 at 10 % / 25 %, `rom duel --trace` and temporary prints
+of the wishes and the attack decision). Income was about 12 a period (food 5, timber 7 against its
+commerce cap), and two things took all of it:
+
+- **Scouts.** After the grace period a scout goes out aggressive and dies at the enemy town.
+  A new one was trained, or the next fresh soldier enlisted as the scout, at once: one every
+  3600 ticks, 60 resources each, the player's whole food income. The army never grew past
+  two. Now a lost scout is replaced only after `SCOUT_WAIT_TICKS` (3600) for every 100 % of
+  slowness beyond the default (`army::scout_due`; 9 × 3600 ticks at 10 %, 3 × 3600 at 25 %,
+  none at 100 %); the first scout never waits. The tick of the loss is the scout army's
+  `since`, so the saved memory keeps its layout.
+- **The way to the next age.** Its wish is saved for (`reserve`) and gains 20 points a minute
+  after four minutes in an age, so after twenty minutes it outranked the army and held every
+  food unit for an age the economy needed an hour to pay. Now the four minutes and the
+  minute both stretch with the slowness (`research::wishes`, `View::paced`).
+
+With those two, the army grows and attacks. Scaling the attack threshold as well was tried
+and left out (the wave the main army waits for, half its share of the population target,
+shrunk by the slowness, and the army that goes looking for an unknown enemy at one wave
+instead of two): at 25 % / 25 % every seed was decided, but the moderate player lost five of
+twenty, its smaller waves broken at palisades. The wave and the attack ratio are as before.
+
+**Resource bodies** are valued by `BodyYield::hundredths_per_period` (`fleet.rs`), so at 2 %
+a body still counts when it pays less than a unit a period.
+
+**Workers with no work left** (the automated ages: every gather site runs without workers).
+In the single-player calibration all 186 workers stood idle from age 12 and held 186 of the
+400 population, because a worker left only when the population was full *and* the workers
+exceeded the profile's worker share. Now an idle worker whose resources have no standing site
+with slots, and every site type of them its nation has that is not superseded needs no workers
+(`economy::workless`), leaves the match, four a thought at most, keeping one worker per city
+and two more to build (`KEPT_BUILDERS`). Before the automated ages there is always a site type
+with slots (the farm, or a university not yet built), so nothing changes there: a first version
+that looked only at the site type buildable now also let workers go whose site could not be
+built yet, and moved default duel seed 1 by 27 ticks. Training already stops in the automated
+ages: the worker wish asks for free slots.
+
+**The duel's tick limit.** `rom duel` stops at 108 000 ticks (90 game minutes). At 10 %
+gathering those 90 minutes hold the income of 9 minutes at the default, where no match is
+decided before about 37 minutes; at 25 % / 25 % both players were still in their first or second
+age. So the slow duels below run to the same income as the default limit: 108 000 × 100 /
+gathering rate ticks (432 000 at 25 %, 1 080 000 at 10 %).
+
+### Measured (task 166)
+
+`rom duel --profiles balanced:moderate,balanced:easiest --seeds 1..20 --jobs 2` (conquest, flat
+two-player maps), wins moderate–easiest–draws and the mean tick of the decided matches:
+
+| Pace (gathering / research speed), tick limit | Main before (0.151.0) | Task 166 |
+| --- | --- | --- |
+| 100 % / 100 %, 108 000 | 20–0–0, mean 46 979 | 20–0–0, mean 46 979: all twenty hashes as on main |
+| 25 % / 25 %, 108 000 | 0–0–20 | 0–0–20 |
+| 10 % / 25 %, 108 000 | 0–0–20 | 0–0–20 |
+| 25 % / 25 %, 432 000 | 16–1–3, mean 247 568 | 18–2–0, mean 212 826 |
+| 10 % / 25 %, 1 080 000 | 6–0–14, mean 747 955 | 19–0–1, mean 478 332 |
+
+The draws left: seed 5 at 10 % / 25 % (the easiest player reached age 9 against age 2 and could
+not finish its enemy). The easiest player's two wins at 25 % / 25 % (seeds 5 and 10) are the same
+kind of match won by the other side. With the attack threshold scaled too (tried, left out) the
+25 % / 25 % table was 15–5–0.
+
+`rom fight-matrix`: `strengths=305 unanswered=0`. `rom playthrough --seed 1` (the simulation's
+own bot): `hash=7855de049a43d4ef`, ascension `ascended_tick=64576 hash=21ece904af9a6efd`, as
+on main. The single-player calibration
+(`docs/database.md`, economy pace) reaches the last age at the same ticks as on main at
+100 % / 100 %; its workers fall from 188 to 17 (15 cities and two builders) once every site of
+the last ages runs by itself, and the military fills the room (84 at age 11, 265 by tick
+156 000 at 100 % / 1000 %).
+
 ## Simulation gaps found in part 2, and what task 65 did with them
 
 - **Closed: `explore`, `patrol`, `guard`.** `explore` walks to the nearest tile

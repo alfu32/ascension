@@ -6,7 +6,7 @@ use std::path::PathBuf;
 pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <file.png>] \
 [--size <width>x<height>] [--scale <percent>] [--style <key>] [--seed <n>] [--players <n>] [--factions <key,key,...>] [--ai <profile:difficulty,...|none>] [--watch] \
 [--map-size <width>x<height>] [--sphere <n>] [--single-planet] [--orbit <lon_deg>,<lat_deg>,<distance>,<heading_deg>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
-[--universe] [--start-placement <separate|together>] [--city-area <on|off>] [--gather-rate <percent>] [--research-time <percent>] [--zoom-all] [--zoom-out] [--age <ordinal>] [--view <surface|globe|system|cluster|quadrant|galaxy>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-chrome] [--no-hud] [--hud-scale <percent>] [--stats] \
+[--universe] [--start-placement <separate|together>] [--city-area <on|off>] [--gather-rate <percent>] [--research-speed <percent>] [--zoom-all] [--zoom-out] [--age <ordinal>] [--view <surface|globe|system|cluster|quadrant|galaxy>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-chrome] [--no-hud] [--hud-scale <percent>] [--stats] \
 [--sun <orbit|fixed|low|midnight>] [--graticule <on|off>] [--grass <on|off>] [--detail <min|medium|max|ultra>] [--projectiles <on|off>] [--look-at <terrain>[+<terrain>][,<distance>]] \
 [--mute] [--volume <percent>] [--music-volume <percent>] [--units-volume <percent>] [--buildings-volume <percent>] [--environment-volume <percent>] [--announcements-volume <percent>] [--mute-unfocused <on|off>] \
 [--middle-drag <turn|pan>] [--invert-horizontal-turn] [--invert-vertical-turn] \
@@ -76,7 +76,7 @@ pub struct Options {
     pub start_placement: Option<rom_mapgen::StartPlacement>,
     /// Whether the city area limits building (`--city-area on|off`, task 158).
     pub city_area: rom_sim::CityArea,
-    /// The economy's pace (`--gather-rate`, `--research-time`, task 159).
+    /// The economy's pace (`--gather-rate`, `--research-speed`, tasks 159 and 166).
     pub pace: rom_sim::EconomyPace,
     /// Map seed.
     pub seed: u64,
@@ -417,11 +417,11 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
                         format!("--gather-rate expects 100, 50, 25, 10, 5 or 2, got {text:?}")
                     })?;
             }
-            "--research-time" => {
-                let text = value("--research-time")?;
-                options.pace.research_time = rom_sim::EconomyPace::parse_research_time(&text)
+            "--research-speed" => {
+                let text = value("--research-speed")?;
+                options.pace.research_time = rom_sim::EconomyPace::parse_research_speed(&text)
                     .ok_or_else(|| {
-                        format!("--research-time expects 100, 200, 400, 1000 or 2000, got {text:?}")
+                        format!("--research-speed expects 1000, 500, 200, 100, 50, 25, 20, 10 or 5, got {text:?}")
                     })?;
             }
             "--seed" => options.seed = number("--seed", &value("--seed")?)?,
@@ -738,7 +738,7 @@ pub fn match_arguments(arguments: &[String]) -> Vec<String> {
         "--start-placement",
         "--city-area",
         "--gather-rate",
-        "--research-time",
+        "--research-speed",
         "--seed",
         "--players",
         "--factions",
@@ -1370,7 +1370,7 @@ mod tests {
     fn the_economy_pace_parses_and_reaches_the_match() {
         use rom_sim::EconomyPace;
         assert_eq!(parse(args(&[])).unwrap().pace, EconomyPace::default());
-        let slow = parse(args(&["--gather-rate", "10", "--research-time", "400"])).unwrap();
+        let slow = parse(args(&["--gather-rate", "10", "--research-speed", "25"])).unwrap();
         let pace = EconomyPace {
             gather_rate: 10,
             research_time: 400,
@@ -1382,16 +1382,25 @@ mod tests {
         );
         assert!(parse(args(&["--gather-rate", "30"])).is_err());
         assert!(parse(args(&["--gather-rate", "0"])).is_err());
-        assert!(parse(args(&["--research-time", "50"])).is_err());
+        assert!(parse(args(&["--research-speed", "400"])).is_err());
+        assert!(parse(args(&["--research-speed", "30"])).is_err());
+        assert!(parse(args(&["--research-time", "400"])).is_err());
+        assert_eq!(
+            parse(args(&["--research-speed", "1000"]))
+                .unwrap()
+                .pace
+                .research_time,
+            10
+        );
         assert_eq!(
             match_arguments(&args(&[
                 "--gather-rate",
                 "2",
                 "--stats",
-                "--research-time",
-                "2000"
+                "--research-speed",
+                "5"
             ])),
-            ["--gather-rate", "2", "--research-time", "2000"]
+            ["--gather-rate", "2", "--research-speed", "5"]
         );
     }
 

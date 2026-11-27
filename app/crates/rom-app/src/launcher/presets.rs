@@ -10,7 +10,7 @@
 //! ```
 //!
 //! `fields` are the Play form's (`simple::FIELDS`: style, opponents, difficulty, placement,
-//! city_area, gather_rate, research_time, seed, speed, age, script, watch); `script` names a bundled script or a file. `icon` and
+//! city_area, gather_rate, research_speed, seed, speed, age, script, watch); `script` names a bundled script or a file. `icon` and
 //! `picture` are optional.
 
 use std::collections::BTreeMap;
@@ -32,7 +32,7 @@ pub(super) const MATCH_FIELDS: [&str; 12] = [
     "placement",
     "city_area",
     "gather_rate",
-    "research_time",
+    "research_speed",
     "seed",
     "speed",
     "age",

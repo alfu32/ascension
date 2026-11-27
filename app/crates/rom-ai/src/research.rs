@@ -178,7 +178,10 @@ pub(crate) fn wishes(
             }
             if path.contains(&tech) {
                 let age = Catalogue::is_age_tech(rules, tech);
-                let urgency = (in_age.saturating_sub(AGE_PATIENCE_TICKS) / 1200) as i64
+                // At a slow economy (task 166) the patience and the minutes stretch with it:
+                // an age that takes ten times as long to pay for is not ten times as late.
+                let urgency = (in_age.saturating_sub(view.paced(AGE_PATIENCE_TICKS))
+                    / view.paced(1200).max(1)) as i64
                     * AGE_URGENCY_PER_MINUTE;
                 wishes.push(Wish {
                     score: 560

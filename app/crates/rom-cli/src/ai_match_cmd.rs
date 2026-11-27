@@ -9,7 +9,7 @@ use rom_mapgen::{
 use rom_rules::{DefId, ResourceKind, Rules};
 use rom_sim::{BodyId, CityArea, EconomyPace, MatchOptions, Player, PlayerId, Pos, World};
 
-const USAGE: &str = "usage: rom ai-match --db <rules.db> --seed <n> --players <profile[:difficulty],...> --ticks <n> [--universe] [--trace <ticks>] [--city-area <on|off>] [--gather-rate <100|50|25|10|5|2>] [--research-time <100|200|400|1000|2000>] [--style <map style key>] [--start-age <age key>]";
+const USAGE: &str = "usage: rom ai-match --db <rules.db> --seed <n> --players <profile[:difficulty],...> --ticks <n> [--universe] [--trace <ticks>] [--city-area <on|off>] [--gather-rate <100|50|25|10|5|2>] [--research-speed <1000|500|200|100|50|25|20|10|5>] [--style <map style key>] [--start-age <age key>]";
 /// Builders each player starts with, as in the application.
 const BUILDERS: usize = 5;
 /// Amount of every base resource each player starts with, as in the application.
@@ -725,11 +725,12 @@ pub fn parse_gather_rate(text: &str) -> Result<u32, String> {
     })
 }
 
-/// Reads `--research-time <pct>` (task 159): one of 100, 200, 400, 1000 or 2000.
-pub fn parse_research_time(text: &str) -> Result<u32, String> {
-    EconomyPace::parse_research_time(text).ok_or_else(|| {
+/// Reads `--research-speed <pct>` (tasks 159, 166): one of 1000, 500, 200, 100, 50, 25, 20, 10 or 5, and gives the research time
+/// it stands for (25 → 400).
+pub fn parse_research_speed(text: &str) -> Result<u32, String> {
+    EconomyPace::parse_research_speed(text).ok_or_else(|| {
         format!(
-            "--research-time expects one of 100, 200, 400, 1000 or 2000 (percent), got {text:?}"
+            "--research-speed expects one of 1000, 500, 200, 100, 50, 25, 20, 10 or 5 (percent), got {text:?}"
         )
     })
 }
@@ -758,7 +759,7 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
             "--trace" => trace = value.parse::<u64>()?,
             "--city-area" => city_area = parse_city_area(&value)?,
             "--gather-rate" => pace.gather_rate = parse_gather_rate(&value)?,
-            "--research-time" => pace.research_time = parse_research_time(&value)?,
+            "--research-speed" => pace.research_time = parse_research_speed(&value)?,
             "--style" => style = Some(value),
             "--start-age" => start_age = Some(value),
             _ => return Err(format!("unknown argument: {flag}").into()),

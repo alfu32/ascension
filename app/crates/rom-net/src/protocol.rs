@@ -407,7 +407,8 @@ pub struct MatchSetup {
     /// Percent of every income drawn from the world (task 159): one of
     /// [`EconomyPace::GATHER_RATES`].
     pub gather_rate: u32,
-    /// Percent of every research's time (task 159): one of [`EconomyPace::RESEARCH_TIMES`].
+    /// Percent of every research's time (task 159): one of [`EconomyPace::RESEARCH_TIMES`]; the
+    /// screens show it as the research speed, `10 000 / research_time` (task 166).
     pub research_time: u32,
     /// Every player starts in the age of this ordinal.
     #[serde(default, skip_serializing_if = "Option::is_none")]

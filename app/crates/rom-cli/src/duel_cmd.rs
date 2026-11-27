@@ -23,7 +23,7 @@ use rom_mapgen::{StartPlacement, Universe};
 use rom_rules::{DefId, Rules, VictoryRule};
 use rom_sim::{CityArea, EconomyPace, MatchOptions, Outcome, PlayerId, World};
 
-const USAGE: &str = "usage: rom duel --db <rules.db> --profiles <a[:difficulty]>,<b[:difficulty]> --seeds <first>..<last> [--ticks-limit <n>] [--universe [--style <map style key>] [--start-placement separate|together]] [--victories conquest[,territory]] [--city-area <on|off>] [--gather-rate <pct>] [--research-time <pct>] [--side <tiles>] [--jobs <n>] [--trace <ticks>]";
+const USAGE: &str = "usage: rom duel --db <rules.db> --profiles <a[:difficulty]>,<b[:difficulty]> --seeds <first>..<last> [--ticks-limit <n>] [--universe [--style <map style key>] [--start-placement separate|together]] [--victories conquest[,territory]] [--city-area <on|off>] [--gather-rate <pct>] [--research-speed <pct>] [--side <tiles>] [--jobs <n>] [--trace <ticks>]";
 /// One and a half game hours at 20 ticks per second.
 pub const DEFAULT_TICKS_LIMIT: u64 = 108_000;
 /// Maps drawn for one seed before an unfair start is accepted.
@@ -739,8 +739,8 @@ pub fn run_command(
             "--gather-rate" => {
                 pace.gather_rate = crate::ai_match_cmd::parse_gather_rate(&value)?;
             }
-            "--research-time" => {
-                pace.research_time = crate::ai_match_cmd::parse_research_time(&value)?;
+            "--research-speed" => {
+                pace.research_time = crate::ai_match_cmd::parse_research_speed(&value)?;
             }
             "--victories" => {
                 victories = value

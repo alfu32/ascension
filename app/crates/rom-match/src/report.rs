@@ -313,11 +313,12 @@ impl MatchReport {
         }
     }
 
-    /// The economy pace in words: "gathering 25 % · research time 400 %".
+    /// The economy pace in words: "gathering 25 % · research speed 25 %".
     pub fn pace_text(&self) -> String {
         format!(
-            "gathering {} % · research time {} %",
-            self.pace.gather_rate, self.pace.research_time
+            "gathering {} % · research speed {} %",
+            self.pace.gather_rate,
+            self.pace.research_speed()
         )
     }
 

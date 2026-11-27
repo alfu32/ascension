@@ -2,8 +2,8 @@
 use rom_geo::CubeSurface;
 use rom_rules::{BodyKind, Rules, build_rules_db};
 use rom_sim::{
-    BodyId, BodyInfo, Command, EntityId, PlanetSurface, Player, PlayerId, Pos, RouteInfo, SimError,
-    SystemInfo, Topology, UniverseSetup, World,
+    BodyId, BodyInfo, Command, EconomyPace, EntityId, PlanetSurface, Player, PlayerId, Pos,
+    RouteInfo, SimError, SystemInfo, Topology, UniverseSetup, World,
 };
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -287,6 +287,41 @@ fn presence_claim_pays_income_and_counts_toward_the_cap() {
     let before = balance(&w, 1);
     run(&mut w, 600);
     assert_eq!(balance(&w, 1) - before, 70);
+}
+
+/// Task 166: at a 2 % gathering rate a claimed body of 40 metal a period shows 0 whole units
+/// a period, yet pays its 0.8 a period over time: the remainder is carried in hundredths like
+/// every other income. Twice, to the same hash.
+#[test]
+fn a_claimed_body_at_two_percent_pays_over_time() {
+    let once = || {
+        let mut w = world();
+        w.set_pace(EconomyPace {
+            gather_rate: 2,
+            research_time: 100,
+        })
+        .unwrap();
+        let body = BodyId(3);
+        let paid = w.body_yield(body, PlayerId(1)).expect("a presence body");
+        assert_eq!((paid.per_period, paid.hundredths_per_period), (0, 80));
+        let pos = w.body_position(body).unwrap();
+        ship(&mut w, 1, pos);
+        run(&mut w, 40);
+        assert_eq!(claimant(&w, 3), Some(PlayerId(1)));
+        let start = balance(&w, 1);
+        run(&mut w, 600 * 10);
+        let ten_periods = balance(&w, 1) - start;
+        // 10 periods × 0.8: eight whole units, give or take the period in progress.
+        assert!((7..=9).contains(&ten_periods), "{ten_periods}");
+        run(&mut w, 600 * 90);
+        assert!(
+            (79..=81).contains(&(balance(&w, 1) - start)),
+            "{}",
+            balance(&w, 1) - start
+        );
+        w.hash()
+    };
+    assert_eq!(once(), once());
 }
 
 #[test]

@@ -18,7 +18,7 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 const SERVE_USAGE: &str = "usage: rom serve [--bind <addr>] [--port <n>] [--path </p/>] \
 [--state-dir <dir>] [--resume] [--keys <n>] [--seed <n>] [--style <Planet|Solar|Cluster|Sector|Quadrant|Galaxy|key>] \
-[--home-size <n>] [--start-placement <separate|together>] [--city-area <on|off>] [--gather-rate <pct>] [--research-time <pct>] [--age <ordinal>] [--humans <n>] \
+[--home-size <n>] [--start-placement <separate|together>] [--city-area <on|off>] [--gather-rate <pct>] [--research-speed <pct>] [--age <ordinal>] [--humans <n>] \
 [--ai <profile:difficulty,...|none>] [--factions <key,key,...>] [--speed <percent>] \
 [--on-disconnect <pause-then-computer|idle|computer>] [--wait-seconds <n>] [--takeover <profile:difficulty>] \
 [--autosave-minutes <n>] [--countdown-seconds <n>]";
@@ -131,8 +131,8 @@ pub fn serve(mut args: impl Iterator<Item = String>) -> Result<()> {
             "--gather-rate" => {
                 plan.pace.gather_rate = crate::ai_match_cmd::parse_gather_rate(&value)?;
             }
-            "--research-time" => {
-                plan.pace.research_time = crate::ai_match_cmd::parse_research_time(&value)?;
+            "--research-speed" => {
+                plan.pace.research_time = crate::ai_match_cmd::parse_research_speed(&value)?;
             }
             "--age" => plan.age = Some(value.parse()?),
             "--humans" => plan.humans = value.parse()?,
