@@ -39,6 +39,7 @@ mod rebuild;
 mod research;
 mod sealift;
 mod sites;
+mod swimming;
 mod view;
 
 pub use ascension::{ChatTopic, chat_line, descend};

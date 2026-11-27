@@ -2164,6 +2164,8 @@ pub fn snapshot_on(
         if entity.owner == me && world.is_carrier_type(entity.type_id) {
             view.aboard = clamp_u8(world.passengers(entity.id).len() as i64);
         }
+        // Drawn waist-deep in the water it swims (task 168).
+        view.swimming = !view.building && world.swimming(entity.id);
         views.push(view);
     }
     for sighting in sightings {
@@ -2198,6 +2200,7 @@ pub fn snapshot_on(
                 kept: 0,
                 capacity: 0,
                 aboard: 0,
+                swimming: false,
                 carry_node: false,
                 under_construction: None,
                 model: model_of(building.owner, building.type_id),
@@ -2251,6 +2254,7 @@ pub fn snapshot_on(
             kept: 0,
             capacity: 0,
             aboard: 0,
+            swimming: false,
             carry_node: false,
             under_construction: Some((left * left).max(0.02)),
             model: model_of(wreck.owner, wreck.type_id),
@@ -2545,6 +2549,7 @@ fn view_of(
         kept: 0,
         capacity: et.keeper.as_ref().map_or(0, |k| clamp_u8(k.capacity)),
         aboard: 0,
+        swimming: false,
         carry_node: et
             .node
             .as_ref()

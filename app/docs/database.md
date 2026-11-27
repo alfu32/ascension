@@ -3303,3 +3303,52 @@ Screenshots (the game's own paths): `img/167-passengers.png` and `img/167-cog-le
 aboard and the pips over it), `img/167-ashore.png` (`tasks/167-ashore-script.txt`: set ashore on
 the island's south coast), and the model sheets `img/167-model-cog.png`,
 `img/167-model-fluyt.png`, `img/167-model-troopship.png`, `img/167-model-landing_ship.png`.
+
+## Swimming (task 168)
+
+The owner (2026-11-25): "citizens can go (swim) through shallow bodies of water since age 5 or 6
+(research swimming in docks)" and "infantry units can swim from age 9"; ages 5, the Industrial
+age, and 9, the Fusion age, accepted on 2026-11-26. **No table or column was added**: swimming
+is two tags, two stats and two technologies, written by hand at the end of `db/seed.sql`
+(after every other definition, so earlier ids stay).
+
+- **Where.** A terrain tagged **`shallow`** (new, category `terrain`) is water a swimmer may
+  cross: `ter.coast` (Shallows). Deep water (`ter.deep`) has no tag and stays closed.
+- **Who.** A unit type tagged **`swimmer`** (new, category `movement`) may learn to swim:
+  `unit.citizen` and every type tagged `infantry` that walks (`foot`) with a `biological` body,
+  militia included. Wheeled infantry (combat robots, gun drones, flak, missile and laser
+  batteries) and the recon drone are machines and never swim; nor do riders, siege engines and
+  vehicles, which are not tagged.
+- **How fast.** The entity stat **`swim`** (new) is the speed on shallow water as a percentage of
+  the speed on plain land; 0, the base, means the unit cannot swim. The stat **`swim_fire`**
+  (new) above 0 lets a swimming unit fire.
+- **Researches** (kind `upgrade`; the next free places of the research pages):
+
+  | Key | Name | At | Age | Ticks | Price | Modifiers |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | `tech.swimming` | Swimming | dock, research (2, 2) | Industrial (5) | 450 | 150 food, 150 wealth | `swim` +40 on tag `civilian` |
+  | `tech.combat_swimming` | Combat Swimming | barracks, research_2 (1, 2) | Fusion (9) | 700 | 300 food, 500 wealth, 250 knowledge | `swim` +50 and `swim_fire` +1 on tag `infantry` |
+
+  A unit swims only with both the tag `swimmer` and a positive `swim`: the citizens' research
+  reaches every civilian but only citizens swim; Combat Swimming reaches the wheeled infantry
+  too, which do not.
+- **Simulation** (`rom-sim/src/swimming.rs`). A walker's path class is its movement class, or
+  once it can swim a **swim class**: the movement class with the swim level in its high bits
+  (`swim_class`), whose grid is the movement class's grid plus every shallow tile at the swim
+  speed. The levels are the distinct `swim` values of the modifier rows (40 and 50); a stacked
+  total above them swims at the highest level not above it. A map without shallow water gets no
+  swim grids and its swimmers use their movement class's. The path class is cached with the
+  unit's motion and refreshed with its stats (spawn, research, capture), so the path cost uses
+  the swim speed: a step into water weighs 100/40 of a step on plain land, and a straight walk
+  or a smoothed shortcut crosses water only from water to water (`Pathing::line_open`), so a
+  short walk round is never cut across a long swim. Reachability for a player's units:
+  `World::reachable_for`; `World::can_swim`, `World::swimming` (stands in water it can only
+  swim). A swimming unit neither gathers nor builds nor repairs (`World::approach` waits for dry
+  land and walks it onto the footprint) and fires only with `swim_fire` (`can_fire_at`, attack
+  ground). It is hit as on land. Boarding a sea transport needs only to be within reach of the
+  ship, so a swimmer boards from the water; passengers still step ashore onto land.
+- **Saves**: nothing new. The research is in `player_tech`; the path class is derived on load.
+  Researches are never lost, so no unit is left in water it can no longer swim.
+- **Drawing**: `EntityView::swimming` (new); `rom-render` lowers the model by
+  `SWIM_DEPTH` = 45 % of its height below the water surface (waist-deep). No model changed.
+- **Computer players**: `docs/computer-player.md`, "Swimming (task 168)".

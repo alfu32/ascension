@@ -8,10 +8,7 @@
 //! they step out.
 
 use crate::construction::footprint;
-use crate::{
-    Command, Entity, EntityId, Order, OrderStatus, Pos, SimError, World, avoidance::Motion,
-    movement::Walk,
-};
+use crate::{Command, Entity, EntityId, Order, OrderStatus, Pos, SimError, World, movement::Walk};
 use rom_rules::{DefId, EntityClass, Layer, ProductionMode};
 
 /// How far from a landing point the search for open ground reaches, in milli-tiles.
@@ -639,10 +636,10 @@ impl World {
         for order in &mut e.orders {
             order.movement = None;
         }
-        let type_id = e.type_id;
         let slot = self.slot(pos.body);
         self.surfaces[slot].spatial.insert(unit, pos);
-        self.avoid.set(unit, Motion::of(&self.rules, type_id), pos);
+        let motion = self.motion_of(unit);
+        self.avoid.set(unit, motion, pos);
         self.economy.dirty.insert(unit);
         self.refresh_viewer(unit);
     }

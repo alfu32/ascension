@@ -179,7 +179,7 @@ fn beach(view: &View<'_>, probe: DefId, walker: DefId, harbour: Pos, goal: Pos) 
         .iter()
         .take_while(|(dx, dy)| dx * dx + dy * dy <= BEACH_TILES * BEACH_TILES)
         .map(|(dx, dy)| world.offset(goal, i64::from(*dx) * 1000, i64::from(*dy) * 1000))
-        .filter(|land| world.reachable(walker, *land, goal) == Some(true))
+        .filter(|land| world.reachable_for(view.me, walker, *land, goal) == Some(true))
         .find(|land| {
             [
                 (1, 0),
@@ -247,7 +247,7 @@ fn walkable(view: &View<'_>, units: &[&Entity], to: Pos) -> bool {
     let (mut yes, mut all) = (0, 0);
     for (type_id, (from, count)) in kinds {
         all += count;
-        if view.world.reachable(type_id, from, to) == Some(true) {
+        if view.world.reachable_for(view.me, type_id, from, to) == Some(true) {
             yes += count;
         }
     }
@@ -386,7 +386,7 @@ fn known_land(view: &View<'_>, walker: DefId, home: Pos) -> bool {
         (0..(height + tiles - 1) / tiles).all(|y| {
             (0..(width + tiles - 1) / tiles).all(|x| {
                 let at = Pos::on(home.body, face, x * cell + cell / 2, y * cell + cell / 2);
-                world.reachable(walker, home, at) != Some(true)
+                world.reachable_for(view.me, walker, home, at) != Some(true)
                     || world.is_explored_on_body(
                         view.me,
                         home.body,
@@ -710,8 +710,8 @@ fn ashore(plan: &mut Plan<'_>, memory: &mut Memory, ferry: &mut Army) {
     let mut orders: Vec<(EntityId, Pos)> = Vec::new();
     for e in members {
         let view = &plan.view;
-        let at_home =
-            rally.is_some_and(|r| view.world.reachable(e.type_id, e.pos, r) == Some(true));
+        let at_home = rally
+            .is_some_and(|r| view.world.reachable_for(view.me, e.type_id, e.pos, r) == Some(true));
         if at_home {
             ferry.members.remove(&e.id.0);
             memory
@@ -726,7 +726,7 @@ fn ashore(plan: &mut Plan<'_>, memory: &mut Memory, ferry: &mut Army) {
             .enemies
             .values()
             .filter(|x| x.building && x.pos.body == e.pos.body)
-            .filter(|x| view.world.reachable(e.type_id, e.pos, x.pos) == Some(true))
+            .filter(|x| view.world.reachable_for(view.me, e.type_id, e.pos, x.pos) == Some(true))
             .min_by_key(|x| (view.distance(e.pos, x.pos), x.pos.face, x.pos.x, x.pos.y))
             .map(|x| x.pos)
             .or(target);

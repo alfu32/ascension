@@ -4,11 +4,13 @@ use crate::{
     Weights,
     catalogue::Catalogue,
     economy::Economy,
+    memory::EnemySighting,
     plan::{Act, Wish},
+    swimming,
     view::{View, operational},
 };
 use rom_rules::{DefId, EntityClass, ProductionMode, StatScope};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Technologies still to research before the next age can be: the age technology itself
 /// and, through prerequisites, everything it waits for.
@@ -134,11 +136,14 @@ const AGE_URGENCY_MAX: i64 = 400;
 
 /// Wishes for technologies; returns the buildings the age path needs. `in_age` is how long
 /// the player has been in its age: an age that drags on moves the next one up the list,
-/// past even an alarm, so a long war cannot keep a player in one age for good.
+/// past even an alarm, so a long war cannot keep a player in one age for good. A research
+/// that teaches swimming is wished only while it opens land (task 168; `enemies` are the
+/// remembered enemies).
 pub(crate) fn wishes(
     view: &View<'_>,
     weights: &Weights,
     eco: &Economy,
+    enemies: &BTreeMap<u32, EnemySighting>,
     in_age: u64,
     second_best: bool,
     wishes: &mut Vec<Wish>,
@@ -192,6 +197,10 @@ pub(crate) fn wishes(
                     reserve: true,
                     opening: false,
                 });
+            } else if swimming::teaches(view, tech) {
+                if swimming::opens_land(view, enemies, tech) {
+                    side.push((swimming::SWIM_WORTH, tech));
+                }
             } else if !info.repeatable {
                 side.push((worth(view, weights, eco, tech), tech));
             }

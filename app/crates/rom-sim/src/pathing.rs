@@ -1,6 +1,7 @@
 //! Movement-class cost grids, line-of-sight checks, and integer A* spread over ticks.
 
 use crate::geometry::{Geometry, Tile};
+use crate::swimming::{SwimRules, base_class, swim_class};
 use crate::tiles::Tiles;
 use crate::{EntityId, MapGrid, OrderId, Pos, integer_sqrt};
 use rom_rules::{DefId, EntityClass, EntityType, Rules};
@@ -215,7 +216,62 @@ fn class_grids(rules: &Rules, map: &MapGrid) -> BTreeMap<u32, ClassGrid> {
             },
         );
     }
+    swim_grids(rules, map, &mut classes);
     classes
+}
+
+/// Adds the path class of every movement class whose walkers may learn to swim, at every swim
+/// level the rules grant (task 168): the class's own tiles, and the shallow water it cannot
+/// enter at that level's speed. A map without shallow water gets none; its walkers use the
+/// class's own grid (`Pathing::grid`).
+fn swim_grids(rules: &Rules, map: &MapGrid, classes: &mut BTreeMap<u32, ClassGrid>) {
+    let swim = SwimRules::of(rules);
+    let Some(shallow) = swim.shallow else {
+        return;
+    };
+    let wet: Vec<bool> = map
+        .terrain
+        .iter()
+        .map(|t| rules.has_tag(*t, shallow))
+        .collect();
+    if !wet.contains(&true) {
+        return;
+    }
+    for (base, level) in swim.variants() {
+        let Some(grid) = classes.get(&base).filter(|g| !g.flies) else {
+            continue;
+        };
+        let pct: Vec<u32> = grid
+            .pct
+            .iter()
+            .zip(&wet)
+            .map(|(p, wet)| if p == 0 && *wet { level } else { p })
+            .collect();
+        let weight: Vec<u32> = pct
+            .iter()
+            .map(|p| {
+                if *p == 0 {
+                    0
+                } else {
+                    (WEIGHT_SCALE / u64::from(*p)).max(1) as u32
+                }
+            })
+            .collect();
+        let min_weight = weight
+            .iter()
+            .filter(|w| **w > 0)
+            .min()
+            .map_or(1, |w| u64::from(*w));
+        classes.insert(
+            swim_class(base, level),
+            ClassGrid {
+                flies: false,
+                pct: Tiles::from_vec(pct),
+                weight: Tiles::from_vec(weight),
+                min_weight,
+            },
+        );
+    }
 }
 
 impl Pathing {
@@ -282,9 +338,27 @@ impl Pathing {
         self.components.lock().expect("component cache").clear();
     }
 
+    /// The grid of a path class: its own, or for a swimming class (task 168) on a map without
+    /// shallow water, its movement class's.
+    #[inline]
+    fn grid(&self, class: u32) -> Option<&ClassGrid> {
+        self.classes.get(&self.grid_key(class))
+    }
+
+    /// The key of [`Pathing::grid`]'s grid.
+    #[inline]
+    fn grid_key(&self, class: u32) -> u32 {
+        if self.classes.contains_key(&class) {
+            class
+        } else {
+            base_class(class)
+        }
+    }
+
     /// Connected stretches of terrain a movement class can cross, labelled from 1 per tile
     /// (0 where it cannot stand); buildings do not count. Flying classes have one stretch.
     pub fn components(&self, class: u32) -> Option<std::sync::Arc<Vec<u32>>> {
+        let class = self.grid_key(class);
         let grid = self.classes.get(&class)?;
         let mut cache = self.components.lock().expect("component cache");
         if let Some(labels) = cache.get(&class) {
@@ -328,7 +402,7 @@ impl Pathing {
 
     /// Whether a class flies.
     pub fn flies(&self, class: u32) -> bool {
-        self.classes.get(&class).is_some_and(|grid| grid.flies)
+        self.grid(class).is_some_and(|grid| grid.flies)
     }
 
     /// Adds or removes one building footprint on a face from the occupancy layer. A minefield
@@ -371,7 +445,7 @@ impl Pathing {
 
     /// Speed percentage for a class on the tile under `pos`; flyers always 100.
     pub fn speed_pct(&self, class: u32, pos: Pos) -> u32 {
-        match (self.classes.get(&class), self.geo.pos_index(pos)) {
+        match (self.grid(class), self.geo.pos_index(pos)) {
             (Some(grid), Some(index)) => grid.pct[index],
             _ => 0,
         }
@@ -401,7 +475,7 @@ impl Pathing {
         tile: Tile,
         exempt: Option<TileRect>,
     ) -> bool {
-        let (Some(grid), Some(index)) = (self.classes.get(&class), self.geo.index_of(tile)) else {
+        let (Some(grid), Some(index)) = (self.grid(class), self.geo.index_of(tile)) else {
             return false;
         };
         grid.flies
@@ -435,9 +509,9 @@ impl Pathing {
         let ex = (i64::from(from.x) + dx).div_euclid(1000) as i32;
         let ey = (i64::from(from.y) + dy).div_euclid(1000) as i32;
         if (tx, ty) == (ex, ey) {
-            return self.classes.contains_key(&class);
+            return self.grid(class).is_some();
         }
-        let Some(grid) = self.classes.get(&class) else {
+        let Some(grid) = self.grid(class) else {
             return false;
         };
         let flat = self.geo.is_flat();
@@ -509,13 +583,38 @@ impl Pathing {
         (tx, ty) == (ex, ey)
     }
 
-    /// Drops each waypoint whose neighbours see each other across tiles passable to `side`.
+    /// Whether a swimmer's class stands in water at `pos` that it can only swim (task 168).
+    fn wet(&self, class: u32, pos: Pos) -> bool {
+        let base = base_class(class);
+        base != class && self.speed_pct(base, pos) == 0 && self.speed_pct(class, pos) > 0
+    }
+
+    /// [`Pathing::line_clear_as`] for a straight walk that skips the search or a path's
+    /// shortcut (task 168): a swimmer's line crosses water only from water to water, so a
+    /// short walk round, which the search prefers, is never cut across a long swim.
+    pub fn line_open(
+        &self,
+        class: u32,
+        side: Option<u32>,
+        from: Pos,
+        to: Pos,
+        exempt: Option<TileRect>,
+    ) -> bool {
+        let base = base_class(class);
+        self.line_clear_as(class, side, from, to, exempt)
+            && (base == class
+                || !self.classes.contains_key(&class)
+                || (self.wet(class, from) && self.wet(class, to))
+                || self.line_clear_as(base, side, from, to, exempt))
+    }
+
+    /// Drops each waypoint whose neighbours see each other across tiles passable to `side`
+    /// ([`Pathing::line_open`]).
     pub fn smooth(&self, class: u32, side: Option<u32>, from: Pos, points: &[Pos]) -> Vec<Pos> {
         let mut out = Vec::new();
         let mut anchor = from;
         for (i, point) in points.iter().enumerate() {
-            if i + 1 < points.len() && self.line_clear_as(class, side, anchor, points[i + 1], None)
-            {
+            if i + 1 < points.len() && self.line_open(class, side, anchor, points[i + 1], None) {
                 continue;
             }
             out.push(*point);
@@ -725,7 +824,11 @@ impl Pathing {
         self.stamp[start as usize] = generation;
         self.g[start as usize] = 0;
         self.parent[start as usize] = start;
-        let h = self.heuristic(self.classes[&class].min_weight, start, target);
+        let h = self.heuristic(
+            self.grid(class).expect("searched class").min_weight,
+            start,
+            target,
+        );
         self.h[start as usize] = h;
         let mut open = BinaryHeap::new();
         open.push(Reverse((h, h, start)));
@@ -748,7 +851,8 @@ impl Pathing {
             let request = self.queue.front().expect("searched request");
             (request.class, request.goal, request.side)
         };
-        let grid = &self.classes[&class];
+        let key = self.grid_key(class);
+        let grid = &self.classes[&key];
         let geo = &self.geo;
         let flat = geo.is_flat();
         let anchor = geo.index_of(search.anchor).expect("clamped anchor") as u32;

@@ -147,6 +147,8 @@ pub struct EntityView {
     pub capacity: u8,
     /// Units aboard an own carrier, drawn as pips above it (task 167); zero otherwise.
     pub aboard: u8,
+    /// A unit swimming shallow water (task 168): drawn lowered to the water surface, waist-deep.
+    pub swimming: bool,
     /// A carry-mode node drawn as a gold-capped plinth.
     pub carry_node: bool,
     /// Construction progress 0 to 1 for a site, `None` when complete.
@@ -714,10 +716,20 @@ pub(crate) fn entity_frame(view: &EntityView, ground: &dyn Footing) -> GroundFra
             origin: ground.datum_point(view.face, view.x, view.y, (0.0, 0.0), height),
             ..frame
         }
+    } else if view.swimming {
+        // Waist-deep (task 168): the model sinks below the water surface it stands on.
+        let depth = SWIM_DEPTH * unit_height(view);
+        GroundFrame {
+            origin: std::array::from_fn(|k| frame.origin[k] - frame.up[k] * depth),
+            ..frame
+        }
     } else {
         frame
     }
 }
+
+/// Share of a swimming unit's height drawn below the water surface (task 168).
+pub const SWIM_DEPTH: f32 = 0.45;
 
 /// The highest ground under a ship's hull: at its point and on a ring of its half length.
 fn ship_floor(view: &EntityView, ground: &dyn Footing) -> f32 {
@@ -1481,6 +1493,7 @@ mod tests {
             kept: 0,
             capacity: 0,
             aboard: 0,
+            swimming: false,
             carry_node: false,
             under_construction: None,
             model: None,
@@ -1493,6 +1506,22 @@ mod tests {
             cloud: None,
             activity: Default::default(),
         }
+    }
+
+    #[test]
+    fn a_swimming_unit_stands_waist_deep_in_the_water() {
+        let ground = FlatGround(&|_, _| 0.0);
+        let dry = view(1, 3.5, 3.5, 0.0);
+        let wet = EntityView {
+            swimming: true,
+            ..dry
+        };
+        let (dry_frame, wet_frame) = (entity_frame(&dry, &ground), entity_frame(&wet, &ground));
+        let depth = SWIM_DEPTH * unit_height(&dry);
+        assert!((dry_frame.origin[1] - wet_frame.origin[1] - depth).abs() < 1e-5);
+        assert_eq!(dry_frame.origin[0], wet_frame.origin[0]);
+        // Its top stays above the water surface.
+        assert!(wet_frame.origin[1] + unit_height(&wet) > 0.0);
     }
 
     fn pair(older: Vec<EntityView>, newer: Vec<EntityView>) -> SnapshotPair {

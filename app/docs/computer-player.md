@@ -1722,3 +1722,22 @@ that land attack the buildings in reach. Player two's searching transport never 
 one, nor did either player on seed 8 within the hour: the eight search points are a coarse net
 on a planet of 192-tile faces, and a long voyage whose path search gives up moves on to the next
 point.
+
+## Swimming (task 168)
+
+`rom-ai/src/swimming.rs`. A research that teaches swimming (a modifier on the stat `swim`) is not
+weighed like other side research: it is wished (score 500, as a side research worth 200) only
+while it **opens land**: for an own unit type the row teaches that cannot swim yet, either land
+within an own city's economic radius (looked at every second tile) that it cannot walk to but
+could swim to, for workers and builders, or a remembered enemy building on its planet the same,
+for armed units (`World::reachable_for` against `World::reachable_swimming`). Otherwise it is
+never researched.
+
+Once learnt, nothing else is special: every reachability test of the managers asks about the
+player's own units (`World::reachable_for`): the military manager's "can most of the army walk
+there", the sea lift's beach, home and ashore tests, the rally spot. So a target across shallow
+water is walked and swum to by the main army, and **the sea lift is left for deep water** (shallow
+water on these planets is the coastal band, so a swim is always short). Workers go to the nearest
+gather site with a free slot that they can reach (`free_site`), and a building is given to a
+builder that can reach its site first, so citizens who swim are sent to island sites within their
+cities' reach, which before were given to whoever stood nearest and failed `no_path`.

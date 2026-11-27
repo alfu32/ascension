@@ -200,8 +200,8 @@ impl World {
             order.status = OrderStatus::Failed("unsupported".into());
             return;
         }
-        // An aircraft fires only in the air (task 123).
-        if self.is_grounded(id) {
+        // An aircraft fires only in the air (task 123); a swimmer may have to reach land.
+        if self.is_grounded(id) || self.holds_fire_in_water(id) {
             return;
         }
         let distance = |w: &World| {

@@ -79,7 +79,7 @@ impl World {
                 request: None,
                 repaths: 0,
             };
-            if pathing.line_clear_as(motion.class, side, pos, own, exempt) {
+            if pathing.line_open(motion.class, side, pos, own, exempt) {
                 state.distance = geo
                     .ceil_distance(pos, own)
                     .expect("clear lines are in reach");
@@ -223,7 +223,8 @@ impl World {
         let walker = self.entity(id).expect("walker");
         let pos = walker.pos;
         let (goal, squared) = closest(self, pos);
-        if squared <= reach * reach {
+        // A swimmer works only from dry land (task 168): it walks on onto the footprint.
+        if squared <= reach * reach && !self.swimming(id) {
             return true;
         }
         // A builder that does not move (an automated colony) works on what lies within its
@@ -247,7 +248,7 @@ impl World {
             return false;
         }
         let pos = self.entity(id).expect("walker").pos;
-        let near = closest(self, pos).1 <= reach * reach;
+        let near = closest(self, pos).1 <= reach * reach && !self.swimming(id);
         if !near && walk == Walk::Arrived {
             // Start a fresh walk next tick; it fails if no step gets closer.
             order.movement = None;
@@ -335,7 +336,7 @@ impl World {
                 }
                 points.extend(found.tiles[1..].iter().map(|t| geo.tile_centre(*t)));
                 let last = points.last().copied().unwrap_or(pos);
-                if pathing.line_clear_as(class, request.side, last, own, None) {
+                if pathing.line_open(class, request.side, last, own, None) {
                     points.push(own);
                 } else if points.is_empty() {
                     points.push(geo.tile_centre(end));

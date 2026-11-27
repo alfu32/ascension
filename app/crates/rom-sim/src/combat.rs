@@ -108,6 +108,7 @@ impl World {
         }
         self.refresh_viewer(id);
         self.refresh_territory(id);
+        self.refresh_swim(id);
     }
 
     pub(crate) fn validate_combat_order(&self, command: &Command) -> Result<(), SimError> {
@@ -366,8 +367,9 @@ impl World {
     }
 
     pub(crate) fn can_fire_at(&self, id: EntityId, target: EntityId) -> bool {
-        // An aircraft fires only in the air (task 123).
-        if self.is_grounded(id) {
+        // An aircraft fires only in the air (task 123); a swimmer from the water only when its
+        // research says so (task 168).
+        if self.is_grounded(id) || self.holds_fire_in_water(id) {
             return false;
         }
         let e = self.entity(id).expect("attacker");
