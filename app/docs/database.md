@@ -3749,6 +3749,11 @@ after every other definition, so earlier ids stay.
   `rom-ai/tests/airlift.rs` (a besieged barracks flies to the safe city on another planet of its
   system), `rom-app` selection tests (a right click on a planet in the system view, the ghost on that
   planet, a click lands it). Each scenario runs twice and compares state hashes.
+- **Measured.** `rom playthrough --seed 1` hash `18de088ac92ec4b0`, ascension `d75f72f81ad7b944`,
+  unchanged: no building lifts off in it, the reach modifiers change no stat it reads, and the
+  computer players value the reach at nothing in their research. `rom fight-matrix`:
+  `strengths=305 unanswered=0`, unchanged (no weapon or layer row changed). `rom duel`
+  moderate–easiest, seeds 1–20: 20–0, mean tick 46 393, unchanged.
 - **Drawing.** In the planet view a building in orbit is drawn above its point at the orbit's
   height, its engines firing, rising to it from its flight height and coming back down to it
   (`sim_thread`); in the system view as a ship of the smallest class (`looks::ship_scales` gives
