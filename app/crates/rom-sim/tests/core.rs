@@ -992,6 +992,18 @@ fn every_vocabulary_kind_validates_its_component_and_target() {
                     ));
                     needs_space = true;
                 }
+                // A jump needs a unit tagged `jumper` and its jetpacks (task 169,
+                // `leap_tests`); this player has researched nothing.
+                Err(SimError::CannotJump) => {
+                    assert_eq!(kind.key, "jump");
+                    needs_space = true;
+                }
+                // A drop needs a ship in orbit with troops aboard (task 169,
+                // tests/orbital_drop.rs).
+                Err(SimError::NotInOrbit | SimError::CannotDrop) => {
+                    assert_eq!(kind.key, "drop");
+                    needs_space = true;
+                }
                 other => panic!("unexpected result for {}: {other:?}", kind.key),
             }
         }

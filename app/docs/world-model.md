@@ -703,6 +703,17 @@ cities in its owners' colours, and the star map rings each system with them.
 Pressing the focus key on a ship that orbits a planet whose globe is not shown
 flies the camera down to that planet.
 
+### Jetpacks and drops from orbit (task 169)
+
+From the Spacefaring age (10) foot soldiers with the barracks' Jetpacks jump up to six tiles at a
+time, every twenty seconds: over walls, gates, water and cliffs, onto free land. A standing
+shield field blocks the air above its line too, so no jump crosses it. In the jump the soldier is
+in the air: anti-air hits it, ground weapons do not, and it cannot fire. From the Starfaring age
+(11), with Orbital Drop, a ship in orbit drops the infantry aboard onto visible open land of the
+planet below within thirty tiles of the point under it, without landing; they fall for four
+seconds, in reach of anti-air and the planet's ground batteries. Without the research a ship
+lands first, as before. Rules and numbers: `database.md`, "Jetpacks and orbital drop".
+
 ### What a star system looks like (task 56)
 
 - **Orbits grow geometrically.** The generator spaces orbit slots from the

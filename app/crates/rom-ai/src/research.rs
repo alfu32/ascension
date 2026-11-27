@@ -81,6 +81,11 @@ fn worth(view: &View<'_>, weights: &Weights, eco: &Economy, tech: DefId) -> i64 
     for modifier in rules.modifiers_from(tech) {
         let size = modifier.value.abs();
         let scope = rules.stats.get(&modifier.stat_key).map(|s| s.scope);
+        // A jump or a drop from orbit (task 169) is worth the same whatever its numbers.
+        if let Some(worth) = crate::jetpacks::stat_worth(&modifier.stat_key) {
+            value += worth;
+            continue;
+        }
         value += match (modifier.stat_key.as_str(), scope) {
             ("pop_cap", _) => size * if crowded { 12 } else { 2 },
             // More cities matter most when every allowed city stands, and most of all when

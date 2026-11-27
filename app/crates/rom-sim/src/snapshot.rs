@@ -545,6 +545,10 @@ pub struct Snapshot {
     pub governors_paused: Vec<EntityId>,
     /// Aircraft on or near the ground and the ticks they have climbed, in id order (task 123).
     pub flight: Vec<(EntityId, u64)>,
+    /// Units in the air after a jump or a drop, in id order (task 169).
+    pub leaps: Vec<(EntityId, crate::Leap)>,
+    /// The tick each unit that jumped lately may jump again, in id order (task 169).
+    pub jump_ready: Vec<(EntityId, u64)>,
     /// The grids of drone operators, in operator id order (tasks 120, 128).
     pub clouds: Vec<(EntityId, crate::Cloud)>,
     /// The pools of shields, in id order (task 157).
@@ -1070,6 +1074,8 @@ impl World {
                 .collect(),
             governors_paused: self.governors_paused.iter().copied().collect(),
             flight: self.flight.iter().map(|(id, c)| (*id, *c)).collect(),
+            leaps: self.leaps().map(|(id, l)| (id, *l)).collect(),
+            jump_ready: self.leap.ready.iter().map(|(id, t)| (*id, *t)).collect(),
             clouds: self.clouds.iter().map(|(id, c)| (*id, *c)).collect(),
             shields: self.shield_pools().collect(),
             dormant: self.life.dormant.iter().map(|(b, d)| (*b, *d)).collect(),
@@ -1127,6 +1133,8 @@ impl World {
             failures,
             governors_paused,
             flight,
+            leaps,
+            jump_ready,
             clouds,
             shields,
             dormant,
@@ -1542,6 +1550,27 @@ impl World {
                 return Err(bad("aircraft climbed past its flight height"));
             }
             world.flight.insert(id, climbed);
+        }
+        for (id, leap) in leaps {
+            let unit = world
+                .entity(id)
+                .is_some_and(|e| e.container_id.is_none() && e.pos.body == leap.to.body);
+            if !unit || leap.ticks == 0 {
+                return Err(bad(
+                    "a flight of an entity that is not a unit on its surface",
+                ));
+            }
+            // Nothing pushes a unit in the air.
+            world
+                .avoid
+                .set(id, None, world.entity(id).expect("leaper").pos);
+            world.leap.flights.insert(id, leap);
+        }
+        for (id, ready) in jump_ready {
+            if world.entity(id).is_none() {
+                return Err(bad("a jetpack cooldown of an unknown entity"));
+            }
+            world.leap.ready.insert(id, ready);
         }
         for (id, pool) in shields {
             let shield = world

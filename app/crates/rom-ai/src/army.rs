@@ -1632,6 +1632,8 @@ fn lead(
                 }
             }
             if let Some(goal) = army.goal {
+                // Soldiers with jetpacks jump what stops them (task 169); the rest break in.
+                crate::jetpacks::vault(plan, units, goal);
                 breach(plan, memory, units, goal);
             }
             advance(plan, memory, cmd, army, units);

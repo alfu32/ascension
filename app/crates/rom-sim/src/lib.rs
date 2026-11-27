@@ -25,6 +25,7 @@ mod income;
 mod index;
 mod intel;
 mod jumps;
+mod leap;
 mod life;
 mod map;
 mod market;
@@ -84,6 +85,7 @@ pub use jumps::{
     ArrivalBlow, ArrivalStrike, Inhibition, JumpCharge, RULE_INTERSTELLAR_TRADE,
     RULE_ROUTE_SENSORS, RULE_ROUTE_SURVEY,
 };
+pub use leap::Leap;
 pub use life::{DormantSurface, Living};
 pub use map::MapGrid;
 pub use market::{MarketQuote, RULE_MARKET_TRADING};
@@ -434,6 +436,28 @@ pub enum SimError {
     /// of the line it belongs to, as wide as the gate.
     #[error("a gate goes into a straight run of its own line")]
     GateOffLine,
+    /// Task 169: only a unit tagged `jumper` whose player researched its jetpacks jumps.
+    #[error("this unit cannot jump")]
+    CannotJump,
+    /// Task 169: the unit jumped lately (or is in the air) and cannot jump again yet.
+    #[error("the jetpack is cooling down")]
+    JumpCooling,
+    /// Task 169: no free land to come down on near the point.
+    #[error("no free land to come down on there")]
+    NoLandingGround,
+    /// Task 169: a standing shield field blocks the air above its line too.
+    #[error("a shield field is in the way")]
+    FieldInTheWay,
+    /// Task 169: only a ship in orbit drops its passengers.
+    #[error("only a ship in orbit can drop troops")]
+    NotInOrbit,
+    /// Task 169: none of the ship's passengers can be dropped (orbital drop not researched, or
+    /// no infantry aboard).
+    #[error("no passenger can be dropped from orbit")]
+    CannotDrop,
+    /// Task 169: troops are dropped onto visible free land of the planet below.
+    #[error("drop onto visible open land of the planet below")]
+    DropZone,
 }
 
 #[cfg(test)]
@@ -448,6 +472,8 @@ mod fields_tests;
 mod fortification_tests;
 #[cfg(test)]
 mod gate_insert_tests;
+#[cfg(test)]
+mod leap_tests;
 #[cfg(test)]
 mod life_tests;
 #[cfg(test)]

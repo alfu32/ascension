@@ -1748,3 +1748,41 @@ Otherwise it is never researched.
   reach of a ship boards it from the water). The water between the two shores is not looked at:
   two lands 8 tiles apart across deep water that are joined by shallows far away count as a short
   swim, and the walk there is found by the path search.
+
+## Jetpacks and orbital drop (task 169)
+
+`rom-ai/src/jetpacks.rs`. Data only: who can jump is `World::jump_range`, who can be dropped
+`World::droppable_passengers`; no definition is named.
+
+- **Research.** A modifier on `jump_range` or `orbital_drop` is worth a fixed 200 as a side
+  research (its cooldown modifier 0), not its size times the army share as other entity stats:
+  a jump range of 6 000 milli-tiles would otherwise outbid everything.
+- **Walls and gaps.** In the attack phase, before the breach, every member that can jump now
+  (not cooling, not in the air, not already ordered this thought) and is farther from the army's
+  goal than its jump looks along the straight way to the goal, from its jump range down in
+  half-tile steps, for a point `World::check_jump` accepts, at least two tiles nearer the goal
+  and on land the goal can be walked to from, and jumps there when something it cannot walk
+  straight across lies between (`World::walkable_line`: a wall, a building, water, cliffs), or
+  when its walk to the goal failed `no_path` in the last 400 ticks or the goal cannot be walked
+  to at all. A walled-in town is reached this way; members that cannot jump strike the wall as
+  before (breach). A standing shield field stops the jump, so from the Spacefaring age, when
+  the computer players' own lines become shield emitters, a powered line still has to be
+  broken. The army's "can we get there" (`swimming::reaches`) also counts a gap narrower than a
+  jump (the shore nearest the target within 30 tiles has land of the target's within the jump
+  range less a tile), so it sets off against a town across a narrow channel and jumps it.
+- **Orbital drop.** A colonising transport (`fleet.rs`, stage 2) over a world with a remembered
+  enemy building, whose orbit no enemy ship holds (no remembered enemy entity in that orbit),
+  first drops its infantry: at the first point `World::check_drop` accepts on the way from the
+  enemy building nearest the point below it toward that point, from 8 tiles off the building in
+  one-tile steps (the ship moves within its orbit until the point is within the drop range), else
+  at the point below. Then it lands its builder as before; the troops on the ground go for the
+  nearest enemy building there (`settle`).
+- **Invasion.** With every allowed city standing (no room for a colony) and an infantry type it
+  can drop, an idle transport takes an **invasion** voyage (`Job::Invade`, new; saved brains
+  write it as 3) to the lowest-numbered enemy world in reach with a remembered enemy building
+  and no own city: it comes down at home, takes up to 12 troops of the gathering main army (the
+  profile's defence share stays home), sets off once loaded or after `LOAD_TICKS`, holds orbit
+  over the enemy world and drops them as above; the voyage ends once nobody aboard can be
+  dropped. The space manager wishes a transport for it as for a colony. An enemy world that is
+  not known (no enemy building remembered there) is not invaded, and a colonising transport that
+  finds nothing in sight below lands as before.

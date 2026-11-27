@@ -1171,6 +1171,35 @@ fn snapshot(conn: &Connection, rules: &Rules) -> Result<Snapshot, SaveError> {
     } else {
         Vec::new()
     };
+    // Saves before format 26 (task 169) had nobody in the air after a jump or a drop.
+    let (leaps, jump_ready) = if format >= 26 {
+        (
+            query_vec(
+                conn,
+                "SELECT entity_id, from_x, from_y, from_face, from_body, to_x, to_y, to_face, \
+                 to_body, start, ticks, dropped FROM entity_leap ORDER BY entity_id",
+                |r| {
+                    Ok((
+                        EntityId(uint(r, 0, "leaper")?),
+                        rom_sim::Leap {
+                            from: pos_at(r, 1)?,
+                            to: pos_at(r, 5)?,
+                            start: int(r, 9)? as u64,
+                            ticks: int(r, 10)? as u64,
+                            drop: int(r, 11)? != 0,
+                        },
+                    ))
+                },
+            )?,
+            query_vec(
+                conn,
+                "SELECT entity_id, ready_tick FROM entity_jump_ready ORDER BY entity_id",
+                |r| Ok((EntityId(uint(r, 0, "jumper")?), int(r, 1)? as u64)),
+            )?,
+        )
+    } else {
+        (Vec::new(), Vec::new())
+    };
     // Saves before format 23 (task 157) had no shields.
     let shields = if format >= 23 {
         query_vec(
@@ -1401,6 +1430,8 @@ fn snapshot(conn: &Connection, rules: &Rules) -> Result<Snapshot, SaveError> {
         awake: flags(conn, "awake")?,
         governors_paused: flags(conn, "governor_paused")?,
         flight,
+        leaps,
+        jump_ready,
         clouds,
         shields,
         history,

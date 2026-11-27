@@ -629,7 +629,7 @@ impl World {
     }
 
     /// Puts a passenger back on the map at `pos`.
-    fn disembark(&mut self, unit: EntityId, pos: Pos) {
+    pub(crate) fn disembark(&mut self, unit: EntityId, pos: Pos) {
         let e = self.entities[unit.0 as usize].as_mut().expect("passenger");
         e.container_id = None;
         e.pos = pos;

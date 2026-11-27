@@ -1241,3 +1241,32 @@ fn a_city_shield_pool_under_fire() {
     );
     check("city_shield", &rules, w, 600, |_| {});
 }
+
+/// Task 169: units in the air are saved and loaded: marines falling from a transport in orbit,
+/// one jumping, and the jetpack's cooldown; both worlds land them alike.
+#[test]
+fn units_in_the_air_after_a_jump_and_a_drop() {
+    let rules = rules();
+    let mut w = universe(&rules);
+    let ship = transport_in_orbit(&mut w, HOME);
+    let marines = passengers(&mut w, 0, 3);
+    board(&mut w, &marines, ship);
+    w.submit(Command {
+        target_pos: Some(at(HOME, 34_500, 30_500)),
+        ..command(&w, ship, "drop")
+    })
+    .unwrap();
+    run_until(&mut w, 2000, |w| marines.iter().all(|m| w.leaping(*m)));
+    let jumper = w
+        .spawn(id(&w, "unit.marine"), P1, at(HOME, 26_500, 40_500))
+        .unwrap();
+    w.submit(Command {
+        target_pos: Some(at(HOME, 26_500, 45_500)),
+        ..command(&w, jumper, "jump")
+    })
+    .unwrap();
+    ticks(&mut w, 5);
+    assert!(w.leaping(jumper) && marines.iter().all(|m| w.leaping(*m)));
+    assert!(w.jump_cooldown_left(jumper) > 0);
+    check("leaps", &rules, w, 200, |_| {});
+}

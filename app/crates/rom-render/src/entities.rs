@@ -149,6 +149,11 @@ pub struct EntityView {
     pub aboard: u8,
     /// A unit swimming shallow water (task 168): drawn lowered to the water surface, waist-deep.
     pub swimming: bool,
+    /// Tiles above the ground of a unit in the air after a jump or a drop (task 169); 0 on it.
+    pub lift: f32,
+    /// A unit falling from orbit in a drop pod (task 169): the share of its fall done, above 0
+    /// and up to 1; 0 for everything else. The pod streaks down with a re-entry trail.
+    pub pod: f32,
     /// A carry-mode node drawn as a gold-capped plinth.
     pub carry_node: bool,
     /// Construction progress 0 to 1 for a site, `None` when complete.
@@ -305,8 +310,19 @@ pub fn interpolate(from: &EntityView, to: &EntityView, alpha: f32) -> EntityView
         y: from.y + (to.y - from.y) * alpha,
         facing_deg: lerp_angle(from.facing_deg, to.facing_deg, alpha),
         flight: from.flight + (to.flight - from.flight) * alpha,
+        lift: from.lift + (to.lift - from.lift) * alpha,
+        pod: blend_pod(from.pod, to.pod, alpha),
         cloud: blend_cloud(from.cloud, to.cloud, alpha),
         ..*to
+    }
+}
+
+/// A pod's fall blended between snapshots; none once either side has none.
+fn blend_pod(from: f32, to: f32, alpha: f32) -> f32 {
+    if from > 0.0 && to > 0.0 {
+        from + (to - from) * alpha
+    } else {
+        to
     }
 }
 
@@ -371,6 +387,8 @@ pub fn interpolate_on(globe: &Globe, from: &EntityView, to: &EntityView, alpha: 
         y,
         facing_deg: facing,
         flight: from.flight + (to.flight - from.flight) * alpha,
+        lift: from.lift + (to.lift - from.lift) * alpha,
+        pod: blend_pod(from.pod, to.pod, alpha),
         cloud: blend_cloud(from.cloud, to.cloud, alpha),
         ..*to
     }
@@ -714,6 +732,12 @@ pub(crate) fn entity_frame(view: &EntityView, ground: &dyn Footing) -> GroundFra
         let height = view.altitude.max(ship_floor(view, ground));
         GroundFrame {
             origin: ground.datum_point(view.face, view.x, view.y, (0.0, 0.0), height),
+            ..frame
+        }
+    } else if view.lift > 0.0 {
+        // In the air after a jump or a drop (task 169): above the ground below it.
+        GroundFrame {
+            origin: std::array::from_fn(|k| frame.origin[k] + frame.up[k] * view.lift),
             ..frame
         }
     } else if view.swimming {
@@ -1494,6 +1518,8 @@ mod tests {
             capacity: 0,
             aboard: 0,
             swimming: false,
+            lift: 0.0,
+            pod: 0.0,
             carry_node: false,
             under_construction: None,
             model: None,
@@ -1506,6 +1532,17 @@ mod tests {
             cloud: None,
             activity: Default::default(),
         }
+    }
+
+    #[test]
+    fn a_unit_in_the_air_is_drawn_above_the_ground() {
+        let ground = FlatGround(&|_, _| 1.0);
+        let down = view(1, 3.5, 3.5, 0.0);
+        let up = EntityView { lift: 2.5, ..down };
+        let (a, b) = (entity_frame(&down, &ground), entity_frame(&up, &ground));
+        assert!((b.origin[1] - a.origin[1] - 2.5).abs() < 1e-5);
+        let half = interpolate(&down, &up, 0.5);
+        assert!((half.lift - 1.25).abs() < 1e-6);
     }
 
     #[test]

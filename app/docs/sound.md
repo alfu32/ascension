@@ -238,6 +238,13 @@ camera, panned by screen position; a zoomed-out view hears a tenth at most):
   type in an activity slot). Synthesised in `tools/sounds/synth.py` (`field_up`, `field_down`,
   `field_hum`); the shield emitter's and shield gate's own sounds (acknowledgment, work loop,
   build done) come from the plan as any building's. Baked alone ("Baking only new types").
+- Drop pods (task 169): a unit dropped from orbit whistles and roars down in its pod
+  (`act.drop_fall`, two variations, 3.7 s, a whistle sliding down under a swelling roar, ending
+  before the four-second fall does) and its landing booms (`act.drop_impact`, two: a crack, a
+  heavy low boom, rumble and clods), heard where the unit is, the loudest of each a pass, in the
+  Units category. Synthesised in `tools/sounds/synth.py` (`drop_fall`, `drop_impact`) and baked
+  alone ("Baking only new types": `synth.py` into a scratch folder, the four new WAV files
+  levelled with `level.py` and encoded with `bake.sh`'s `encode`; no other file changed).
 
 **Ambience** follows the camera, cross-fading every 0.1 s: each `ambience` bed at the square
 root of its share of the 25 ground points (the fields: points within 7 tiles of a food gather

@@ -4,6 +4,10 @@
 //! they fall instead of vanishing, and fire and smoke over ruins and badly damaged buildings.
 //! What stays on the ground afterwards, soot and a building's rubble, is the stain's
 //! (`crate::stains`).
+//!
+//! Task 169: drop pods falling from orbit like ballistic missiles, with a re-entry trail of fire
+//! and smoke, and their impact: a hard flash, a ring of dust, clods thrown up, a scorch that
+//! fades, and the pod opening on the ground.
 
 use super::{LIFT, OverlayGeometry};
 use crate::entities::{EntityView, Footing, building_height};
@@ -78,7 +82,16 @@ pub(super) fn bombardment(
     let tps = hud.ticks_per_second.max(1) as f32;
     let clock = hud.game_ticks as f32 / tps;
     for blast in &hud.blasts {
-        draw_blast(out, ground, right, blast, blast.age_ticks as f32 / tps);
+        let t = blast.age_ticks as f32 / tps;
+        if blast.pod {
+            draw_pod_impact(out, ground, right, blast, t);
+        } else {
+            draw_blast(out, ground, right, blast, t);
+        }
+    }
+    // Drop pods on their way down (task 169).
+    for view in views.iter().filter(|v| v.pod > 0.0) {
+        draw_pod_fall(out, ground, right, view, clock);
     }
     for wreck in &hud.wrecks {
         draw_wreck(
@@ -410,6 +423,264 @@ fn draw_blast(
     }
 }
 
+/// Seconds an opened drop pod stays on the ground, the last of them fading (task 169).
+const POD_SECS: f32 = 6.0;
+/// Seconds the hard flash of a pod's impact lasts.
+const POD_FLASH_SECS: f32 = 0.35;
+/// Seconds the ring of dust takes to roll out.
+const POD_DUST_SECS: f32 = 1.6;
+/// Seconds the pod takes to open, after it struck.
+const POD_OPEN: (f32, f32) = (0.5, 1.3);
+/// Tiles of fire behind a falling pod at the end of its fall, and of smoke above that.
+const POD_FIRE: f32 = 8.0;
+const POD_SMOKE: f32 = 14.0;
+
+/// A drop pod on its way down (task 169), `view.lift` tiles above its landing point and
+/// `view.pod` of its fall done: the nose glowing white-hot, a tongue of fire behind it and a
+/// column of smoke above, all growing as it falls faster.
+fn draw_pod_fall(
+    out: &mut OverlayGeometry,
+    ground: &dyn Footing,
+    right: [f32; 3],
+    view: &EntityView,
+    clock: f32,
+) {
+    let frame = ground.frame(view.face, view.x, view.y);
+    let nose = ground.point(view.face, view.x, view.y, (0.0, 0.0), view.lift);
+    let speed = view.pod.clamp(0.0, 1.0);
+    let seed = view.id.wrapping_mul(2_654_435_761);
+    let flicker = 0.85 + 0.15 * (clock * 23.0 + noise(seed, 1) * 6.0).sin();
+    // Smoke first, so the fire is drawn over it: puffs widening and fading up the column.
+    let smoke = POD_SMOKE * (0.4 + 0.6 * speed);
+    for k in 0..9u32 {
+        let along = POD_FIRE * 0.6 + smoke * k as f32 / 9.0;
+        let wobble = (noise(seed, 10 + k) - 0.5) * 0.3 * (1.0 + k as f32 * 0.2);
+        let base = add(add(nose, frame.up, along), right, wobble);
+        let size = 0.9 + 0.25 * k as f32;
+        puff(
+            out,
+            base,
+            right,
+            frame.up,
+            size,
+            size * 1.3,
+            rgba(
+                mix([120, 110, 100], [70, 68, 66], k as f32 / 9.0),
+                0.55 * (1.0 - k as f32 / 10.0),
+            ),
+        );
+    }
+    // The fire of re-entry: an outer orange tongue and a yellow-white core.
+    let fire = POD_FIRE * (0.35 + 0.65 * speed) * flicker;
+    flame_down(
+        out,
+        nose,
+        right,
+        frame.up,
+        1.6,
+        fire,
+        rgba([255, 120, 30], 0.75),
+    );
+    flame_down(
+        out,
+        nose,
+        right,
+        frame.up,
+        0.8,
+        fire * 0.6,
+        rgba([255, 230, 150], 0.9),
+    );
+    // The nose, white-hot.
+    let glow = 0.8 + 1.0 * speed;
+    puff(
+        out,
+        add(nose, frame.up, -glow * 0.5),
+        right,
+        frame.up,
+        glow * 1.6,
+        glow,
+        rgba([255, 200, 120], 0.8 * flicker),
+    );
+    puff(
+        out,
+        add(nose, frame.up, -glow * 0.3),
+        right,
+        frame.up,
+        glow * 0.8,
+        glow * 0.6,
+        rgba([255, 252, 235], 0.95),
+    );
+}
+
+/// A tongue of flame `width` across trailing `length` up from `tip` (the way a falling pod
+/// came).
+fn flame_down(
+    out: &mut OverlayGeometry,
+    tip: [f32; 3],
+    right: [f32; 3],
+    up: [f32; 3],
+    width: f32,
+    length: f32,
+    colour: [u8; 4],
+) {
+    let shoulder = add(tip, up, length * 0.25);
+    let left = add(shoulder, right, -width / 2.0);
+    let rightmost = add(shoulder, right, width / 2.0);
+    let end = add(tip, up, length);
+    let faint = [colour[0], colour[1], colour[2], colour[3] / 3];
+    out.tri([tip, rightmost, left], colour);
+    out.tri([left, rightmost, end], faint);
+}
+
+/// A drop pod's impact (task 169), `t` seconds after it struck: a hard flash, a bright ring and
+/// a ring of dust rolling out, clods thrown up, a scorch fading, and the pod opening its four
+/// petals around the soldiers stepping out.
+fn draw_pod_impact(
+    out: &mut OverlayGeometry,
+    ground: &dyn Footing,
+    right: [f32; 3],
+    blast: &HudBlast,
+    t: f32,
+) {
+    let (face, cx, cy) = (blast.face, blast.x as f32 / 1000.0, blast.y as f32 / 1000.0);
+    let radius = (blast.radius as f32 / 1000.0).max(0.5);
+    let frame = ground.frame(face, cx, cy);
+    let at = |dx: f32, dy: f32, lift: f32| ground.point(face, cx, cy, (dx, dy), lift);
+    // The scorch: a dark ragged disc fading over the scorch time.
+    if t < SCORCH_SECS {
+        let fade = 1.0 - t / SCORCH_SECS;
+        let centre = at(0.0, 0.0, LIFT * 0.6);
+        let rim = |i: usize| {
+            let angle = i as f32 / SEGMENTS as f32 * std::f32::consts::TAU;
+            let r = radius * 0.9 * (0.75 + 0.35 * noise(blast.seed, 200 + i as u32));
+            at(r * angle.cos(), r * angle.sin(), LIFT * 0.6)
+        };
+        for i in 0..SEGMENTS {
+            out.tri(
+                [centre, rim(i), rim((i + 1) % SEGMENTS)],
+                rgba([22, 17, 14], 0.8 * fade),
+            );
+        }
+    }
+    // The hard flash.
+    if t < POD_FLASH_SECS {
+        let k = t / POD_FLASH_SECS;
+        let size = radius * (0.8 + 1.2 * ease_out(k));
+        puff(
+            out,
+            add(frame.origin, frame.up, -size * 0.2),
+            right,
+            frame.up,
+            size * 2.0,
+            size * 1.5,
+            rgba([255, 210, 140], 0.8 * (1.0 - k)),
+        );
+        puff(
+            out,
+            frame.origin,
+            right,
+            frame.up,
+            size,
+            size * 0.9,
+            rgba([255, 255, 245], 1.0 - k),
+        );
+        billboard(
+            out,
+            frame.origin,
+            right,
+            frame.up,
+            radius * 0.3,
+            12.0,
+            rgba([255, 240, 210], 0.6 * (1.0 - k)),
+        );
+    }
+    // A bright shock ring, then the dust rolling out behind it.
+    if t < POD_DUST_SECS {
+        let k = t / POD_DUST_SECS;
+        let ring = ease_out((k * 2.5).min(1.0)) * radius * 1.8;
+        if k < 0.4 {
+            let width = 0.25;
+            let alpha = 0.9 * (1.0 - k / 0.4);
+            for i in 0..SEGMENTS {
+                let a0 = i as f32 / SEGMENTS as f32 * std::f32::consts::TAU;
+                let a1 = (i + 1) as f32 / SEGMENTS as f32 * std::f32::consts::TAU;
+                let point = |a: f32, r: f32, lift: f32| at(r * a.cos(), r * a.sin(), lift);
+                out.quad(
+                    [
+                        point(a0, ring - width, LIFT * 2.0),
+                        point(a0, ring, LIFT * 2.0 + 0.15),
+                        point(a1, ring, LIFT * 2.0 + 0.15),
+                        point(a1, ring - width, LIFT * 2.0),
+                    ],
+                    rgba([255, 235, 190], alpha),
+                );
+            }
+        }
+        let reach = ease_out(k) * radius * 2.4;
+        for i in 0..10u32 {
+            let angle = i as f32 / 10.0 * std::f32::consts::TAU + noise(blast.seed, 400 + i);
+            let base = at(reach * angle.cos(), reach * angle.sin(), 0.0);
+            let size = radius * (0.5 + 0.9 * k) * (0.8 + 0.4 * noise(blast.seed, 420 + i));
+            puff(
+                out,
+                base,
+                right,
+                frame.up,
+                size * 1.4,
+                size,
+                rgba([150, 125, 95], 0.7 * (1.0 - k)),
+            );
+        }
+    }
+    // Clods thrown up and falling back.
+    if t < 1.2 {
+        let k = t / 1.2;
+        for i in 0..10u32 {
+            let angle = noise(blast.seed, 100 + i) * std::f32::consts::TAU;
+            let along = radius * (0.6 + 1.2 * noise(blast.seed, 120 + i)) * ease_out(k);
+            let height = radius * (1.0 + 1.5 * noise(blast.seed, 140 + i)) * 4.0 * k * (1.0 - k);
+            let p = add(
+                at(along * angle.cos(), along * angle.sin(), 0.1),
+                frame.up,
+                height,
+            );
+            let size = 0.12 + 0.15 * noise(blast.seed, 160 + i);
+            out.tri(
+                [
+                    add(p, right, -size),
+                    add(p, right, size),
+                    add(p, frame.up, size * 1.5),
+                ],
+                rgba([60, 48, 36], 1.0 - k * 0.5),
+            );
+        }
+    }
+    // The pod: a squat hull whose four petals swing open, hot at first, cooling to grey.
+    if t < POD_SECS {
+        let fade = ((POD_SECS - t) / 1.0).clamp(0.0, 1.0);
+        let open = ((t - POD_OPEN.0) / (POD_OPEN.1 - POD_OPEN.0)).clamp(0.0, 1.0);
+        let angle = ease_out(open) * 1.1;
+        let hot = (1.0 - t / 2.5).clamp(0.0, 1.0);
+        let colour = mix([78, 80, 88], [255, 130, 50], hot * 0.8);
+        let half = 0.4;
+        let length = 0.9;
+        let sides = [
+            (frame.ex, frame.ey),
+            (frame.ey, frame.ex),
+            (frame.ex.map(|v| -v), frame.ey),
+            (frame.ey.map(|v| -v), frame.ex),
+        ];
+        for (n, side) in sides {
+            let base = add(frame.origin, n, half);
+            let (a, b) = (add(base, side, -half), add(base, side, half));
+            let reach: [f32; 3] =
+                std::array::from_fn(|i| frame.up[i] * angle.cos() + n[i] * angle.sin());
+            let tip = |p: [f32; 3]| add(add(p, reach, length), frame.up, 0.02);
+            out.quad([a, b, tip(b), tip(a)], rgba(colour, fade));
+        }
+    }
+}
+
 fn draw_wreck(
     out: &mut OverlayGeometry,
     ground: &dyn Footing,
@@ -572,6 +843,7 @@ mod tests {
             radius: 12_000,
             age_ticks,
             seed: 7,
+            pod: false,
         }
     }
 
@@ -607,6 +879,40 @@ mod tests {
         };
         let wave = drawn(&hud(vec![blast(16)], Vec::new()));
         assert!(reach(&wave) > 8.0, "{}", reach(&wave));
+    }
+
+    /// Task 169: a drop pod's impact flashes and throws dust, its open petals stay a few
+    /// seconds and nothing is left after the scorch; no fireball rises like a blast's.
+    #[test]
+    fn a_pod_strikes_opens_and_fades() {
+        let pod = |age_ticks| HudBlast {
+            radius: 1_500,
+            pod: true,
+            ..blast(age_ticks)
+        };
+        let fresh = drawn(&hud(vec![pod(1)], Vec::new()));
+        let opened = drawn(&hud(vec![pod(40)], Vec::new()));
+        let gone = drawn(&hud(vec![pod(400)], Vec::new()));
+        assert!(fresh.tris.len() > opened.tris.len());
+        // The petals stand out of the ground once open.
+        let top = |o: &OverlayGeometry| {
+            o.tris
+                .iter()
+                .flat_map(|t| t.v)
+                .map(|p| p[1])
+                .fold(0.0, f32::max)
+        };
+        assert!(top(&opened) > 0.3, "{}", top(&opened));
+        assert!(gone.tris.is_empty());
+        // Smaller than a bombardment: nothing reaches past four tiles once the flash is over.
+        let reach = |o: &OverlayGeometry| {
+            o.tris
+                .iter()
+                .flat_map(|t| t.v)
+                .map(|p| ((p[0] - 40.0).powi(2) + (p[2] - 40.0).powi(2)).sqrt())
+                .fold(0.0_f32, f32::max)
+        };
+        assert!(reach(&opened) < 4.0, "{}", reach(&opened));
     }
 
     /// A fallen building raises dust while it sinks, then its ruin burns.

@@ -542,10 +542,14 @@ pub(crate) fn wishes(view: &View<'_>, weights: &Weights, memory: &Memory, wishes
             });
         }
     }
+    // A transport for a colony, or, with every city standing, to drop troops on an enemy world
+    // (task 169).
     if let Some(transport) = ships.transport
         && view.count(transport) == 0
-        && !colony_targets(view, memory, &systems).is_empty()
-        && city_room(view)
+        && ((!colony_targets(view, memory, &systems).is_empty() && city_room(view))
+            || (!city_room(view)
+                && crate::jetpacks::drops(view)
+                && !crate::jetpacks::invasion_targets(view, memory, &systems).is_empty()))
     {
         wishes.push(Wish {
             score: TRANSPORT_SCORE,
@@ -1113,18 +1117,24 @@ fn colonise(
                 if stale.is_some() {
                     memory.voyages.remove(&ship.id.0);
                 }
-                if !city_room(&plan.view) {
-                    continue;
-                }
                 let taken: BTreeSet<u32> = memory.voyages.values().map(|v| v.body).collect();
-                let Some(body) = colony_targets(&plan.view, memory, systems)
-                    .into_iter()
-                    .find(|b| !taken.contains(&b.0))
-                else {
+                // No room for another city: troops go to drop on an enemy world, once the
+                // player can drop them from orbit (task 169).
+                let (job, targets) = if city_room(&plan.view) {
+                    (Job::Colonise, colony_targets(&plan.view, memory, systems))
+                } else if crate::jetpacks::drops(&plan.view) {
+                    (
+                        Job::Invade,
+                        crate::jetpacks::invasion_targets(&plan.view, memory, systems),
+                    )
+                } else {
+                    continue;
+                };
+                let Some(body) = targets.into_iter().find(|b| !taken.contains(&b.0)) else {
                     continue;
                 };
                 let voyage = Voyage {
-                    job: Job::Colonise,
+                    job,
                     body: body.0,
                     stage: 0,
                     since: tick,
@@ -1165,17 +1175,37 @@ fn colonise(
                     continue;
                 }
                 let view = &plan.view;
-                let has_builder = view.world.passengers(ship.id).iter().any(|id| {
-                    view.world
-                        .entity(*id)
-                        .is_some_and(|e| view.rules.entity_types[&e.type_id].builder.is_some())
-                });
+                let invade = voyage.job == Job::Invade;
+                // An invasion takes troops only (task 169): it sets off with whom it has.
+                let has_builder = invade
+                    || view.world.passengers(ship.id).iter().any(|id| {
+                        view.world
+                            .entity(*id)
+                            .is_some_and(|e| view.rules.entity_types[&e.type_id].builder.is_some())
+                    });
+                let aboard = !view.world.passengers(ship.id).is_empty();
                 let room = view.world.carry_capacity(ship.id) - view.world.carried_load(ship.id);
-                if has_builder && (room <= 0 || tick >= voyage.since + LOAD_TICKS) {
+                if has_builder
+                    && (!invade || aboard)
+                    && (room <= 0 || tick >= voyage.since + LOAD_TICKS)
+                {
                     next(memory, 1);
                     continue;
                 }
-                board(plan, memory, ship, home_body, has_builder, room, weights);
+                let troops = if invade {
+                    crate::jetpacks::INVASION_TROOPS
+                } else {
+                    ESCORT_TROOPS
+                };
+                board(
+                    plan,
+                    memory,
+                    ship,
+                    home_body,
+                    has_builder,
+                    room,
+                    (weights, troops),
+                );
             }
             1 => {
                 // Loaded on the ground: up again first (task 68).
@@ -1204,6 +1234,17 @@ fn colonise(
                     next(memory, 1);
                     continue;
                 };
+                // Over an enemy world it holds, its infantry are dropped first (task 169).
+                if crate::jetpacks::drop_troops(plan, memory, ship) {
+                    continue;
+                }
+                // An invasion ends once its troops are down: the ship is free for the next.
+                if voyage.job == Job::Invade {
+                    if plan.view.world.droppable_passengers(ship.id).is_empty() {
+                        memory.voyages.remove(&ship.id.0);
+                    }
+                    continue;
+                }
                 if let Some(site) = landing(&plan.view, ship.id, below) {
                     plan.order(ship.id, "land", None, None, Some(site));
                 }
@@ -1231,7 +1272,7 @@ fn board(
     home: BodyId,
     has_builder: bool,
     room: i64,
-    weights: &Weights,
+    (weights, troops): (&Weights, usize),
 ) {
     let view = &plan.view;
     let walking_in = |e: &Entity| {
@@ -1273,14 +1314,19 @@ fn board(
         room -= view.rules.entity_types[&builder.type_id].pop_cost.max(0);
     }
     // Troops from the main army while it waits at home, as many as the profile spares.
-    let spare = (ESCORT_TROOPS as i64 * (100 - weights.defense_share) / 100).max(1) as usize;
+    let spare = (troops as i64 * (100 - weights.defense_share) / 100).max(1) as usize;
     let walking = view.own.iter().filter(|e| walking_in(e)).count();
+    // An invasion (task 169) also takes members of an army out at home with nothing to do: an
+    // army whose enemy is on another planet never sets off on foot.
+    let invading = troops == crate::jetpacks::INVASION_TROOPS;
     if let Some(army) = memory.armies.get(&Role::Attack)
-        && army.phase == Phase::Gather
+        && (army.phase == Phase::Gather || invading)
     {
+        let gathering = army.phase == Phase::Gather;
         for e in fighters(view)
             .into_iter()
             .filter(|e| army.members.contains(&e.id.0) && e.pos.body == home)
+            .filter(|e| gathering || e.orders().is_empty())
             .filter(|e| !walking_in(e))
             .take(spare.saturating_sub(walking))
         {

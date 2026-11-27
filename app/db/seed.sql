@@ -7656,4 +7656,55 @@ INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_ro
  ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM def WHERE key='tech.swimming'),'research','research',2,2),
  ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='tech.combat_swimming'),'research','research_2',1,2);
 
+
+-- ── jetpacks and orbital drop (task 169) ────────────────────────────────────
+-- Foot soldiers jump short distances once the barracks' Jetpacks is researched (Spacefaring age,
+-- ordinal 10), and ride drop capsules from a ship in orbit to the ground below once its Orbital
+-- Drop is (Starfaring age, ordinal 11). Who may jump is the tag `jumper`; how far and how often
+-- are the stats `jump_range` and `jump_cooldown` (0: it cannot jump); who may be dropped is the
+-- stat `orbital_drop` above 0 (docs/database.md, "Jetpacks and orbital drop").
+INSERT INTO tag(key,category) VALUES ('jumper','movement');
+-- Every infantry type on foot with a living body (not the drones, robots and wheeled guns).
+INSERT INTO def_tag(def_id,tag_id)
+ SELECT et.id, (SELECT id FROM tag WHERE key='jumper') FROM entity_type et
+ JOIN et_movement m ON m.entity_type_id=et.id JOIN movement_class c ON c.id=m.movement_class_id
+ WHERE c.key='foot'
+   AND et.id IN (SELECT def_id FROM def_tag WHERE tag_id=(SELECT id FROM tag WHERE key='biological'))
+   AND et.id IN (SELECT def_id FROM def_tag WHERE tag_id=(SELECT id FROM tag WHERE key='infantry'))
+ ORDER BY et.id;
+INSERT INTO stat(key,scope,note) VALUES
+ ('jump_range','entity','task 169: farthest jump of a unit tagged jumper, milli-tiles; 0 = cannot jump'),
+ ('jump_cooldown','entity','task 169: ticks from the start of a jump before the unit can jump again'),
+ ('orbital_drop','entity','task 169: above 0 = can be dropped from a ship in orbit to the ground below');
+INSERT INTO game_constant(key,value,unit,note) VALUES
+ ('air.jump_speed',4000,'milli-tiles/second','task 169: ground covered per second by a unit in a jump; a jump lasts at least half a second'),
+ ('space.drop_ticks',80,'ticks','task 169: fall of a dropped unit from orbit to the ground'),
+ ('space.drop_range',30000,'milli-tiles','task 169: how far from the point below its ship a unit may be dropped');
+INSERT INTO order_kind(key,needs,target,note,line) VALUES
+ ('jump','movement','point','task 169: a unit that can jump walks until the point lies within its jump range, then flies there over walls, water and units (not across a standing shield field) and lands on free land','move'),
+ ('drop','container','point','task 169: a ship in orbit moves within its orbit until the point lies within space.drop_range of the point below it, then drops every passenger that can be dropped onto free land around that visible point','');
+INSERT INTO def(kind,key,name,descr) VALUES
+ ('tech','tech.jetpacks','Jetpacks','Foot soldiers jump up to six tiles, over walls, water and cliffs, every twenty seconds.'),
+ ('tech','tech.orbital_drop','Orbital Drop','Infantry aboard a ship in orbit are dropped straight onto the ground below.');
+INSERT INTO tech(id,kind,track,level,research_ticks) VALUES
+ ((SELECT id FROM def WHERE key='tech.jetpacks'),'upgrade','',0,800),
+ ((SELECT id FROM def WHERE key='tech.orbital_drop'),'upgrade','',0,900);
+WITH v(t,r,n) AS (VALUES ('tech.jetpacks','res.metal',600), ('tech.jetpacks','res.energy',400),
+  ('tech.jetpacks','res.knowledge',550),
+  ('tech.orbital_drop','res.metal',900), ('tech.orbital_drop','res.energy',600),
+  ('tech.orbital_drop','res.knowledge',700))
+INSERT INTO cost(def_id,resource_id,amount,ramp)
+ SELECT t.id, r.id, v.n, 0 FROM v JOIN def t ON t.key=v.t JOIN def r ON r.key=v.r;
+INSERT INTO prerequisite(def_id,requires_def_id) VALUES
+ ((SELECT id FROM def WHERE key='tech.jetpacks'),(SELECT id FROM def WHERE key='age.starfaring')),
+ ((SELECT id FROM def WHERE key='tech.orbital_drop'),(SELECT id FROM def WHERE key='age.expansion'));
+WITH v(t,s,n) AS (VALUES ('tech.jetpacks','jump_range',6000), ('tech.jetpacks','jump_cooldown',400),
+  ('tech.orbital_drop','orbital_drop',1))
+INSERT INTO modifier(source_def_id,target_tag_id,stat_key,op,value)
+ SELECT t.id, g.id, v.s, 'add', v.n FROM v JOIN def t ON t.key=v.t JOIN tag g ON g.key='infantry';
+-- The next free places of the barracks' second research page.
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES
+ ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='tech.jetpacks'),'research','research_2',2,2),
+ ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='tech.orbital_drop'),'research','research_2',3,2);
+
 COMMIT;

@@ -32,6 +32,13 @@ impl GlobeEye {
         }
     }
 
+    /// The same eye moved by `by` with the point it looks at (a camera shake, task 169).
+    pub(super) fn shaken(mut self, by: [f32; 3]) -> Self {
+        self.eye = std::array::from_fn(|i| self.eye[i] + by[i]);
+        self.target = std::array::from_fn(|i| self.target[i] + by[i]);
+        self
+    }
+
     /// The one camera seen in the planet frame, for a planet of `radius` tiles.
     pub(super) fn of_view(view: &FrameView, radius: f32) -> Self {
         let height = (0..3)

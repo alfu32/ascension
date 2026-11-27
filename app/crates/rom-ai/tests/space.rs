@@ -599,3 +599,48 @@ fn a_fleet_travels_in_formation() {
     );
     assert_eq!(play(), (sent, places, hash, saved));
 }
+
+/// Task 169: with Orbital Drop researched, a transport sent to an enemy world drops its
+/// infantry from orbit before it lands. Player two holds the other planets of both systems;
+/// player one sees everything and has a band of marines at home. The same match twice gives
+/// equal hashes.
+#[test]
+fn a_transport_drops_its_marines_on_an_enemy_world_from_orbit() {
+    let mut rules = (*common::rules()).clone();
+    for d in rules.ai_difficulties.values_mut() {
+        d.sees_all = true;
+    }
+    let rules = Arc::new(rules);
+    let play = || {
+        let mut w = world_with(&rules, &[FAR]);
+        let foe = PlayerId(2);
+        for body in [NEIGHBOUR, FAR] {
+            w.place_for_setup(
+                rules.id_of("bld.city").unwrap(),
+                foe,
+                Pos::on(body, 0, 24_500, 24_500),
+            )
+            .unwrap();
+        }
+        let marine = rules.id_of("unit.marine").unwrap();
+        for n in 0..8 {
+            w.spawn(marine, ME, Pos::on(HOME, 0, 24_500 + n * 1000, 28_500))
+                .unwrap();
+        }
+        let mut brain = Brain::new(Arc::clone(&rules), ME, "balanced", "tougher", 61).unwrap();
+        let mut dropped = None;
+        for _ in 0..30_000 {
+            brain.step(&mut w);
+            w.step();
+            if let Some((id, leap)) = w.leaps().find(|(_, l)| l.drop) {
+                dropped = Some((id, leap.to));
+                break;
+            }
+        }
+        let (id, at) = dropped.unwrap_or_else(|| panic!("no drop by tick {}", w.tick()));
+        assert_eq!(w.entity(id).unwrap().owner, ME);
+        assert_eq!(at.body, NEIGHBOUR, "dropped on the enemy world");
+        w.hash()
+    };
+    assert_eq!(play(), play());
+}

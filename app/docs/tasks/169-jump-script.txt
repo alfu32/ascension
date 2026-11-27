@@ -1,0 +1,31 @@
+# Task 169: marines jump a stone wall. Seed 1, player one in the Spacefaring age with Jetpacks; a
+# stone wall of player two runs south of the city; six marines just north of it are sent with the Jump
+# button (S) to a point beyond it, the game slowed to 5 %, and are caught in the air over the wall.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun fixed --size 1600x900 \
+#     --script app/docs/tasks/169-jump-script.txt --after 16 --screenshot app/docs/img/169-jump-over-wall.png
+0 grant-age age.starfaring
+0 grant-tech tech.jetpacks
+0 place 2 bld.stone_wall @-6,9
+0 place 2 bld.stone_wall @-5,9
+0 place 2 bld.stone_wall @-4,9
+0 place 2 bld.stone_wall @-3,9
+0 place 2 bld.stone_wall @-2,9
+0 place 2 bld.stone_wall @-1,9
+0 place 2 bld.stone_wall @0,9
+0 place 2 bld.stone_wall @1,9
+0 place 2 bld.stone_wall @2,9
+0 place 2 bld.stone_wall @3,9
+0 place 2 bld.stone_wall @4,9
+0 place 2 bld.stone_wall @5,9
+0 place 2 bld.stone_wall @6,9
+0 place 1 unit.marine @-3,7
+0 place 1 unit.marine @-2,7
+0 place 1 unit.marine @-1,7
+0 place 1 unit.marine @1,7
+0 place 1 unit.marine @2,7
+0 place 1 unit.marine @3,7
+5 box-near army1 7
+10 hud slot 6
+12 click @0,12
+13 speed 5
+14 cam wheel 3 800,440
