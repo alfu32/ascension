@@ -1,0 +1,26 @@
+# Task 167: a cog at the dock on the east shore of player one's home island in the Medieval
+# age. Seven units (pikemen, crossbowmen, a knight and a trebuchet) are box-selected and
+# right-click the cog: they walk to the shore beside it and board. The cog is then selected and
+# right-clicked on land of the island's south coast: it sails there and sets them ashore, and they
+# walk on to the point. The camera follows the cog.
+#   rise-of-man --universe --style map.one_world --seed 2 --players 2 --ai none --sun fixed \
+#     --size 1280x800 --script app/docs/tasks/167-cog-script.txt --after 13 \
+#     --screenshot app/docs/img/167-cog-leaving.png            (loaded, leaving the dock)
+#   ... --after 9 --screenshot app/docs/img/167-passengers.png  (the passenger list)
+#   For the landing, app/docs/tasks/167-ashore-script.txt.
+0 grant-age age.medieval
+0 place 1 bld.dock @12,7
+0 place 1 unit.cog @18,11
+0 place 1 unit.pikeman @6,9
+0 place 1 unit.pikeman @7,9
+0 place 1 unit.pikeman @8,9
+0 place 1 unit.crossbowman @6,11
+0 place 1 unit.crossbowman @7,11
+0 place 1 unit.knight @8,11
+0 place 1 unit.trebuchet @7,13
+5 box-near army1 5
+7 rclick transport1
+160 click transport1
+170 rclick @-8,17
+175 cam follow
+180 cam wheel 3 640,330

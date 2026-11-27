@@ -1,0 +1,23 @@
+# Task 167: the same scene as 167-cog-script.txt; once the cog has set its seven units ashore on
+# the island's south coast, everything within twelve tiles of it is box-selected, so their rings
+# and health bars show where they stepped ashore beside it.
+#   rise-of-man --universe --style map.one_world --seed 2 --players 2 --ai none --sun fixed \
+#     --size 1280x800 --script app/docs/tasks/167-ashore-script.txt --after 30 \
+#     --screenshot app/docs/img/167-ashore.png
+0 grant-age age.medieval
+0 place 1 bld.dock @12,7
+0 place 1 unit.cog @18,11
+0 place 1 unit.pikeman @6,9
+0 place 1 unit.pikeman @7,9
+0 place 1 unit.pikeman @8,9
+0 place 1 unit.crossbowman @6,11
+0 place 1 unit.crossbowman @7,11
+0 place 1 unit.knight @8,11
+0 place 1 unit.trebuchet @7,13
+5 box-near army1 5
+7 rclick transport1
+160 click transport1
+170 rclick @-8,17
+175 cam follow
+180 cam wheel 3 640,330
+560 box-near transport1 12

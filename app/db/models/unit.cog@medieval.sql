@@ -18,7 +18,7 @@ WITH v(name,shape,mat,team,attach,params) AS (VALUES
   ('cargo','box','mat.hide',0,'hull','{"x":-0.3,"y":0.71,"w":0.4,"d":0.5,"h":0.2,"far":0}'),
   ('barrels','cylinder','mat.oak',0,'hull','{"x":0.35,"y":0.71,"z":-0.18,"w":0.18,"h":0.24,"segments":6,"repeat":2,"dz":0.36,"far":0}'),
   ('mast','cylinder','mat.timber',0,'hull','{"x":0.05,"y":0.66,"w":0.09,"h":2.3,"segments":5}'),
-  ('yard','cylinder','mat.timber',0,'mast','{"y":1.95,"w":0.05,"h":1.5,"pitch":90,"yaw":90,"segments":4,"far":0}'),
+  ('yard','cylinder','mat.timber',0,'mast','{"y":1.95,"z":-0.75,"w":0.05,"h":1.5,"pitch":90,"segments":4,"far":0}'),
   ('sail','sail','mat.cloth',1,'mast','{"y":0.65,"yaw":90,"w":1.45,"h":1.3,"billow":0.22}'),
   ('crows_nest','cylinder','mat.sawn_timber',0,'mast','{"y":2.1,"w":0.24,"h":0.14,"segments":6,"far":0}'),
   ('pennant','box','mat.cloth',1,'mast','{"y":2.3,"z":-0.16,"w":0.015,"d":0.32,"h":0.1,"far":0}'))

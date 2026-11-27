@@ -3297,3 +3297,9 @@ keeps to a planet's surface.
 
 No schema change and no new simulation state: passengers are `entity.container_id` as before,
 so saves carry them unchanged.
+
+Screenshots (the game's own paths): `img/167-passengers.png` and `img/167-cog-leaving.png`
+(`tasks/167-cog-script.txt`: seven units board a cog at the dock, it sails with the list of those
+aboard and the pips over it), `img/167-ashore.png` (`tasks/167-ashore-script.txt`: set ashore on
+the island's south coast), and the model sheets `img/167-model-cog.png`,
+`img/167-model-fluyt.png`, `img/167-model-troopship.png`, `img/167-model-landing_ship.png`.
