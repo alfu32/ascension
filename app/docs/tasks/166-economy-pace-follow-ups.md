@@ -13,16 +13,16 @@ GitHub issue #168.
 
 1. **Research speed** (owner correction, 2026-11-27: "actually 10%,20%,50% is slower
    research"). The owner thinks of the option as a *speed* in % of normal, like the gathering
-   rate, where lower is slower. They never wanted faster research.
+   rate, where lower is slower. Then: "keep the faster settings if they are already in ...
+   even though 500% is already almost instantaneous ... good to have though".
    - **Rename** the option to **Research speed** on the Play, Host and Server forms, in the
      lobby and in the match report. On the command line, `--research-speed` replaces
      `--research-time`. No backward compatibility is needed.
-   - **Values:** 100, 50, 25, 20, 10, 5 %. Internally research time = 10000 / speed (100, 200,
-     400, 500, 1000, 2000), so the simulation and saves keep their meaning. 20 % (time 500) is
-     new.
-   - **No faster settings.**
-   - **Timing:** measure the 20 % speed for the timing table in `docs/database.md`, and relabel
-     the table by speed.
+   - **Values:** 1000, 500, 200, 100, 50, 25, 20, 10, 5 %. Internally research time =
+     10000 / speed (10, 20, 50, 100, 200, 400, 500, 1000, 2000), so the simulation and saves
+     keep their meaning. `research_ticks` never goes below 1 tick.
+   - **Timing:** the timing table in `docs/database.md` is relabelled by speed and covers
+     every value.
 2. **Claimed bodies at 2 %.** `body_yield` rounds to 0 at a 2 % gathering rate. Carry its
    remainder in hundredths like the other incomes (`World::credit_gathered`), so every income
    adds up at every rate. Test: a claimed body at 2 % pays over time.
