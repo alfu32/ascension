@@ -361,6 +361,93 @@ fn at_four_hundred_percent_a_research_takes_four_times_as_long() {
     assert_eq!(run(pace(100, 400)).1, hash, "run twice, the same hash");
 }
 
+/// Task 166: at a research speed of 20 % (a research time of 500 %) every research, the age
+/// advance included, takes five times as long; prices are unchanged. Twice, to the same hash.
+#[test]
+fn at_twenty_percent_speed_a_research_takes_five_times_as_long() {
+    let catalogue = rules("");
+    let run = |pace: EconomyPace| {
+        let mut w = world(&catalogue, pace);
+        spawn(&mut w, "bld.city", at(56_500, 56_500));
+        let library = spawn(&mut w, "bld.library", at(30_000, 20_000));
+        for key in ["res.food", "res.timber"] {
+            w.grant(OWNER, id(&w, key), 5_000).unwrap();
+        }
+        let mut times = Vec::new();
+        for track in [
+            "tech.military.1",
+            "tech.civic.1",
+            "tech.commerce.1",
+            "tech.science.1",
+            "tech.age.classical",
+        ] {
+            times.push(research_time(&mut w, library, track));
+        }
+        assert_eq!(w.players().next().unwrap().age, id(&w, "age.classical"));
+        let spent: Vec<i64> = ["res.food", "res.timber"]
+            .into_iter()
+            .map(|key| 5_200 - balance(&w, key))
+            .collect();
+        (times, spent, w.hash())
+    };
+    let speed = EconomyPace::parse_research_speed("20").unwrap();
+    assert_eq!(speed, 500);
+    let (normal, normal_spent, _) = run(EconomyPace::default());
+    let (slow, spent, hash) = run(pace(100, speed));
+    assert_eq!(spent, normal_spent, "prices are unchanged");
+    for ((normal, normal_total), (slow, slow_total)) in normal.iter().zip(&slow) {
+        assert_eq!(*slow_total, 5 * normal_total);
+        assert_eq!(slow - normal, 4 * normal_total);
+    }
+    assert_eq!(run(pace(100, speed)).2, hash, "run twice, the same hash");
+}
+
+/// Task 166: at research speeds of 1000, 500 and 200 % (research times of 10, 20 and 50 %)
+/// every research, the age advance included, takes that share of its time (never less than a
+/// tick); prices are unchanged. Twice at 1000 %, to the same hash.
+#[test]
+fn faster_research_takes_its_share_of_the_time() {
+    let catalogue = rules("");
+    let run = |pace: EconomyPace| {
+        let mut w = world(&catalogue, pace);
+        spawn(&mut w, "bld.city", at(56_500, 56_500));
+        let library = spawn(&mut w, "bld.library", at(30_000, 20_000));
+        for key in ["res.food", "res.timber"] {
+            w.grant(OWNER, id(&w, key), 5_000).unwrap();
+        }
+        let mut times = Vec::new();
+        for track in [
+            "tech.military.1",
+            "tech.civic.1",
+            "tech.commerce.1",
+            "tech.science.1",
+            "tech.age.classical",
+        ] {
+            times.push(research_time(&mut w, library, track));
+        }
+        assert_eq!(w.players().next().unwrap().age, id(&w, "age.classical"));
+        let spent: Vec<i64> = ["res.food", "res.timber"]
+            .into_iter()
+            .map(|key| 5_200 - balance(&w, key))
+            .collect();
+        (times, spent, w.hash())
+    };
+    let (normal, normal_spent, _) = run(EconomyPace::default());
+    for speed in ["1000", "500", "200"] {
+        let pct = EconomyPace::parse_research_speed(speed).unwrap();
+        let (fast, spent, _) = run(pace(100, pct));
+        assert_eq!(spent, normal_spent, "prices are unchanged at {speed} %");
+        for ((normal, normal_total), (fast, fast_total)) in normal.iter().zip(&fast) {
+            let expected = (normal_total * u64::from(pct) / 100).max(1);
+            assert_eq!(*fast_total, expected, "{speed} %");
+            // The same fixed overhead around the shorter work.
+            assert_eq!(normal - fast, normal_total - fast_total, "{speed} %");
+        }
+    }
+    let (_, _, hash) = run(pace(100, 10));
+    assert_eq!(run(pace(100, 10)).2, hash, "run twice, the same hash");
+}
+
 /// A merchant's route between two cities of the classical age at `pace`: its shown income per
 /// trip and the wealth after every delivery.
 fn trade(pace: EconomyPace) -> (i64, Vec<i64>, u64) {

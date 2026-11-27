@@ -230,8 +230,8 @@ impl Catalog {
                 ("city-area", choices(&["on", "off"])),
                 ("gather-rate", choices(&["100", "50", "25", "10", "5", "2"])),
                 (
-                    "research-time",
-                    choices(&["100", "200", "400", "1000", "2000"]),
+                    "research-speed",
+                    choices(&["1000", "500", "200", "100", "50", "25", "20", "10", "5"]),
                 ),
                 ("age", age_choices),
                 ("gallery", gallery),

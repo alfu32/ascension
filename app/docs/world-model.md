@@ -912,7 +912,7 @@ planets per star system when te number of planets in a cluster is low )".
 - **Computer players** (`rom-ai` `fleet.rs`) count as reachable only the systems joined to their
   home by routes they may jump, so the navy, the claims and the colonies stay in the home
   cluster until the Age of Abundance and spread over the others after it. `rom ai-match --seed 3
-  --universe --style map.sector --start-age age.expansion --research-time 1000 --players
+  --universe --style map.sector --start-age age.expansion --research-speed 10 --players
   balanced,balanced,balanced --ticks 40000` (every player starts in the Starfaring Age with its
   research done and a rich stock): the three reach the Age of Abundance at ticks 14 681 to
   14 683; before it their cities and ships stand in 3, 7 and 3 systems, all of their home

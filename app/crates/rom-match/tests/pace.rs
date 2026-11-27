@@ -45,7 +45,7 @@ fn the_pace_reaches_the_world_a_follower_and_the_report_and_repeats() {
     let (leader, follower, report) = run(slow, 1_200);
     assert_eq!(leader, follower);
     assert!(
-        report.contains("gathering 10 % · research time 400 %"),
+        report.contains("gathering 10 % · research speed 25 %"),
         "{report}"
     );
     let (again, _, _) = run(slow, 1_200);
@@ -53,7 +53,7 @@ fn the_pace_reaches_the_world_a_follower_and_the_report_and_repeats() {
     let (usual, usual_follower, report) = run(EconomyPace::default(), 1_200);
     assert_eq!(usual, usual_follower);
     assert!(
-        report.contains("gathering 100 % · research time 100 %"),
+        report.contains("gathering 100 % · research speed 100 %"),
         "{report}"
     );
     assert_ne!(usual, leader);

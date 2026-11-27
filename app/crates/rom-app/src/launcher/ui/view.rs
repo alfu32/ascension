@@ -242,7 +242,7 @@ impl Launcher {
         .into_any_element()
     }
 
-    /// The economy's pace (task 159): gathering rate and research time, side by side.
+    /// The economy's pace (tasks 159, 166): gathering rate and research speed, side by side.
     fn pace_fields(&self, cx: &mut Context<Self>) -> AnyElement {
         let segmented = |this: &Self,
                          field: &'static str,
@@ -253,9 +253,10 @@ impl Launcher {
                 "" => "100".to_owned(),
                 chosen => chosen.to_owned(),
             };
+            // "10%" without a space: nine research speeds fit one row (task 166).
             let items = values
                 .iter()
-                .map(|pct| (pct.to_string(), format!("{pct} %")))
+                .map(|pct| (pct.to_string(), format!("{pct}%")))
                 .collect();
             this.segmented(
                 field,
@@ -275,12 +276,15 @@ impl Launcher {
                 segmented(self, "gather_rate", &rom_sim::EconomyPace::GATHER_RATES, cx),
             ))
             .child(style::field(
-                "Research time",
-                Some("How long every research takes, age advances included. Prices stay.".into()),
+                "Research speed",
+                Some(
+                    "Of every research, age advances included. Lower is slower; prices stay."
+                        .into(),
+                ),
                 segmented(
                     self,
-                    "research_time",
-                    &rom_sim::EconomyPace::RESEARCH_TIMES,
+                    "research_speed",
+                    &rom_sim::EconomyPace::RESEARCH_SPEEDS,
                     cx,
                 ),
             ))

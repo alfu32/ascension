@@ -71,9 +71,9 @@ pub(super) const FIELDS: &[(&str, &str)] = &[
     ("placement", ""),
     // Whether the city area limits building (task 158): on or off.
     ("city_area", "on"),
-    // The economy's pace (task 159): gathering rate and research time, in percent.
+    // The economy's pace (tasks 159, 166): gathering rate and research speed, in percent.
     ("gather_rate", "100"),
-    ("research_time", "100"),
+    ("research_speed", "100"),
     // Starting age (an ordinal), a setup script (a file) and, in Play, watching the computers
     // (task 112's presets and the forms' script choice); blank or "false" leave them off.
     ("age", ""),
@@ -302,12 +302,12 @@ impl Simple {
             }
             _ => return Err("Gathering rate: 100, 50, 25, 10, 5 or 2 %".into()),
         }
-        match self.get("research_time").trim() {
+        match self.get("research_speed").trim() {
             "100" => {}
-            pct if rom_sim::EconomyPace::parse_research_time(pct).is_some() => {
-                form.set("research-time", pct)
+            pct if rom_sim::EconomyPace::parse_research_speed(pct).is_some() => {
+                form.set("research-speed", pct)
             }
-            _ => return Err("Research time: 100, 200, 400, 1000 or 2000 %".into()),
+            _ => return Err("Research speed: 1000, 500, 200, 100, 50, 25, 20, 10 or 5 %".into()),
         }
         form.set("ai", self.computers(computers));
         if watch {
@@ -714,7 +714,7 @@ mod tests {
         for mode in [Mode::Play, Mode::Host, Mode::Serve] {
             let mut simple = Simple::default();
             simple.set("gather_rate", "5");
-            simple.set("research_time", "1000");
+            simple.set("research_speed", "10");
             let options = simple.options(mode, &mix(), 1).unwrap();
             assert_eq!(
                 options.pace,
@@ -725,6 +725,15 @@ mod tests {
                 "{mode:?}"
             );
             simple.set("gather_rate", "7");
+            assert!(simple.options(mode, &mix(), 1).is_err(), "{mode:?}");
+            // Task 166: the research speed, faster and slower, stands for a research time.
+            simple.set("gather_rate", "100");
+            for (speed, time) in [(1000, 10), (500, 20), (200, 50), (20, 500)] {
+                simple.set("research_speed", speed.to_string());
+                let options = simple.options(mode, &mix(), 1).unwrap();
+                assert_eq!(options.pace.research_time, time, "{mode:?}");
+            }
+            simple.set("research_speed", "400");
             assert!(simple.options(mode, &mix(), 1).is_err(), "{mode:?}");
         }
     }

@@ -472,8 +472,9 @@ impl Render for LobbyView {
             && (setup.gather_rate, setup.research_time) != (100, 100)
         {
             page = page.child(style::hint(SharedString::from(format!(
-                "Economy: gathering {} % · research time {} %",
-                setup.gather_rate, setup.research_time
+                "Economy: gathering {} % · research speed {} %",
+                setup.gather_rate,
+                10_000 / setup.research_time.max(1)
             ))));
         }
         if let Some(error) = state.error.clone() {
