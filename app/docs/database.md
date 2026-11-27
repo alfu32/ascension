@@ -2217,14 +2217,20 @@ Pictures: `img/158-setup-city-area.png` (the Play form), `img/158-farm-outside-c
 
 **The economy's pace as setup options (task 159, owner 2026-11-25).**
 `rom_sim::MatchOptions::pace` (`EconomyPace { gather_rate, research_time }`, percent; set with
-`World::set_pace` before the first tick). **Gathering rate** 100 (default), 50, 25, 10, 5 or 2;
-**research time** 100 (default), 200, 400, 1000 or 2000. Values outside the lists are refused
-(`SimError::InvalidOptions`, and at every parser). `--gather-rate <pct>` and
-`--research-time <pct>` on the game, `rom duel`, `rom ai-match`, `rom replay-hash` and `rom
-serve`; the setup screen's **Gathering rate** and **Research time**; the advanced Game group's
-fields of the same names; presets' `gather_rate` and `research_time`; the network setup's
-`MatchSetup.gather_rate` and `research_time` (the lobby shows them when not 100 %); the match
-report's options line, `report.json`'s `gather_rate` and `research_time`.
+`World::set_pace` before the first tick). **Gathering rate** 100 (default), 50, 25, 10, 5 or 2.
+**Research speed** (task 166, owner 2026-11-26; task 159 called it research time) in percent of
+the normal speed, lower being slower: 1000, 500, 200, 100 (default), 50, 25, 20, 10 or 5, listed
+in that order on the Play, Host and Server forms. Inside, the simulation and saves keep the
+research *time*, `10 000 / speed` exactly: 10, 20, 50, 100, 200, 400, 500, 1000 or 2000
+(`EconomyPace::RESEARCH_SPEEDS` and `RESEARCH_TIMES`, `research_speed()`,
+`parse_research_speed`). Values outside the lists are refused (`SimError::InvalidOptions`, and
+at every parser). `--gather-rate <pct>` and `--research-speed <pct>` on the game, `rom duel`,
+`rom ai-match`, `rom replay-hash` and `rom serve` (`--research-time` is gone); the setup screen's
+**Gathering rate** and **Research speed**; the advanced Game group's fields of the same names;
+presets' `gather_rate` and `research_speed`; the network setup's `MatchSetup.gather_rate` and
+`research_time` (the time, as saved; the lobby shows the speed when not 100 %); the match
+report's options line ("gathering 25 % · research speed 25 %"), `report.json`'s `gather_rate`
+and `research_speed`.
 
 - *Scaled by the gathering rate* (everything a player draws from the world), all through
   `World::credit_gathered`: the income of `pay_income` (workers in gather slots, a site's
@@ -2240,21 +2246,41 @@ report's options line, `report.json`'s `gather_rate` and `research_time`.
 - *Remainders.* What falls below one unit stays, in hundredths, in `gather_remainders` per
   player and resource (removed at zero; hashed and saved), so 2 % of a trickle still adds up.
   At 100 % nothing is scaled and no remainder is kept.
-- *Research time* multiplies `production_duration` of every research after its
-  `research_time` modifiers, age advances included, and the ascension's duration. Prices are
-  unchanged.
+- *Research time* (100 / research speed) multiplies `production_duration` of every research
+  after its `research_time` modifiers, age advances included, and the ascension's duration.
+  Prices are unchanged, so at 200, 500 and 1000 % speed resources become the brake. Off the
+  default a research takes at least one tick (`EconomyPace::research_ticks`).
 - *Shown rates.* `World::income` gives `effective` and `trade` at the gathering rate (the HUD's
   +N, the computer players' view), as do `trade_routes`, `trade_offer` and `body_yield`; the
-  HUD scales the commerce cap it shows beside the rate alike.
+  HUD scales the commerce cap it shows beside the rate alike. `BodyYield::per_period` is in
+  whole units, rounded down; `BodyYield::hundredths_per_period` (task 166) is exact, so a body
+  of 40 a period shows 0 at 2 % yet pays 0.8 a period, its remainder carried like every other
+  income (the payment itself always went through `credit_gathered`). The computer players
+  value bodies by the exact figure.
 - Hashed only off the defaults (the options and the remainders), so default matches keep their
   hashes; the rules fingerprint is unchanged. No seed row.
 
-Calibration (one `balanced:moderate` computer alone, `rom ai-match --universe --seed 1`): the
-last age (ordinal 13) came at 149 561 ticks (2.1 h) at 100/100, 465 601 (6.5 h) at 25/400,
-1 101 841 (15.3 h) at 10/1000 and 8 479 521 (117.8 h, about 4.9 days) at 2/2000; at 2 % the
-first ages are the slow ones (the classical age at 7.7 h, the eighth at 99 h), the automated
-ages then go quickly. 2/2000, the slowest setting, gives this computer about five days of game
-time to the last age.
+Calibration (one `balanced:moderate` computer alone, `rom ai-match --universe --seed 1`), paces
+written gathering rate / research speed. Task 159 measured the last age of its day (ordinal 13)
+before age 14 existed; task 166 measured the last age (ordinal 14) at 100 % gathering for every
+research speed it added, and 100 % / 100 % again (the same as before the task to the tick):
+
+| Pace | Last age | Game time | Measured by |
+| --- | --- | --- | --- |
+| 100 % / 1000 % | 134 541 | 1.9 h | task 166 |
+| 100 % / 500 % | 132 802 | 1.8 h | task 166 |
+| 100 % / 200 % | 137 105 | 1.9 h | task 166 |
+| 100 % / 100 % | 146 569 (ordinal 13 at 144 121) | 2.0 h | task 166 |
+| 100 % / 100 % | 149 561 (ordinal 13) | 2.1 h | task 159 |
+| 100 % / 20 % | 203 921 (ordinal 13 at 192 721) | 2.8 h | task 166 |
+| 25 % / 25 % | 465 601 (ordinal 13) | 6.5 h | task 159 |
+| 10 % / 10 % | 1 101 841 (ordinal 13) | 15.3 h | task 159 |
+| 2 % / 5 % | 8 479 521 (ordinal 13) | 117.8 h, about 4.9 days | task 159 |
+
+Resources are the brake: ten times the research speed saves this computer only 8 % of the way
+(prices are unchanged), and a fifth of it costs 39 %. At 2 % the first ages are the slow ones (the classical age at 7.7 h, the eighth at
+99 h), the automated ages then go quickly. 2 % / 5 %, the slowest setting, gives this computer
+about five days of game time to the last age.
 
 Pictures: `img/159-setup-economy-pace.png` (the Play form at 10 % gathering, 400 % research
 time), `img/159-hud-rate-gathering-10.png` and `img/159-hud-rate-gathering-100.png` (the same

@@ -174,6 +174,18 @@ impl<'a> View<'a> {
         })
     }
 
+    /// How many times longer than at the default pace an income takes to pay a price, in
+    /// percent: 100 at the default gathering rate, 1000 at 10 % (task 166). The pace is match
+    /// setup, which every player sees.
+    pub fn slowness(&self) -> i64 {
+        10_000 / i64::from(self.world.pace().gather_rate.max(1))
+    }
+
+    /// `ticks` stretched by [`View::slowness`]: a span measured at the default pace.
+    pub fn paced(&self, ticks: u64) -> u64 {
+        ticks.saturating_mul(self.slowness().max(1) as u64) / 100
+    }
+
     /// Ordinal of the player's age.
     /// How far the player's stores run over: the least store, in thousands, of the base
     /// resources it earns (0 when any of them is short or none is earned).

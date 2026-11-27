@@ -26,6 +26,10 @@ pub(crate) const PACE_TICKS: u64 = 100;
 /// Income periods in which a resource earned only from sites without workers (energy) should
 /// bring in what the plans spend of it (task 152).
 const SPEND_PERIODS: i64 = 10;
+/// Workers kept beyond one per city when no site has work for them: they build (task 166).
+const KEPT_BUILDERS: i64 = 2;
+/// Workers without any work dismissed in one thought at most.
+const RELEASED_PER_THOUGHT: i64 = 4;
 /// Score of such a site while a city lacks one and the income covers the plans: with the
 /// technologies, below the gather sites that feed the workers.
 const UNATTENDED_SCORE: i64 = 600;
@@ -605,6 +609,37 @@ fn free_site(plan: &Plan<'_>, eco: &Economy, worker: &Entity, resource: DefId) -
         .map(|site| site.id)
 }
 
+/// Whether no gather site of the resources a worker harvests has, or will ever have, a slot
+/// for it: none stands with slots, and every site type of those resources the player's
+/// nation has and that is not superseded needs no workers. Before the automated ages there
+/// is always such a type with slots (the farm, or the university not yet built).
+fn workless(view: &View<'_>, eco: &Economy, worker: &Entity) -> bool {
+    let rules = view.rules;
+    rules.entity_types[&worker.type_id]
+        .harvester
+        .iter()
+        .all(|h| {
+            let standing = eco.resources.get(&h.resource_id).map_or(0, |g| g.slots);
+            let types: Vec<DefId> = view
+                .cat
+                .gather_sites
+                .get(&h.resource_id)
+                .into_iter()
+                .flatten()
+                .copied()
+                .filter(|site| rules.is_available(*site, view.faction) && !view.obsolete(*site))
+                .collect();
+            standing == 0
+                && !types.is_empty()
+                && types.iter().all(|site| {
+                    rules.entity_types[site]
+                        .gather_site
+                        .as_ref()
+                        .is_none_or(|s| s.slots_max == 0)
+                })
+        })
+}
+
 /// Sends builders to untended sites, idle workers to the resource that lacks them most,
 /// moves one worker off an overstaffed resource, and puts idle traders on a route.
 pub(crate) fn assign(
@@ -685,6 +720,9 @@ pub(crate) fn assign(
     // Idle workers go where the plan is shortest of hands.
     let crowded = plan.view.pop_used + plan.view.queued_pop >= plan.view.pop_cap;
     let mut disbanded = false;
+    // Workers kept for building when no gather site has work for anyone (task 166).
+    let keep = plan.view.cities.len() as i64 + KEPT_BUILDERS;
+    let mut released = 0;
     let idle: Vec<&Entity> = workers
         .iter()
         .copied()
@@ -713,6 +751,17 @@ pub(crate) fn assign(
                 return;
             }
             disbanded = true;
+        } else if released < RELEASED_PER_THOUGHT
+            && eco.workers - released > keep
+            && workless(&plan.view, eco, worker)
+        {
+            // No site anywhere has work for its kind (the automated ages, where every site
+            // runs unattended) and none will: beyond a few builders it leaves the match, so
+            // idle hands do not fill the population for good (task 166).
+            if !plan.order(worker.id, "disband", None, None, None) {
+                return;
+            }
+            released += 1;
         }
     }
 

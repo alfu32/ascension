@@ -68,6 +68,11 @@ const SIEGE_WAIT_TICKS: u64 = 3600;
 const SIEGE_PER: usize = 6;
 /// Score of the wish for a scout when none is out.
 const SCOUT_SCORE: i64 = 700;
+/// A lost scout is replaced at once at the default pace; at a slower economy it waits this
+/// span for every 100 % of slowness beyond the default (task 166): at 10 % gathering a scout
+/// costs ten times as many minutes of income, and one lost every few minutes would take
+/// everything the player earns.
+const SCOUT_WAIT_TICKS: u64 = 3600;
 
 /// Own ground fighters that can take orders now, in id order: no spacecraft, no orbital
 /// craft, no warships (the naval manager's), no militia (held at their city, task 152).
@@ -488,13 +493,29 @@ fn look(view: &View<'_>, memory: &mut Memory) {
     }
 }
 
+/// Whether a scout may be found now: always at the default pace; at a slower economy once
+/// [`SCOUT_WAIT_TICKS`] per 100 % of slowness beyond the default have passed since the last
+/// scout was lost (the first scout never waits).
+fn scout_due(view: &View<'_>, memory: &Memory) -> bool {
+    let wait = view.paced(SCOUT_WAIT_TICKS) - SCOUT_WAIT_TICKS;
+    memory
+        .armies
+        .get(&Role::Scout)
+        .is_none_or(|a| a.since == 0 || view.tick >= a.since.saturating_add(wait))
+}
+
 /// Puts new fighters into armies: the fastest become scouts, then the home guard and the
 /// raiders get their shares, and the rest join the main army.
 fn enlist(view: &View<'_>, weights: &Weights, memory: &mut Memory, units: &[&Entity]) {
     let alive: BTreeSet<u32> = units.iter().map(|e| e.id.0).collect();
     for role in [Role::Defend, Role::Attack, Role::Raid, Role::Scout] {
         let army = memory.armies.entry(role).or_default();
+        let had = !army.members.is_empty();
         army.members.retain(|id| alive.contains(id));
+        // When the last scout was lost: at a slow economy its replacement waits (task 166).
+        if role == Role::Scout && had && army.members.is_empty() {
+            army.since = view.tick;
+        }
     }
     let enlisted: BTreeSet<u32> = memory
         .armies
@@ -511,9 +532,10 @@ fn enlist(view: &View<'_>, weights: &Weights, memory: &mut Memory, units: &[&Ent
     }
     let total = units.len() as i64;
     let size = |memory: &Memory, role| memory.armies.get(&role).map_or(0, |a| a.members.len());
-    // Scouts: the fastest fresh units.
+    // Scouts: the fastest fresh units; at a slow economy not until the wait after the last
+    // scout lost is over (task 166).
     let want = weights.scouts as usize;
-    if size(memory, Role::Scout) < want {
+    if size(memory, Role::Scout) < want && scout_due(view, memory) {
         fresh.sort_by_key(|e| {
             let speed = view.rules.entity_types[&e.type_id]
                 .movement
@@ -1971,7 +1993,10 @@ pub(crate) fn wishes(view: &View<'_>, weights: &Weights, memory: &Memory, wishes
     let in_training = |unit: DefId| {
         view.count(unit) - view.own.iter().filter(|e| e.type_id == unit).count() as i64
     };
-    if weights.scouts > 0 && army(Role::Scout).is_none_or(|a| a.members.is_empty()) {
+    if weights.scouts > 0
+        && army(Role::Scout).is_none_or(|a| a.members.is_empty())
+        && scout_due(view, memory)
+    {
         // The fastest unit the player can train, the cheapest among equals.
         let scout = view
             .owned
