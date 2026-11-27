@@ -335,7 +335,7 @@ fn reachable_by_most(view: &View<'_>, units: &[&Entity], to: Pos) -> bool {
     let (mut yes, mut all) = (0, 0);
     for (type_id, (from, count)) in kinds {
         all += count;
-        if view.world.reachable_for(view.me, type_id, from, to) != Some(false) {
+        if crate::swimming::reaches(view, type_id, from, to) != Some(false) {
             yes += count;
         }
     }

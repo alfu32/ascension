@@ -1,0 +1,21 @@
+# Task 168: citizens swim a strait. On seed 1 an island lies off player one's home coast to the
+# east, parted from it by shallow water. Player one is in the Industrial age with Swimming
+# researched; six citizens on the home shore north of the strait wade out into it, then are sent
+# on to the island and swim across, drawn waist-deep.
+#   rise-of-man --universe --style map.one_world --seed 1 --players 2 --ai none --sun fixed \
+#     --size 1280x800 --script app/docs/tasks/168-swim-script.txt --after 13 \
+#     --screenshot app/docs/img/168-strait.png
+0 grant-age age.industrial
+0 grant-tech tech.swimming
+0 place 1 bld.temple @84,4
+0 place 1 unit.citizen @79,7
+0 place 1 unit.citizen @80,7
+0 place 1 unit.citizen @81,7
+0 place 1 unit.citizen @79,8
+0 place 1 unit.citizen @80,8
+0 place 1 unit.citizen @81,8
+5 box-near temple1 9
+8 cam focus
+60 cam wheel 5 590,400
+90 rclick @82,12
+220 rclick @75,17

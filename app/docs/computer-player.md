@@ -1727,17 +1727,24 @@ point.
 
 `rom-ai/src/swimming.rs`. A research that teaches swimming (a modifier on the stat `swim`) is not
 weighed like other side research: it is wished (score 500, as a side research worth 200) only
-while it **opens land**: for an own unit type the row teaches that cannot swim yet, either land
-within an own city's economic radius (looked at every second tile) that it cannot walk to but
-could swim to, for workers and builders, or a remembered enemy building on its planet the same,
-for armed units (`World::reachable_for` against `World::reachable_swimming`). Otherwise it is
-never researched.
+while it **opens land** for an own unit type the row teaches that cannot swim yet: land within an
+own city's economic radius (looked at every second tile) that a worker or builder cannot walk to
+but could swim to, or a remembered enemy building on its planet that a soldier cannot walk to but
+could reach across a **short swim** (`World::reachable_for` against `World::reachable_swimming`).
+Otherwise it is never researched.
 
-Once learnt, nothing else is special: every reachability test of the managers asks about the
-player's own units (`World::reachable_for`): the military manager's "can most of the army walk
-there", the sea lift's beach, home and ashore tests, the rally spot. So a target across shallow
-water is walked and swum to by the main army, and **the sea lift is left for deep water** (shallow
-water on these planets is the coastal band, so a swim is always short). Workers go to the nearest
-gather site with a free slot that they can reach (`free_site`), and a building is given to a
-builder that can reach its site first, so citizens who swim are sent to island sites within their
-cities' reach, which before were given to whoever stood nearest and failed `no_path`.
+- **Workers.** A worker goes to the nearest gather site with a free slot that it can reach
+  (`free_site`, `World::reachable_for`), and a building is given to a builder that can reach its
+  site first. So citizens who swim are sent to island sites within their cities' reach, which
+  before went to whoever stood nearest and failed `no_path`; before they swim, such sites wait
+  for a worker on their own land.
+- **The army and the sea lift.** Shallow water on these planets is not a thin strip: the coastal
+  shelf is often 10 to 30 tiles wide, so a swim can be long and slow (half the walking speed).
+  The military manager's "can most of the army get there" and the sea lift's walk tests count a
+  swim only when it is **short** (`swimming::reaches`): the tile of the army's land nearest the
+  target (within 30 tiles of it) has a tile of the target's land within 8 tiles. Then the army
+  swims over and the sea lift does nothing; across a longer stretch of shallows, or deep water,
+  the sea lift carries it as before. Swimmers still board and leave transports (a swimmer within
+  reach of a ship boards it from the water). The water between the two shores is not looked at:
+  two lands 8 tiles apart across deep water that are joined by shallows far away count as a short
+  swim, and the walk there is found by the path search.

@@ -1,0 +1,20 @@
+# Task 168: infantry wade ashore. The island of 168-swim-script.txt on seed 1; player one is in the
+# Fusion age with Combat Swimming researched. Exo-troopers and pulse gunners stand in the shallow
+# strait east of the island and are sent onto it: the first wade up the beach while the rest still
+# swim, waist-deep.
+#   rise-of-man --universe --style map.one_world --seed 1 --players 2 --ai none --sun fixed \
+#     --size 1280x800 --script app/docs/tasks/168-wade-script.txt --after 13 \
+#     --screenshot app/docs/img/168-wading-ashore.png
+0 grant-age age.fusion
+0 grant-tech tech.combat_swimming
+0 place 1 bld.temple @84,4
+0 place 1 unit.exo_trooper @82,12
+0 place 1 unit.exo_trooper @83,12
+0 place 1 unit.exo_trooper @84,13
+0 place 1 unit.pulse_gunner @83,14
+0 place 1 unit.pulse_gunner @84,14
+0 place 1 unit.pulse_gunner @85,15
+5 box-near army1 6
+8 cam focus
+60 cam wheel 5 590,400
+100 rclick @74,15

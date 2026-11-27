@@ -3352,3 +3352,18 @@ is two tags, two stats and two technologies, written by hand at the end of `db/s
 - **Drawing**: `EntityView::swimming` (new); `rom-render` lowers the model by
   `SWIM_DEPTH` = 45 % of its height below the water surface (waist-deep). No model changed.
 - **Computer players**: `docs/computer-player.md`, "Swimming (task 168)".
+- **Measured.** `rom playthrough --seed 1` hash `fe20e5716eb82f40`, ascension `ad57c72834ff8abb`
+  (were `babae5857cdf8d04`, `3c35efa63d8642f3`): the playthrough researches every technology, now
+  204 (was 202); every age is reached at the same tick and the ascension ends with the same
+  resources. `rom fight-matrix`: `strengths=305 unanswered=0`, unchanged (no unit's weapons or
+  stats change on land). `rom duel` moderate–easiest, seeds 1–20: 20–0, mean tick 46 393 (was
+  46 979); duels end before the Industrial age, so nobody swims there: seeds 4 and 13 changed
+  (moderate wins at 44 470 and 57 925, was 51 211 and 62 900) because a worker is now sent only
+  to a gather site it can reach and a building to a builder that can reach its site.
+- **Screenshots**: `docs/img/168-strait.png` (`docs/tasks/168-swim-script.txt`: citizens
+  waist-deep in a strait off player one's coast on seed 1), `docs/img/168-wading-ashore.png`
+  (`docs/tasks/168-wade-script.txt`: exo-troopers and pulse gunners wading onto the island). The
+  map styles make wide coastal shelves (often 10 to 30 tiles of shallows) rather than narrow
+  straits: on the Planet style, seeds 1 to 16, six seeds (1, 8, 9, 11, 14, 15) have land within
+  100 tiles of player one's city that a citizen cannot walk to but can swim to, and on three of
+  them (1, 9, 14) it lies within 11 tiles of the home shore.
