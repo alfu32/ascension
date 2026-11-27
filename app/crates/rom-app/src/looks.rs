@@ -138,26 +138,43 @@ fn tile_kind(id: DefId, base: BaseTerrains) -> TileKind {
 /// planet size when it lands (task 72); an orbital craft (`et_movement.climb_ticks`) comes
 /// down into the air at its true size.
 pub fn ship_scales(rules: &Rules) -> ShipScales {
-    ShipScales(
-        rules
-            .entity_types
-            .iter()
-            .filter_map(|(id, et)| {
-                let row = et.view_scale.as_ref()?;
-                let kind = u16::try_from(id.0).ok()?;
-                let scale = ShipScale::from_pct(row.planet_pct, row.system_pct);
-                let craft = et.movement.as_ref().is_some_and(|m| m.climb_ticks > 0);
-                Some((
-                    kind,
-                    if craft {
-                        scale.true_size_on_the_ground()
-                    } else {
-                        scale
-                    },
-                ))
-            })
-            .collect(),
-    )
+    let mut scales: BTreeMap<u16, ShipScale> = rules
+        .entity_types
+        .iter()
+        .filter_map(|(id, et)| {
+            let row = et.view_scale.as_ref()?;
+            let kind = u16::try_from(id.0).ok()?;
+            let scale = ShipScale::from_pct(row.planet_pct, row.system_pct);
+            let craft = et.movement.as_ref().is_some_and(|m| m.climb_ticks > 0);
+            Some((
+                kind,
+                if craft {
+                    scale.true_size_on_the_ground()
+                } else {
+                    scale
+                },
+            ))
+        })
+        .collect();
+    // A building that lifted off (task 170b) is drawn in space at its true size, of the
+    // smallest class: its floor and marker are the smallest ship's.
+    let smallest = rules
+        .entity_types
+        .values()
+        .filter_map(|et| et.view_scale.as_ref())
+        .map(|row| row.system_pct)
+        .min();
+    if let Some(system_pct) = smallest {
+        for (id, et) in &rules.entity_types {
+            if et.class == rom_rules::EntityClass::Building
+                && et.view_scale.is_none()
+                && let Ok(kind) = u16::try_from(id.0)
+            {
+                scales.insert(kind, ShipScale::from_pct(100, system_pct));
+            }
+        }
+    }
+    ShipScales(scales)
 }
 
 /// Everything the renderer needs to draw a planet or map of these rules up close, its baked

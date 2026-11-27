@@ -2991,7 +2991,12 @@ impl Controller {
                 {
                     actions.push((6, Action::Land));
                 }
-                if armed_mover || own.iter().any(|e| world.orbit(e.id).is_some()) {
+                // A building in orbit (task 170b) does not patrol.
+                if armed_mover
+                    || own
+                        .iter()
+                        .any(|e| world.orbit(e.id).is_some() && !world.airborne(e.id))
+                {
                     actions.push((7, Action::Patrol));
                 }
                 if own
@@ -4232,9 +4237,10 @@ impl Controller {
         if hud.help.is_empty()
             && !self.view.in_space
             && own.iter().any(|e| {
-                world
-                    .orbit(e.id)
-                    .is_some_and(|o| o.body == self.view.planet)
+                !world.airborne(e.id)
+                    && world
+                        .orbit(e.id)
+                        .is_some_and(|o| o.body == self.view.planet)
             })
         {
             hud.help = if own.iter().any(|e| lands(world, e)) {
@@ -4269,9 +4275,23 @@ impl Controller {
         }
         // A building in the air (task 170) says what it can and cannot do there.
         if hud.help.is_empty() && own.iter().any(|e| world.airborne(e.id)) {
-            hud.help = "In the air: it trains and researches nothing until it lands; \
-                        right-click to fly, Land to come down"
-                .into();
+            // In orbit or in space (task 170b) it is sent from the space views.
+            let away = own.iter().any(|e| {
+                world.flight_stage(e.id).is_some_and(|s| {
+                    !matches!(
+                        s,
+                        rom_sim::FlightStage::Air | rom_sim::FlightStage::Climbing
+                    )
+                })
+            });
+            hud.help = if away {
+                "Away from the ground: it trains and researches nothing; right-click a planet \
+                 or a star in the space views to send it, Land to pick where it comes down"
+            } else {
+                "In the air: it trains and researches nothing until it lands; \
+                 right-click to fly, Land to come down"
+            }
+            .into();
         }
         if hud.help.is_empty() && own.iter().any(|e| world.jump_charge(e.id).is_some()) {
             hud.help = "Charging a jump: it cannot move or fire until it leaves; \

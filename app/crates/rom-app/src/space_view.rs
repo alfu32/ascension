@@ -482,7 +482,10 @@ pub fn flight_line(world: &World, building: &rom_sim::Entity) -> Option<String> 
             _ => None,
         };
     };
-    if flight.stage == FlightStage::Air && target.body == building.pos.body {
+    if flight.stage == FlightStage::Air
+        && flight.landing.is_none()
+        && target.body == building.pos.body
+    {
         return None;
     }
     let info = world.body(target.body)?;

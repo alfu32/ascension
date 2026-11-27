@@ -3749,3 +3749,16 @@ after every other definition, so earlier ids stay.
   `rom-ai/tests/airlift.rs` (a besieged barracks flies to the safe city on another planet of its
   system), `rom-app` selection tests (a right click on a planet in the system view, the ghost on that
   planet, a click lands it). Each scenario runs twice and compares state hashes.
+- **Drawing.** In the planet view a building in orbit is drawn above its point at the orbit's
+  height, its engines firing, rising to it from its flight height and coming back down to it
+  (`sim_thread`); in the system view as a ship of the smallest class (`looks::ship_scales` gives
+  every building without a view-scale row the smallest ship's class, so its floor and marker are
+  that ship's); between systems on its lane as a ship. The help line away from the ground says it
+  is sent from the space views; Patrol is not offered to a building in orbit.
+- **Screenshots** (the game's own paths, `--script`, release build): `img/170b-orbit.png`
+  (`tasks/170b-orbit-script.txt`: a barracks sent to its own planet's orbit, holding above the
+  city), `img/170b-crossing.png` (`tasks/170b-system-script.txt`: a barracks crossing the plane of
+  its system toward the colony's planet, the camera following it), `img/170b-landing.png`
+  (`tasks/170b-landing-script.txt`: the barracks, come down from that planet's orbit, settling
+  beside the colony's city after Land and a click on that planet). The scripts gained `orbit home`
+  and the live point `touchdownN`.
