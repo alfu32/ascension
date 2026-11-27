@@ -252,6 +252,12 @@ fn write_all(
             params![id.0, w(*ready)],
         )?;
     }
+    for (id, type_id) in &s.retype_waiting {
+        tx.execute(
+            "INSERT INTO entity_retype VALUES (?,?)",
+            params![id.0, type_id.0],
+        )?;
+    }
     for (id, pool) in &s.shields {
         tx.execute(
             "INSERT INTO entity_shield VALUES (?,?,?)",

@@ -1612,6 +1612,13 @@ CREATE TABLE entity_jump_ready (
   ready_tick INTEGER NOT NULL
 ) STRICT;
 
+-- A type change waiting for its unit (task 172, format 27): the unit stood where the new type
+-- cannot and no tile it can stand on was within reach; it becomes `type_id` once it can.
+CREATE TABLE entity_retype (
+  entity_id INTEGER PRIMARY KEY,
+  type_id   INTEGER NOT NULL
+) STRICT;
+
 -- The pool of a shield (task 157, format 23): the points it holds now and the tick it last
 -- took damage (it recharges `et_shield.recharge_delay_ticks` after that). Only shields whose
 -- pool has been charged have a row.

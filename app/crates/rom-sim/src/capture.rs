@@ -170,6 +170,8 @@ impl World {
             self.index_building(id, e.pos, true);
         }
         self.economy.dirty.insert(id);
+        // A convert its new owner cannot keep where it stands (a swimmer) moves (task 172).
+        self.keep_footing(id);
     }
 
     /// Restores a disabled city; enemy restoration transfers its dependent buildings.

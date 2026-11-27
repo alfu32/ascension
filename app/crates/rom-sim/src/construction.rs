@@ -175,8 +175,18 @@ impl World {
         let surface = self.surf(pos.body);
         for tile in surface.geo.footprint_tiles(pos.face, bounds) {
             let index = surface.geo.index_of(tile).expect("checked bounds");
-            if !self.rules.terrains[&surface.map.terrain[index]].buildable {
-                return Err(SimError::UnbuildableTerrain);
+            let terrain = surface.map.terrain[index];
+            // Ground cover takes the buildings whose units can all move through it (task 172).
+            if !self.rules.terrains[&terrain].buildable
+                && !self.rules.stands_in_cover(subject, terrain)
+            {
+                return Err(
+                    if self.rules.judged_for_cover(subject) && self.rules.is_cover(terrain) {
+                        SimError::UnfitForCover(terrain)
+                    } else {
+                        SimError::UnbuildableTerrain
+                    },
+                );
             }
         }
         // A gate may go into the player's own line, over its segments (task 165).

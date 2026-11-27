@@ -1,0 +1,23 @@
+# Task 172: a barracks standing in a forest, its infantry walking out. Seed 1, player one in the
+# Ancient age; the barracks is put in the forest south-west of the city (the setup places it, as a
+# citizen could), six spearmen are queued and their rally point is set on open ground east of the
+# trees; the game runs at 400 % until several have come out and are walking off.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun fixed --size 1600x900 \
+#     --script app/docs/tasks/172-forest-barracks-script.txt --after 10 --screenshot app/docs/img/172-forest-barracks.png
+0 grant-age age.ancient
+0 grant-tech tech.military.1
+0 grant res.food 20000
+0 grant res.timber 20000
+0 grant res.metal 20000
+0 place 1 bld.barracks @-31,31
+4 producers
+5 hud slot 0
+6 hud slot 0
+7 hud slot 0
+8 hud slot 0
+9 hud slot 0
+10 hud slot 0
+12 rclick @-15,34
+14 look @-28,32
+15 cam wheel 3 760,330
+16 speed 400

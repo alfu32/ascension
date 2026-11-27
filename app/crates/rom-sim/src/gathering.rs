@@ -14,15 +14,32 @@ impl World {
         if let Some(terrain) = site.needs_node_terrain_id {
             // Node tiles whose centres lie within the radius, across face edges on a sphere.
             let surface = self.surf(pos.body);
+            // A node tile under a building (task 172: one standing in a forest) gives nothing
+            // while it is built over.
             nodes = surface
                 .geo
                 .disc(pos, site.node_radius.max(0))
                 .flatten()
                 .filter(|index| surface.map.terrain[*index] == terrain)
+                .filter(|index| !self.built_over(pos.body, *index))
                 .count() as i128;
         }
         (i128::from(site.slots_base) + i128::from(site.slots_per_node) * nodes)
             .min(i128::from(site.slots_max)) as i64
+    }
+
+    /// Whether a standing building or site other than a minefield covers tile `index` of
+    /// `body`.
+    fn built_over(&self, body: crate::BodyId, index: usize) -> bool {
+        let centre = Pos {
+            body,
+            ..self.surf(body).geo.index_centre(index)
+        };
+        let (x, y) = (i64::from(centre.x), i64::from(centre.y));
+        self.buildings_overlapping(centre, [x - 500, y - 500, x + 500, y + 500], false)
+            .into_iter()
+            .filter_map(|id| self.entity(id))
+            .any(|e| !self.mine_types.contains(&e.type_id))
     }
 
     pub(crate) fn validate_harvest(&self, command: &Command) -> Result<(), SimError> {

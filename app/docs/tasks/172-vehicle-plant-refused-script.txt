@@ -1,0 +1,21 @@
+# Task 172: the ghost of a vehicle plant refused over a forest, with its reason. Seed 1, player one
+# in the Industrial age with the vehicle plant unlocked; the builders are selected, the vehicle
+# plant armed from the military page of the build palette and the pointer rests on the small
+# forest north-west of the city: the footprint is red and the line under it says why.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun fixed --size 1600x900 \
+#     --script app/docs/tasks/172-vehicle-plant-refused-script.txt --after 6 --screenshot app/docs/img/172-vehicle-plant-refused.png
+0 grant-age age.industrial
+0 grant-tech tech.up.vehicle_plant
+0 grant res.food 20000
+0 grant res.timber 20000
+0 grant res.metal 20000
+0 grant res.wealth 20000
+0 grant res.oil 20000
+4 look @-4,-11
+5 box builders
+8 hud tab 0
+10 hud arrow 1
+11 hud arrow 1
+12 hud arrow 1
+14 hud slot 7
+18 hover @-4,-11

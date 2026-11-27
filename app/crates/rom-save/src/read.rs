@@ -1200,6 +1200,21 @@ fn snapshot(conn: &Connection, rules: &Rules) -> Result<Snapshot, SaveError> {
     } else {
         (Vec::new(), Vec::new())
     };
+    // Saves before format 27 (task 172) had no type change waiting for its unit.
+    let retype_waiting = if format >= 27 {
+        query_vec(
+            conn,
+            "SELECT entity_id, type_id FROM entity_retype ORDER BY entity_id",
+            |r| {
+                Ok((
+                    EntityId(uint(r, 0, "retyped unit")?),
+                    DefId(uint(r, 1, "waiting type")?),
+                ))
+            },
+        )?
+    } else {
+        Vec::new()
+    };
     // Saves before format 23 (task 157) had no shields.
     let shields = if format >= 23 {
         query_vec(
@@ -1432,6 +1447,7 @@ fn snapshot(conn: &Connection, rules: &Rules) -> Result<Snapshot, SaveError> {
         flight,
         leaps,
         jump_ready,
+        retype_waiting,
         clouds,
         shields,
         history,

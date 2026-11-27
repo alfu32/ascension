@@ -245,9 +245,12 @@ impl World {
                                     == Some(player)
                             }))
                 }
-                PlacementKind::OnTerrain => {
-                    footprint_terrain().all(|terrain| terrain == rule.ref_def_id)
-                }
+                // Ground cover counts as the required terrain for the buildings it takes
+                // (task 172).
+                PlacementKind::OnTerrain => footprint_terrain().all(|terrain| {
+                    terrain == rule.ref_def_id
+                        || terrain.is_some_and(|t| self.rules.stands_in_cover(subject, t))
+                }),
                 PlacementKind::AdjacentTerrain => geo
                     .footprint_surroundings(pos.face, bounds, rule.distance)
                     .any(|index| rule.ref_def_id == Some(surface.map.terrain[index])),

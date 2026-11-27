@@ -1270,3 +1270,55 @@ fn units_in_the_air_after_a_jump_and_a_drop() {
     assert!(w.jump_cooldown_left(jumper) > 0);
     check("leaps", &rules, w, 200, |_| {});
 }
+
+/// Task 172: a type change waiting for its unit (a dragoon deep in a forest when its line
+/// became the armoured car) is saved and loaded; both worlds make it alike once the unit rides
+/// within reach of open ground.
+#[test]
+fn a_type_change_waiting_for_its_unit() {
+    let rules = rules();
+    let (plain, forest) = (
+        rules.id_of("ter.plain").unwrap(),
+        rules.id_of("ter.forest").unwrap(),
+    );
+    let players = (1..=2)
+        .map(|n| Player {
+            id: PlayerId(n),
+            team: n,
+            faction: rules.id_of("nation.romans").unwrap(),
+            age: rules.id_of("age.industrial").unwrap(),
+            resources: rules.resources.keys().map(|r| (*r, 100_000)).collect(),
+            techs: [(rules.id_of("tech.up.dragoon").unwrap(), 1)].into(),
+        })
+        .collect();
+    let tiles = (0..64 * 64)
+        .map(|i| if i % 64 >= 24 { forest } else { plain })
+        .collect();
+    let mut w = World::new(
+        rules.clone(),
+        MapGrid::new(64, 64, tiles).unwrap(),
+        5,
+        players,
+    )
+    .unwrap();
+    let flat = |x: i32, y: i32| Pos::flat(x * 1000 + 500, y * 1000 + 500);
+    let plant = w
+        .place_for_setup(id(&w, "bld.vehicle_plant"), P1, flat(10, 40))
+        .unwrap();
+    let dragoon = w.spawn(id(&w, "unit.dragoon"), P1, flat(45, 32)).unwrap();
+    w.submit(Command {
+        subject: Some(id(&w, "tech.up.armoured_car")),
+        ..command(&w, plant, "research")
+    })
+    .unwrap();
+    run_until(&mut w, 20_000, |w| w.waiting_retypes().count() == 1);
+    order(&mut w, dragoon, "move", None, Some(flat(10, 32)));
+    ticks(&mut w, 5);
+    let car = id(&w, "unit.armoured_car");
+    assert_eq!(
+        w.waiting_retypes().collect::<Vec<_>>(),
+        vec![(dragoon, car)]
+    );
+    let outcome = check("waiting_retype", &rules, w, 800, |_| {});
+    assert_ne!(outcome.hash_before, outcome.hash_after_run);
+}

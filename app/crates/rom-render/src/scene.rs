@@ -1863,6 +1863,9 @@ impl Scene {
         if let (Some(grass), Some(gpu), Some(_)) = (&mut self.grass, &self.globe, orbit) {
             grass.set_buildings(&gpu.globe, views);
         }
+        if let (Some(features), Some(gpu), Some(_)) = (&mut self.features, &self.globe, orbit) {
+            features.set_buildings(&gpu.globe, views);
+        }
         let looks = &self.looks;
         let objects = self.features.as_ref().map(|f| &f.buildings);
         let drawn_as_objects = |kind: u16| {

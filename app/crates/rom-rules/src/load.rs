@@ -1686,6 +1686,7 @@ impl Rules {
             rules.production.values().flatten().cloned().collect(),
             |r| r.product_def_id,
         );
+        rules.cover_terrains = crate::cover::derive_cover_terrains(&rules);
         Ok(rules)
     }
 }
