@@ -3744,7 +3744,7 @@ after every other definition, so earlier ids stay.
   landing refused on a planet with another player's city and allowed on one with none; a flight to a
   planet's place ends in its orbit; a jump refused to another cluster below the galactic tier and
   below half its hit points, given up when hit below half while charging, then made, restored in
-  transit; space weapons hit it in the plane), `rom-save/tests/scenarios.rs`
+  transit; an enemy inhibitor in its system holds it; space weapons hit it in the plane), `rom-save/tests/scenarios.rs`
   (`buildings_through_the_system_and_the_stars`: saved and loaded in every stage),
   `rom-ai/tests/airlift.rs` (a besieged barracks flies to the safe city on another planet of its
   system), `rom-app` selection tests (a right click on a planet in the system view, the ghost on that

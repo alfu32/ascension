@@ -187,9 +187,12 @@ fn stage(w: &World, id: EntityId) -> Option<FlightStage> {
     w.flight_stage(id)
 }
 
+/// A building's reach and what a flight in its system and to another star gave.
+type Reached = (i64, Result<(), SimError>, Result<(), SimError>);
+
 /// Its reach is its age's: in the Spacefaring age its planet only; with the Starfaring age's
 /// research its star system but not another star; with the Galactic War's research other stars.
-fn reach_scenario() -> (u64, Vec<(i64, Result<(), SimError>, Result<(), SimError>)>) {
+fn reach_scenario() -> (u64, Vec<Reached>) {
     let rules = rules();
     let mut out = Vec::new();
     let mut last = 0;
@@ -459,4 +462,28 @@ fn space_fight() -> (u64, i64) {
 fn space_weapons_reach_a_building_in_space() {
     let (hash, hp) = space_fight();
     assert_eq!(space_fight(), (hash, hp));
+}
+
+/// An enemy jump inhibitor in its system holds it as it holds a ship: it may leave only the way
+/// it came, and it came by no route.
+fn held_scenario() -> (u64, Result<(), SimError>, Result<(), SimError>) {
+    let rules = rules();
+    let mut w = world(&rules, "age.galactic", &[SYSTEM, STARS]);
+    let barracks = lifted_barracks(&mut w);
+    let free = to_star(&mut w, barracks, 2);
+    order(&mut w, barracks, "fly", Some(on(2, 16, 30))).unwrap();
+    let inhibitor = w.rules.id_of("bld.jump_inhibitor").unwrap();
+    w.spawn(inhibitor, P2, on(2, 40, 40)).unwrap();
+    ticks(&mut w, 2);
+    let held = to_star(&mut w, barracks, 2);
+    ticks(&mut w, 20);
+    (w.hash(), free, held)
+}
+
+#[test]
+fn an_enemy_inhibitor_holds_a_building_as_a_ship() {
+    let (hash, free, held) = held_scenario();
+    assert_eq!(free, Ok(()));
+    assert_eq!(held, Err(SimError::HeldByInhibitor));
+    assert_eq!(held_scenario().0, hash);
 }

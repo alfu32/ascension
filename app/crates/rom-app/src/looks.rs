@@ -556,7 +556,27 @@ mod tests {
         let rules = load_rules().expect("rules");
         let scales = ship_scales(&rules);
         assert!(scales.0.len() >= 5, "{scales:?}");
-        for (kind, scale) in &scales.0 {
+        // A building (one that lifted off, task 170b) is of the smallest class at its true size.
+        let smallest = scales
+            .0
+            .values()
+            .map(|s| s.system)
+            .fold(f32::INFINITY, f32::min);
+        let ships: Vec<(&u16, &ShipScale)> = scales
+            .0
+            .iter()
+            .filter(|(kind, scale)| {
+                let et = &rules.entity_types[&DefId(u32::from(**kind))];
+                if et.class != rom_rules::EntityClass::Building {
+                    return true;
+                }
+                assert!(et.view_scale.is_none(), "{kind}");
+                assert_eq!((scale.planet, scale.system), (1.0, smallest), "{kind}");
+                false
+            })
+            .collect();
+        assert!(ships.len() >= 5, "{ships:?}");
+        for (kind, scale) in ships {
             let et = &rules.entity_types[&DefId(u32::from(*kind))];
             assert!(et.movement.is_some(), "{kind}");
             // Two to three times their true size above a planet (task 72: the starships as
@@ -577,8 +597,12 @@ mod tests {
         // The sizes differ by ship class, and a type without a row keeps the default.
         let mut sizes: Vec<i64> = scales
             .0
-            .values()
-            .map(|s| (s.planet * 100.0) as i64)
+            .iter()
+            .filter(|(kind, _)| {
+                rules.entity_types[&DefId(u32::from(**kind))].class
+                    != rom_rules::EntityClass::Building
+            })
+            .map(|(_, s)| (s.planet * 100.0) as i64)
             .collect();
         sizes.sort_unstable();
         sizes.dedup();
