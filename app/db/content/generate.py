@@ -744,6 +744,8 @@ def generate():
     fortifications(definition, row, tag, need, produce, cost, modifier)
     shields(definition, row, tag, need, cost, modifier, sql.append)
     shield_emitters(definition, row, tag, need, produce, cost)
+    transport_research = sea_transports(definition, row, tag, need, produce, cost, upgrade, sql.append)
+    research = [r for r in research if r[3] not in transport_research]
     # Library grid: one row per age, the advance in column 0 and the tracks in 1-4,
     # three ages per page. Other research is listed by the age it needs.
     grid_columns = ['age'] + list(TRACKS)
@@ -759,6 +761,9 @@ def generate():
     # Task 157's researches take the next free places at the city.
     for key, *_ in SHIELDS:
         produce('bld.' + SHIELD_RESEARCH_AT, key, 'research', 'research')
+    # Task 167's upgrades take the next free places at the dock.
+    for key in transport_research:
+        produce('bld.dock', key, 'research', 'research')
     # Upgraded producers retain their whole palette, including subsequent upgrades.
     for base, steps in building_variants:
         for key, _ in steps:
@@ -1791,6 +1796,56 @@ def shield_emitters(definition, row, tag, need, produce, cost):
             upkeep_resource_id=Ref('res.energy'), upkeep=FIELD_UPKEEP * price_pct // 100)
     row('et_fortification', entity_type_id=Ref('bld.' + gate), gate=1)
     row('et_fortification', entity_type_id=Ref('bld.' + seg), gate=0, gate_type_id=Ref('bld.' + gate))
+
+
+# Task 167 (owner, 2026-11-25: "a dock transport ship that can take personnel (units) onboard";
+# age 2 accepted 2026-11-26): one class of sea transports trained at the dock, each look replacing
+# the one before it by an upgrade. Unarmed; the warships of its age answer it. It carries land
+# units (tag `sea_passenger`: every unit that walks or drives) up to its capacity in population.
+# key, name, age, base hit points (before the age scale), speed, capacity, price (before the scale).
+SEA_TRANSPORTS = [
+    ('cog', 'Cogs', 'medieval', 300, 1500, 10, {'timber': 80, 'metal': 20}),
+    ('fluyt', 'Fluyts', 'gunpowder', 340, 1700, 15, {'timber': 90, 'metal': 30}),
+    ('troopship', 'Troopships', 'industrial', 400, 2000, 20, {'timber': 40, 'metal': 80, 'oil': 10}),
+    ('landing_ship', 'Landing Ships', 'modern', 460, 2200, 25, {'metal': 110, 'oil': 30}),
+]
+SEA_PASSENGER_TAG = 'sea_passenger'
+# The movement classes of the units a sea transport carries: on foot, wheeled and tracked.
+SEA_PASSENGER_CLASSES = ('foot', 'wheeled')
+
+
+def sea_transports(definition, row, tag, need, produce, cost, upgrade, emit):
+    """Task 167: the sea transports and the tag of the units they carry. Written after every other
+    definition so earlier ids stay. Returns the keys of the upgrade research, which the caller puts
+    at the dock after every earlier button."""
+    row('tag', key=SEA_PASSENGER_TAG, category='role')
+    classes = ','.join(val(c) for c in SEA_PASSENGER_CLASSES)
+    emit(f"INSERT INTO def_tag(def_id,tag_id) SELECT et.id,{val(Ref(SEA_PASSENGER_TAG, 'tag'))} FROM entity_type et "
+         f"JOIN et_movement m ON m.entity_type_id=et.id JOIN movement_class c ON c.id=m.movement_class_id "
+         f"WHERE et.class='unit' AND c.key IN ({classes}) ORDER BY et.id;")
+    researches, old = [], None
+    for key, name, age_key, hp, speed, capacity, prices in SEA_TRANSPORTS:
+        full, age = 'unit.' + key, AGES.index(age_key)
+        definition('entity_type', full, name)
+    for key, name, age_key, hp, speed, capacity, prices in SEA_TRANSPORTS:
+        full, age = 'unit.' + key, AGES.index(age_key)
+        scale = lambda n: n * (100 + 15 * age) // 100
+        prices = {r: scale(n) for r, n in prices.items()}
+        ticks = min(500, 150 + 25 * age)
+        row('entity_type', id=Ref(full), **{'class': 'unit'}, ui_group='sea_transport', hp=scale(hp), armor=age // 2,
+            armor_class_id=Ref('hull', 'armor_class'), los=(8 + age // 3) * 1000, pop_cost=1, build_ticks=ticks,
+            ramp_mode='per_type', upgrades_from_id=Ref(old) if old else None, first_age_id=Ref('age.' + age_key))
+        tag(full, 'mechanical', 'military', 'ship')
+        row('et_movement', entity_type_id=Ref(full), movement_class_id=Ref('ship', 'movement_class'), speed=speed)
+        row('et_container', entity_type_id=Ref(full), capacity=capacity, accept_tag_id=Ref(SEA_PASSENGER_TAG, 'tag'))
+        need(full, 'age.' + age_key)
+        produce('bld.dock', full, 'train', 'units')
+        cost(full, prices, True)
+        if old:
+            upgrade(old, full, name, age, 'dock', ticks, prices)
+            researches.append('tech.up.' + key)
+        old = full
+    return researches
 
 
 # Automated sites whose key and name are not "auto_<site>" / "Automated <Site>"

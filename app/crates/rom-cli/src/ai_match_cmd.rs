@@ -102,6 +102,62 @@ pub struct PlayerResult {
     /// (sampled), the tick its map scale first reached the galactic tier, and the first tick one
     /// of them stood outside its home's star cluster.
     pub space: ClusterReach,
+    /// Task 167: what its sea transports carried (sampled).
+    pub sea: SeaLift,
+}
+
+/// What a player's sea transports carried over a match (task 167), sampled.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SeaLift {
+    /// The most sea transports it had at a sample.
+    pub transports: usize,
+    /// The most units aboard its sea transports at a sample.
+    pub aboard: usize,
+    /// The most of its land units at a sample standing on the home planet where they could not
+    /// walk to its first city: carried over the water.
+    pub abroad: usize,
+    /// The first sampled tick with such a unit.
+    pub first_abroad: Option<u64>,
+}
+
+/// Records, for every player (index `i` is player `i + 1`), its sea transports, the units aboard
+/// them and its units that ride them (`riders`) standing where they could not walk home (task
+/// 167).
+fn sample_sea(
+    world: &World,
+    homes: &[Option<Pos>],
+    riders: &std::collections::BTreeSet<DefId>,
+    sea: &mut [SeaLift],
+) {
+    let mut now = vec![SeaLift::default(); sea.len()];
+    for e in world.entities() {
+        let Some(i) = (e.owner.0 as usize)
+            .checked_sub(1)
+            .filter(|&i| i < sea.len())
+        else {
+            continue;
+        };
+        if world.is_sea_carrier_type(e.type_id) {
+            now[i].transports += 1;
+            now[i].aboard += world.passengers(e.id).len();
+        } else if e.container_id.is_none()
+            && riders.contains(&e.type_id)
+            && let Some(home) = homes[i]
+            && e.pos.body == home.body
+            && world.reachable(e.type_id, e.pos, home) == Some(false)
+            && world.reachable(e.type_id, e.pos, e.pos) == Some(true)
+        {
+            now[i].abroad += 1;
+        }
+    }
+    for (s, n) in sea.iter_mut().zip(now) {
+        s.transports = s.transports.max(n.transports);
+        s.aboard = s.aboard.max(n.aboard);
+        s.abroad = s.abroad.max(n.abroad);
+        if n.abroad > 0 && s.first_abroad.is_none() {
+            s.first_abroad = Some(world.tick());
+        }
+    }
 }
 
 /// Where a player reached among the star clusters (task 163).
@@ -506,6 +562,52 @@ pub fn run_match(rules: &Arc<Rules>, request: &Request) -> Result<MatchResult, S
         })
         .collect();
     let mut reach = vec![ClusterReach::default(); count];
+    let mut sea = vec![SeaLift::default(); count];
+    // Task 167: where each player's first city stands, and whether they can walk to each other.
+    let homes: Vec<Option<Pos>> = brains
+        .iter()
+        .map(|b| {
+            world
+                .cities(b.player())
+                .first()
+                .and_then(|id| world.entity(*id))
+                .map(|e| e.pos)
+        })
+        .collect();
+    let riders: std::collections::BTreeSet<DefId> = rules
+        .entity_types
+        .keys()
+        .copied()
+        .filter(|t| {
+            rules
+                .entity_types
+                .keys()
+                .any(|c| world.is_sea_carrier_type(*c) && world.may_ride(*c, *t))
+        })
+        .collect();
+    let walker = rules.entity_types.values().find(|t| {
+        t.class == rom_rules::EntityClass::Unit
+            && t.builder.is_some()
+            && t.movement.is_some()
+            && world.reachable(
+                t.id,
+                homes[0].unwrap_or_default(),
+                homes[0].unwrap_or_default(),
+            ) == Some(true)
+    });
+    for (i, a) in homes.iter().enumerate() {
+        for (j, b) in homes.iter().enumerate().skip(i + 1) {
+            if let (Some(a), Some(b), Some(w)) = (a, b, walker) {
+                println!(
+                    "landmass players={},{} same_planet={} walkable={}",
+                    i + 1,
+                    j + 1,
+                    a.body == b.body,
+                    world.reachable(w.id, *a, *b) == Some(true)
+                );
+            }
+        }
+    }
     let home_cluster: Vec<Option<u32>> = (0..count)
         .map(|i| {
             let body = universe.as_ref()?.starts.get(i)?.0;
@@ -533,6 +635,9 @@ pub fn run_match(rules: &Arc<Rules>, request: &Request) -> Result<MatchResult, S
         }
         rom_ai::run_governors(&mut world);
         world.step();
+        if tick % SAMPLE_TICKS == 0 {
+            sample_sea(&world, &homes, &riders, &mut sea);
+        }
         if let Some(universe) = &universe
             && tick % SAMPLE_TICKS == 0
         {
@@ -625,6 +730,7 @@ pub fn run_match(rules: &Arc<Rules>, request: &Request) -> Result<MatchResult, S
                 think_us: think_us[i],
                 max_think_us: max_think_us[i],
                 space: reach[i].clone(),
+                sea: sea[i].clone(),
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
@@ -824,6 +930,16 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
                 tick(p.space.left_home)
             );
         }
+    }
+    for p in &result.players {
+        println!(
+            "sea player={} transports={} aboard_max={} abroad_max={} first_abroad_tick={}",
+            p.player.0,
+            p.sea.transports,
+            p.sea.aboard,
+            p.sea.abroad,
+            p.sea.first_abroad.map_or("-".to_owned(), |t| t.to_string())
+        );
     }
     for p in &result.players {
         for (reason, count) in &p.rejections {

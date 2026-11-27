@@ -497,7 +497,8 @@ pub struct HudCard {
     pub wealth: Vec<String>,
     /// Construction percentage while unfinished.
     pub progress_pct: Option<u32>,
-    /// The workers inside a gather building, one portrait each (at most twelve).
+    /// The workers inside a gather building, or the units aboard a carrier, one portrait each
+    /// (at most twelve).
     pub inside: Vec<HudTile>,
 }
 

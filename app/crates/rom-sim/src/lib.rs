@@ -101,6 +101,7 @@ pub use space::{BodyClaim, BodyYield, Orbit, OrbitalShot, Transit};
 pub use stains::{BUILDING_STAIN_PERMILLE, STAIN_FLOOR, Stain, UNIT_STAIN_PERMILLE};
 pub use surface::Surface;
 pub use tally::{HistorySample, PlayerTally, ScoreParts};
+pub use transport::SHORE_REACH;
 pub use universe::{BodyId, BodyInfo, PlanetSurface, RouteInfo, SystemInfo, UniverseSetup};
 pub use victory::{
     CityArea, Elimination, EndReason, MatchEnd, MatchOptions, Outcome, PlayerStatus,
@@ -325,6 +326,12 @@ pub enum SimError {
     /// Troops board and leave a ship only while it stands on the ground.
     #[error("the ship must land first: troops board and leave it only on the ground")]
     ShipNotLanded,
+    /// A ship at sea takes troops aboard and sets them ashore only near land: within
+    /// `SHORE_REACH` of a tile they can stand on (task 167).
+    #[error(
+        "the ship is too far from the shore: troops board and step ashore within three tiles of land"
+    )]
+    OffShore,
     /// Lifting off needs a landed ship.
     #[error("ship has not landed")]
     NotLanded,

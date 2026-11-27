@@ -1566,13 +1566,13 @@ impl HudPainter {
                     );
                 }
                 if !card.inside.is_empty() {
-                    self.caption(
-                        l,
-                        R,
-                        "WORKERS INSIDE",
-                        Rect::new(1122.0, 848.0, 190.0, 16.0),
-                        GOLD,
-                    );
+                    // A gather building's workers, or the units aboard a carrier (task 167).
+                    let title = if card.workers.is_some() {
+                        "WORKERS INSIDE"
+                    } else {
+                        "ABOARD"
+                    };
+                    self.caption(l, R, title, Rect::new(1122.0, 848.0, 190.0, 16.0), GOLD);
                 }
                 for (i, worker) in card.inside.iter().take(12).enumerate() {
                     let r = l.inside_tile(i);

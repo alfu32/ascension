@@ -3226,3 +3226,80 @@ table; no save table and no save-format bump. Both lint views stay empty and the
 - **Screenshots** (the game's own paths, `--script`): `img/156-up.png`
   (`tasks/156-up-script.txt`) and `img/156-down.png` (`tasks/156-down-script.txt`, the same line
   without energy); the model sheets `img/156-models-emitters.png` and `img/156-models-gates.png` (`--model <id>`, the three looks of each).
+
+## Sea transports (task 167)
+
+The owner (2026-11-25): "we need a dock transport ship that can take personnel (units) onboard
+since age 2 or 3"; age 2, the Medieval age, accepted on 2026-11-26. No table or column was
+added: a sea transport is a carrier (`et_container` + `et_movement`, task 54) whose movement
+keeps to a planet's surface.
+
+- **Content** (`db/content/generate.py`, `sea_transports()`, written after every other
+  definition so earlier ids stay). One class trained at the dock (`ui_group` `sea_transport`),
+  each look replacing the one before it by an upgrade researched at the dock, like the other
+  unit lines (`docs/unit-series.md`). Unarmed, armour class `hull`, movement class `ship`,
+  `pop_cost` 1, tags `mechanical`, `military`, `ship`. Hit points and price are scaled by the age
+  as other units are (`n × (100 + 15 × age) / 100`).
+
+  | Key | Name | Age | HP | Speed | Carries | Price | Upgrade |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | `unit.cog` | Cogs | Medieval (2) | 390 | 1500 | 10 | 104 timber, 26 metal | — |
+  | `unit.fluyt` | Fluyts | Discovery (3) | 493 | 1700 | 15 | 130 timber, 43 metal | `tech.up.fluyt` |
+  | `unit.troopship` | Troopships | Industrial (5) | 700 | 2000 | 20 | 70 timber, 140 metal, 17 oil | `tech.up.troopship` |
+  | `unit.landing_ship` | Landing Ships | Modern (6) | 874 | 2200 | 25 | 209 metal, 57 oil | `tech.up.landing_ship` |
+
+  The upgrades take the next free places of the dock's research page, so no earlier button
+  moves; the transports take the next places of its training page.
+- **Who boards** is the container's tag, **`sea_passenger`** (new, role): every unit whose
+  movement class is `foot` or `wheeled` (soldiers, workers, traders, cavalry, siege, tanks and
+  other vehicles, militia), tagged by the generator from the movement rows. Ships, aircraft,
+  orbital craft and starships never have it, and a unit with a container of its own never rides
+  (`World::may_ride`). Capacity is in population, as for the space transport, after
+  `garrison_capacity` modifiers.
+- **Boarding** (`enter`, existing): a unit walks to the land nearest the ship (`World::ashore_tile`:
+  the tile within `SHORE_REACH` = 3 000 milli-tiles of the ship its class can stand on, nearest
+  first, ties to the lower index) and goes aboard once within 4 tiles of the ship. Refused at
+  submission when no such land lies in reach (`SimError::OffShore`, new), when the ship is full
+  (`NoRoomAboard`), or for a unit that may not ride (`CannotBoard`); a unit that arrives at a ship
+  that filled meanwhile fails with `no_room`, one whose ship sailed off with `off_shore`.
+- **Unloading** (`unload`, existing): with no point (the Unload button), everyone aboard steps
+  ashore at once onto the nearest tiles within 6 tiles of the ship that they can stand on, one
+  unit a tile, in id order (`World::put_ashore`); refused when no passenger has land in reach
+  (`OffShore`). Sent to a point, the ship first sails to the water nearest it (within 16 tiles; a
+  point farther inland: as near as it can) unless it is within 6 tiles of it with land in reach,
+  then sets them ashore and they walk to the point. Units for whom no tile is left stay aboard.
+- **A passenger given an order** steps ashore first when land is in reach; otherwise it refuses
+  orders (`Aboard`), as aboard a ship in space (`World::aboard_in_space` covers both).
+- **Losing the ship**: the units aboard die with it, credited to the same killer and counted as
+  losses (task 54's rule, unchanged); its owner gets an alert, `AlertKind::Sunk` (new: the ship,
+  its type and how many were aboard), which the event line words "Lost with all aboard: Cogs,
+  carrying 5 units" (presentation only: alerts are neither hashed nor saved). A carrier with units
+  aboard cannot be deleted or disbanded (`PassengersAboard`, unchanged): set them ashore first.
+- `World::can_land_type` now requires a spacecraft: a sea transport never lands from orbit, and
+  the Land and Lift buttons stay hidden for it.
+- **The counter rule** (card 71): the transport is unarmed, so it outranges and beats nothing and
+  takes no row of the fight matrix; the warships of its age sink it (the scenario test
+  `the_units_aboard_are_lost_with_a_sunk_ship`: a war galley sinks a loaded cog). The sea rows
+  list warships only (a container is not a warship there), so the matrix is unchanged.
+- **Interface** (`rom-app`): with land units selected, a right click on an own sea transport
+  boards it (the Board badge); with a sea transport selected, a right click on an own unit that
+  may ride sends that unit aboard, and a right click on land sails there and sets the troops
+  ashore (on water it moves). The Unload button sets them ashore when land is in reach, else
+  says "Sail to a coast first". The selection panel lists the passengers and the load
+  ("4 / 10"), as for other carriers. Over every own carrier the units aboard are drawn as pale
+  pips in rows of five (`EntityView::aboard`, new). Script name `transportN` (own sea
+  transports).
+- **Computer players**: `docs/computer-player.md`, "The sea lift (task 167)".
+- **Sounds**: each transport has its own voice lines and moving loop (`tools/sounds`, batch 6 of
+  `ADDED_LATER`; only the 16 new files were baked).
+- **Models**: `unit.cog@medieval`, `unit.fluyt@gunpowder`, `unit.troopship@industrial`,
+  `unit.landing_ship@modern` (`db/models/`), for the owner's review round.
+
+No schema change and no new simulation state: passengers are `entity.container_id` as before,
+so saves carry them unchanged.
+
+Screenshots (the game's own paths): `img/167-passengers.png` and `img/167-cog-leaving.png`
+(`tasks/167-cog-script.txt`: seven units board a cog at the dock, it sails with the list of those
+aboard and the pips over it), `img/167-ashore.png` (`tasks/167-ashore-script.txt`: set ashore on
+the island's south coast), and the model sheets `img/167-model-cog.png`,
+`img/167-model-fluyt.png`, `img/167-model-troopship.png`, `img/167-model-landing_ship.png`.

@@ -1755,15 +1755,25 @@ impl Controller {
         let formation = self.group_formation(world);
         let mut issued = false;
         let mut flash: Option<bool> = None;
+        let mut riders = Vec::new();
         for id in self.right_executors(world) {
             let Some(order) =
                 self.right_order(world, &kind, mend, id, target, formation, mods.shift)
             else {
                 continue;
             };
+            // A unit clicked with sea transports selected boards the first of them (task 167).
+            let executor = match order.rider {
+                Some(rider) if riders.contains(&rider) => continue,
+                Some(rider) => {
+                    riders.push(rider);
+                    rider
+                }
+                None => id,
+            };
             let given = self.submit(
                 world,
-                id,
+                executor,
                 order.kind,
                 order.subject,
                 order.target_entity,
@@ -2160,7 +2170,8 @@ impl Controller {
     }
 
     /// The Unload button: a landed carrier sets everyone down around itself; a launching carrier
-    /// in orbit sends its craft out; anything else in orbit must land first.
+    /// in orbit sends its craft out; anything else in orbit must land first; a sea transport sets
+    /// them ashore when land is in reach (task 167).
     fn unload_selected(&mut self, world: &mut OrderSink<'_>) {
         let carriers: Vec<EntityId> = self
             .own_selected(world)
@@ -2170,7 +2181,20 @@ impl Controller {
             .collect();
         for id in carriers {
             let launches = world.orbit(id).is_some() && world.launches_craft(id);
-            if world.is_landed(id) || launches {
+            let sea = world
+                .entity(id)
+                .is_some_and(|e| world.is_sea_carrier_type(e.type_id));
+            if sea {
+                // At sea they step ashore onto land within reach (task 167).
+                if world.shore_in_reach(id) {
+                    self.submit(world, id, "unload", None, Some(id), None, false);
+                } else {
+                    self.say(
+                        world,
+                        "Sail to a coast first: troops step ashore within three tiles of land",
+                    );
+                }
+            } else if world.is_landed(id) || launches {
                 self.submit(world, id, "unload", None, Some(id), None, false);
             } else {
                 self.say(
@@ -4566,6 +4590,9 @@ fn rejection_message(
         SimError::CannotBoard => "Cannot board that ship".into(),
         SimError::ShipNotLanded => {
             "The ship must land first: troops board and leave it only on the ground".into()
+        }
+        SimError::OffShore => {
+            "Sail to a coast first: troops board and step ashore within three tiles of land".into()
         }
         SimError::BoundToOrbit => "A satellite moves only within its orbit".into(),
         SimError::ClusterClosed => cluster_closed_message(world.rules()),

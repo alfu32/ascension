@@ -47,6 +47,7 @@ pub fn alert_about(world: &World, alert: &Alert) -> Option<EntityId> {
         AlertKind::Arrival { ships, .. } => {
             ships.iter().copied().find(|id| world.entity(*id).is_some())
         }
+        AlertKind::Sunk { .. } => None,
     }
 }
 
@@ -72,6 +73,22 @@ pub fn alert_text(world: &World, me: PlayerId, alert: &Alert) -> String {
                 "Foreign ships entered the {} system: {count} of {}",
                 system_name(world, *system),
                 crate::ascension_view::player_name(world, me, *owner)
+            )
+        }
+        AlertKind::Sunk {
+            ship_type, lost, ..
+        } => {
+            let faction = world
+                .players()
+                .find(|p| p.id == me)
+                .map_or(rom_rules::DefId(0), |p| p.faction);
+            let units = match lost {
+                1 => "1 unit".to_owned(),
+                n => format!("{n} units"),
+            };
+            format!(
+                "Lost with all aboard: {}, carrying {units}",
+                world.rules().display_name(*ship_type, faction)
             )
         }
     }
@@ -193,7 +210,7 @@ pub fn fill_hud(world: &World, me: PlayerId, body: BodyId, hud: &mut HudSnapshot
 
 fn mark_of(alert: &Alert) -> AlertMark {
     match alert.kind {
-        AlertKind::Attack { .. } => AlertMark::Attack,
+        AlertKind::Attack { .. } | AlertKind::Sunk { .. } => AlertMark::Attack,
         AlertKind::Arrival { .. } => AlertMark::Arrival,
     }
 }
@@ -243,7 +260,7 @@ pub fn revealed_ships<'w>(
         .filter(|a| world.tick().saturating_sub(a.tick) <= life)
         .filter_map(|a| match &a.kind {
             AlertKind::Arrival { ships, .. } => Some(ships),
-            AlertKind::Attack { .. } => None,
+            AlertKind::Attack { .. } | AlertKind::Sunk { .. } => None,
         })
         .flatten()
         .filter_map(|id| world.entity(*id))

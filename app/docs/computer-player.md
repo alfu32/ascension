@@ -1653,3 +1653,72 @@ A rom-ai test (`tests/fortify.rs`) sees the line laid and its field standing. A 
 known lost seed 19 (19–1, mean 54099): lines are now a response to enemies come near.
 Tests: `crates/rom-ai/tests/fortify.rs` (a line with its gate across the way in, turned along
 it, twice alike; mines before the gate).
+
+## The sea lift (task 167)
+
+The owner (2026-11-25): computer players use the dock's sea transports "to reach land they
+cannot walk to: an island, or another continent on the same planet", at least when the enemy's
+city is not reachable on foot. `rom-ai/src/sealift.rs`; a sea transport is told apart by its rows
+(`World::is_sea_carrier_type`: a container that moves and does not fly through space), who rides
+it by its container's tag (`World::may_ride`).
+
+- **When.** Each thought `Lift::new` looks at the enemy buildings remembered on the home planet.
+  If the main army (most of its kinds, from where they stand) can walk to any of them, the
+  military manager has work and the sea lift does nothing. Otherwise the target is the enemy
+  city (else building) nearest the harbour that has a **beach**: land within 30 tiles of it from
+  which the army's most common kind can walk to it, next to water a transport can sail to from
+  the harbour (`World::reachable` for both). The beach found is kept with the target.
+- **Search.** When no enemy building is known on the home planet that the army can walk or sail to,
+  and every cell of the home land the army can walk to has been seen, a transport looks for the
+  enemy: it sails in turn to the water nearest eight points two faces of the planet from the
+  capital (where a planet's other starts lie: they are placed far apart), then eight points one
+  face away. It counts the points visited in the sea lift's army (`peak`).
+- **Wishes.** A dock first (640) while there is none; then the transport with the most room
+  (610), as many as the main army needs (its units over the room of one, at least one, at most
+  three); one for a search.
+- **Waves.** A transport waits at the harbour (water next to the dock). Once the main army at
+  home is gathered (`Phase::Gather`) and has at least six units (or enough to fill the ship), its
+  units walk aboard (`enter`) up to the room; they leave the main army for the sea lift's own
+  army (`Role::Ferry`, one more role code in the same saved layout), so the military manager
+  never calls them back. The transport sails when it is full, or after 1 800 ticks with whoever
+  is aboard, with an `unload` order at the beach; the simulation sails it to the water nearest
+  the beach, sets the troops ashore and walks them there. Then it comes home for the next wave.
+  A stage that takes over 9 600 ticks is given up (the ship comes home and sets anyone still
+  aboard ashore there). Its errand is a `Voyage` with the new job code `Job::Ferry` (stage 0
+  loading, 1 sailing, 2 home), its `body` the target's entity id. No wave sets off in the grace
+  period.
+- **Ashore.** Units of the sea lift standing where they cannot walk home attack-move to the
+  nearest enemy building they can walk to there, else to the target. Units of the sea lift back
+  on the home land with nothing to do (a boarding that failed, a voyage given up) rejoin the
+  main army.
+- Nothing else changes: the navy (task 97) still keeps its warships, which escort nothing; a
+  transport is unarmed, so the naval and production managers never take it for a warship
+  (`is_military` needs a weapon).
+
+### Measured (task 167)
+
+`rom ai-match` prints, per pair of players, whether they share a planet and can walk to each
+other (`landmass … walkable=`), and per player a `sea` line: the most sea transports it had,
+the most units aboard them and the most of its riding units standing where they could not walk
+to its first city, sampled every 20 ticks, and the first tick one stood there. There is no island
+map style; on the Planet style (`map.one_world`, every player on one planet) seeds 2 and 8 of the
+first sixteen put two players on separate landmasses.
+
+`rom ai-match --universe --style map.one_world --players balanced:moderate,balanced:moderate
+--ticks 72000` (an hour):
+
+| Seed | Landmasses | Player | Transports | Most aboard | Most carried over | First carried over |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2 | separate | 1 | 2 | 20 | 10 | tick 48 881 |
+| 2 | separate | 2 | 1 | 0 | 0 | — |
+| 8 | separate | 1 | 1 | 0 | 0 | — |
+| 8 | separate | 2 | 0 | 0 | 0 | — |
+
+Seed 2 runs twice to the same hash (`d4588bbe95098995`). There player one reaches the Medieval
+age at tick 33 497, trains a cog, finds player two's coast with it and carries waves of up to
+ten over in two transports; player two's war galleys sink some of them with all aboard (the
+event line's "Lost with all aboard"; seen in a traced run while this was built), and the waves
+that land attack the buildings in reach. Player two's searching transport never found player
+one, nor did either player on seed 8 within the hour: the eight search points are a coarse net
+on a planet of 192-tile faces, and a long voyage whose path search gives up moves on to the next
+point.

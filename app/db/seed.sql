@@ -3827,6 +3827,65 @@ INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SEL
 INSERT INTO et_field_emitter(entity_type_id,gap,upkeep_period_ticks,upkeep_resource_id,upkeep) VALUES ((SELECT id FROM def WHERE key='bld.shield_gate'),2,600,(SELECT id FROM def WHERE key='res.energy'),6);
 INSERT INTO et_fortification(entity_type_id,gate) VALUES ((SELECT id FROM def WHERE key='bld.shield_gate'),1);
 INSERT INTO et_fortification(entity_type_id,gate,gate_type_id) VALUES ((SELECT id FROM def WHERE key='bld.shield_emitter'),0,(SELECT id FROM def WHERE key='bld.shield_gate'));
+INSERT INTO tag(key,category) VALUES ('sea_passenger','role');
+INSERT INTO def_tag(def_id,tag_id) SELECT et.id,(SELECT id FROM tag WHERE key='sea_passenger') FROM entity_type et JOIN et_movement m ON m.entity_type_id=et.id JOIN movement_class c ON c.id=m.movement_class_id WHERE et.class='unit' AND c.key IN ('foot','wheeled') ORDER BY et.id;
+INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.cog','Cogs');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.fluyt','Fluyts');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.troopship','Troopships');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.landing_ship','Landing Ships');
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.cog'),'unit','sea_transport',390,1,(SELECT id FROM armor_class WHERE key='hull'),8000,1,200,'per_type',NULL,(SELECT id FROM def WHERE key='age.medieval'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.cog'),(SELECT id FROM tag WHERE key='mechanical'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.cog'),(SELECT id FROM tag WHERE key='military'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.cog'),(SELECT id FROM tag WHERE key='ship'));
+INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.cog'),(SELECT id FROM movement_class WHERE key='ship'),1500);
+INSERT INTO et_container(entity_type_id,capacity,accept_tag_id) VALUES ((SELECT id FROM def WHERE key='unit.cog'),10,(SELECT id FROM tag WHERE key='sea_passenger'));
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM def WHERE key='unit.cog'),'train','units',1,2);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.cog'),(SELECT id FROM def WHERE key='res.timber'),104,2);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.cog'),(SELECT id FROM def WHERE key='res.metal'),26,1);
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.fluyt'),'unit','sea_transport',493,1,(SELECT id FROM armor_class WHERE key='hull'),9000,1,225,'per_type',(SELECT id FROM def WHERE key='unit.cog'),(SELECT id FROM def WHERE key='age.gunpowder'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.fluyt'),(SELECT id FROM tag WHERE key='mechanical'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.fluyt'),(SELECT id FROM tag WHERE key='military'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.fluyt'),(SELECT id FROM tag WHERE key='ship'));
+INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.fluyt'),(SELECT id FROM movement_class WHERE key='ship'),1700);
+INSERT INTO et_container(entity_type_id,capacity,accept_tag_id) VALUES ((SELECT id FROM def WHERE key='unit.fluyt'),15,(SELECT id FROM tag WHERE key='sea_passenger'));
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM def WHERE key='unit.fluyt'),'train','units',2,2);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.fluyt'),(SELECT id FROM def WHERE key='res.timber'),130,2);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.fluyt'),(SELECT id FROM def WHERE key='res.metal'),43,1);
+INSERT INTO def(kind,key,name) VALUES ('tech','tech.up.fluyt','Upgrade to Fluyts');
+INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.up.fluyt'),'unit_upgrade','',0,450);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.fluyt'),(SELECT id FROM def WHERE key='res.timber'),260,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.fluyt'),(SELECT id FROM def WHERE key='res.metal'),86,0);
+INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.fluyt'),'upgrade_type',(SELECT id FROM def WHERE key='unit.cog'),(SELECT id FROM def WHERE key='unit.fluyt'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.troopship'),'unit','sea_transport',700,2,(SELECT id FROM armor_class WHERE key='hull'),9000,1,275,'per_type',(SELECT id FROM def WHERE key='unit.fluyt'),(SELECT id FROM def WHERE key='age.industrial'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.troopship'),(SELECT id FROM tag WHERE key='mechanical'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.troopship'),(SELECT id FROM tag WHERE key='military'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.troopship'),(SELECT id FROM tag WHERE key='ship'));
+INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.troopship'),(SELECT id FROM movement_class WHERE key='ship'),2000);
+INSERT INTO et_container(entity_type_id,capacity,accept_tag_id) VALUES ((SELECT id FROM def WHERE key='unit.troopship'),20,(SELECT id FROM tag WHERE key='sea_passenger'));
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM def WHERE key='unit.troopship'),'train','units',3,2);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.troopship'),(SELECT id FROM def WHERE key='res.timber'),70,1);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.troopship'),(SELECT id FROM def WHERE key='res.metal'),140,2);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.troopship'),(SELECT id FROM def WHERE key='res.oil'),17,1);
+INSERT INTO def(kind,key,name) VALUES ('tech','tech.up.troopship','Upgrade to Troopships');
+INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.up.troopship'),'unit_upgrade','',0,550);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.troopship'),(SELECT id FROM def WHERE key='res.timber'),140,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.troopship'),(SELECT id FROM def WHERE key='res.metal'),280,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.troopship'),(SELECT id FROM def WHERE key='res.oil'),34,0);
+INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.troopship'),'upgrade_type',(SELECT id FROM def WHERE key='unit.fluyt'),(SELECT id FROM def WHERE key='unit.troopship'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.landing_ship'),'unit','sea_transport',874,3,(SELECT id FROM armor_class WHERE key='hull'),10000,1,300,'per_type',(SELECT id FROM def WHERE key='unit.troopship'),(SELECT id FROM def WHERE key='age.modern'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.landing_ship'),(SELECT id FROM tag WHERE key='mechanical'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.landing_ship'),(SELECT id FROM tag WHERE key='military'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.landing_ship'),(SELECT id FROM tag WHERE key='ship'));
+INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.landing_ship'),(SELECT id FROM movement_class WHERE key='ship'),2200);
+INSERT INTO et_container(entity_type_id,capacity,accept_tag_id) VALUES ((SELECT id FROM def WHERE key='unit.landing_ship'),25,(SELECT id FROM tag WHERE key='sea_passenger'));
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM def WHERE key='unit.landing_ship'),'train','units',4,2);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.landing_ship'),(SELECT id FROM def WHERE key='res.metal'),209,4);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.landing_ship'),(SELECT id FROM def WHERE key='res.oil'),57,1);
+INSERT INTO def(kind,key,name) VALUES ('tech','tech.up.landing_ship','Upgrade to Landing Ships');
+INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.up.landing_ship'),'unit_upgrade','',0,600);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.landing_ship'),(SELECT id FROM def WHERE key='res.metal'),418,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.landing_ship'),(SELECT id FROM def WHERE key='res.oil'),114,0);
+INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.landing_ship'),'upgrade_type',(SELECT id FROM def WHERE key='unit.troopship'),(SELECT id FROM def WHERE key='unit.landing_ship'));
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.military.1'),'research','research',1,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.civic.1'),'research','research',2,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.commerce.1'),'research','research',3,0);
@@ -4027,6 +4086,9 @@ INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_ro
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.city'),(SELECT id FROM def WHERE key='tech.missile_shield'),'research','research',2,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.city'),(SELECT id FROM def WHERE key='tech.laser_shield'),'research','research',3,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.city'),(SELECT id FROM def WHERE key='tech.energy_shield'),'research','research',4,0);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM def WHERE key='tech.up.fluyt'),'research','research',4,1);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM def WHERE key='tech.up.troopship'),'research','research',0,2);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM def WHERE key='tech.up.landing_ship'),'research','research',1,2);
 INSERT OR IGNORE INTO production SELECT (SELECT id FROM def WHERE key='bld.bastion'),product_def_id,mode,ui_page,ui_col,ui_row FROM production WHERE producer_type_id=(SELECT id FROM def WHERE key='bld.tower');
 INSERT OR IGNORE INTO production SELECT (SELECT id FROM def WHERE key='bld.bunker'),product_def_id,mode,ui_page,ui_col,ui_row FROM production WHERE producer_type_id=(SELECT id FROM def WHERE key='bld.tower');
 INSERT OR IGNORE INTO production SELECT (SELECT id FROM def WHERE key='bld.defence_turret'),product_def_id,mode,ui_page,ui_col,ui_row FROM production WHERE producer_type_id=(SELECT id FROM def WHERE key='bld.tower');
@@ -4734,6 +4796,18 @@ INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FR
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.energy_shield'),(SELECT id FROM def WHERE key='tech.laser_shield'),1);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='bld.shield_emitter'),(SELECT id FROM def WHERE key='age.starfaring'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='bld.shield_gate'),(SELECT id FROM def WHERE key='age.starfaring'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.cog'),(SELECT id FROM def WHERE key='age.medieval'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.fluyt'),(SELECT id FROM def WHERE key='age.gunpowder'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.up.fluyt'),(SELECT id FROM def WHERE key='age.gunpowder'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.fluyt'),(SELECT id FROM def WHERE key='tech.up.fluyt'),1);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.troopship'),(SELECT id FROM def WHERE key='age.industrial'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.up.troopship'),(SELECT id FROM def WHERE key='age.industrial'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.up.troopship'),(SELECT id FROM def WHERE key='tech.up.fluyt'),1);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.troopship'),(SELECT id FROM def WHERE key='tech.up.troopship'),1);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.landing_ship'),(SELECT id FROM def WHERE key='age.modern'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.up.landing_ship'),(SELECT id FROM def WHERE key='age.modern'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.up.landing_ship'),(SELECT id FROM def WHERE key='tech.up.troopship'),1);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.landing_ship'),(SELECT id FROM def WHERE key='tech.up.landing_ship'),1);
 INSERT INTO constellation(id,abbr,name,genitive) VALUES (1,'And','Andromeda','Andromedae');
 INSERT INTO constellation(id,abbr,name,genitive) VALUES (2,'Ant','Antlia','Antliae');
 INSERT INTO constellation(id,abbr,name,genitive) VALUES (3,'Aps','Apus','Apodis');
@@ -6930,6 +7004,10 @@ WITH v(k,e,s,f,g) AS (VALUES
  ('unit.citizen','moving',0,'unit.citizen.moving',100),
  ('unit.citizen','research_done',0,'voice.citizen.research_done',100),
  ('unit.citizen','select',0,'voice.citizen.select',100),
+ ('unit.cog','move',0,'voice.cog.move',100),
+ ('unit.cog','moving',0,'unit.cog.moving',100),
+ ('unit.cog','research_done',0,'voice.cog.research_done',100),
+ ('unit.cog','select',0,'voice.cog.select',100),
  ('unit.combat_robot','attack',0,'voice.combat_robot.attack',100),
  ('unit.combat_robot','fire',0,'unit.combat_robot.fire',100),
  ('unit.combat_robot','move',0,'voice.combat_robot.move',100),
@@ -7022,6 +7100,10 @@ WITH v(k,e,s,f,g) AS (VALUES
  ('unit.flak_gun','moving',0,'unit.flak_gun.moving',100),
  ('unit.flak_gun','research_done',0,'voice.flak_gun.research_done',100),
  ('unit.flak_gun','select',0,'voice.flak_gun.select',100),
+ ('unit.fluyt','move',0,'voice.fluyt.move',100),
+ ('unit.fluyt','moving',0,'unit.fluyt.moving',100),
+ ('unit.fluyt','research_done',0,'voice.fluyt.research_done',100),
+ ('unit.fluyt','select',0,'voice.fluyt.select',100),
  ('unit.freight_wagon','move',0,'voice.freight_wagon.move',100),
  ('unit.freight_wagon','moving',0,'unit.freight_wagon.moving',100),
  ('unit.freight_wagon','research_done',0,'voice.freight_wagon.research_done',100),
@@ -7152,6 +7234,10 @@ WITH v(k,e,s,f,g) AS (VALUES
  ('unit.lancer','moving',0,'unit.lancer.moving',100),
  ('unit.lancer','research_done',0,'voice.lancer.research_done',100),
  ('unit.lancer','select',0,'voice.lancer.select',100),
+ ('unit.landing_ship','move',0,'voice.landing_ship.move',100),
+ ('unit.landing_ship','moving',0,'unit.landing_ship.moving',100),
+ ('unit.landing_ship','research_done',0,'voice.landing_ship.research_done',100),
+ ('unit.landing_ship','select',0,'voice.landing_ship.select',100),
  ('unit.laser_battery','attack',0,'voice.laser_battery.attack',100),
  ('unit.laser_battery','fire',0,'unit.laser_battery.fire',100),
  ('unit.laser_battery','move',0,'voice.laser_battery.move',100),
@@ -7487,6 +7573,10 @@ WITH v(k,e,s,f,g) AS (VALUES
  ('unit.trireme','moving',0,'unit.trireme.moving',100),
  ('unit.trireme','research_done',0,'voice.trireme.research_done',100),
  ('unit.trireme','select',0,'voice.trireme.select',100),
+ ('unit.troopship','move',0,'voice.troopship.move',100),
+ ('unit.troopship','moving',0,'unit.troopship.moving',100),
+ ('unit.troopship','research_done',0,'voice.troopship.research_done',100),
+ ('unit.troopship','select',0,'voice.troopship.select',100),
  ('unit.war_galley','attack',0,'voice.war_galley.attack',100),
  ('unit.war_galley','fire',0,'unit.war_galley.fire',100),
  ('unit.war_galley','move',0,'voice.war_galley.move',100),

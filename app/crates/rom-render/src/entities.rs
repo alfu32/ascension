@@ -20,6 +20,11 @@ use crate::terrain::{Shape, TerrainScene, vertex_height};
 pub const OWNER_COLORS: usize = 9;
 /// Colour of node entities.
 pub const NODE_COLOR: [f32; 3] = [0.98, 0.84, 0.16];
+/// Colour of the pips that count the units aboard a carrier (task 167): pale, beside the gold of
+/// carried nodes.
+const ABOARD_COLOR: [f32; 3] = [0.92, 0.95, 1.0];
+/// Pips in one row over a carrier; more stack in rows above.
+const ABOARD_ROW: u8 = 5;
 /// Nominal time between two simulation ticks, used until two snapshots have arrived.
 const DEFAULT_INTERVAL: Duration = Duration::from_millis(50);
 /// Arrival gaps shorter than this come from catch-up bursts and are ignored for the interval.
@@ -140,6 +145,8 @@ pub struct EntityView {
     pub kept: u8,
     /// Keeper capacity, zero for other entities.
     pub capacity: u8,
+    /// Units aboard an own carrier, drawn as pips above it (task 167); zero otherwise.
+    pub aboard: u8,
     /// A carry-mode node drawn as a gold-capped plinth.
     pub carry_node: bool,
     /// Construction progress 0 to 1 for a site, `None` when complete.
@@ -833,6 +840,18 @@ fn instances_on(
                 NODE_COLOR,
             ));
         }
+        // Units aboard: rows of up to `ABOARD_ROW` pips over the hull, nearest row first.
+        for i in 0..view.aboard {
+            let (row, column) = (i / ABOARD_ROW, i % ABOARD_ROW);
+            let in_row = (view.aboard - row * ABOARD_ROW).min(ABOARD_ROW);
+            let across = (f32::from(column) - f32::from(in_row - 1) / 2.0) * 0.3;
+            out.push(frame_box(
+                frame.at([across, top + 0.75 + f32::from(row) * 0.3, 0.0]),
+                axes,
+                [0.18, 0.18, 0.18],
+                ABOARD_COLOR,
+            ));
+        }
         if let Some(anchors) = anchors.as_mut() {
             let width = if view.building {
                 f32::from(view.footprint.0.max(view.footprint.1)).max(1.0)
@@ -1461,6 +1480,7 @@ mod tests {
             carrying: false,
             kept: 0,
             capacity: 0,
+            aboard: 0,
             carry_node: false,
             under_construction: None,
             model: None,

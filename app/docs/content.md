@@ -203,6 +203,7 @@ hit-point percentage. The first step of each line needs only its age and buildin
 | Supply | Siege Workshop → Factory | Supply Wagons (2), Supply Trucks (5): cancel attrition for their own side within 8 tiles; repair vehicles (`mechanical`) within 3 tiles, 4 hp a second (wagons) and 8 (trucks), task 140 |
 | Repair | Factory | Repair Drones (7) |
 | Warships | Dock | Triremes (1), War Galleys (2), Carracks (3), Frigates (4), Ironclads (5), Destroyers (6), Missile Cruisers (7), Drone Cruisers (8), Hover Frigates (9) |
+| Sea transport | Dock | Cogs (2), Fluyts (3), Troopships (5), Landing Ships (6): unarmed, carry 10, 15, 20 and 25 population of land units (tag `sea_passenger`) across water; each replaces the one before by an upgrade at the dock (task 167) |
 | Fighters | Airfield | Biplanes (5), Fighters (6), Jet Fighters (7), Drone Fighters (8), Interceptors (9) |
 | Bombers | Airfield | Bombers (6), Strategic Bombers (7), Drone Bombers (8) |
 | Rotorcraft | Airfield | Attack Helicopters (6), Gunship Helicopters (7), Hover Gunships (8) |

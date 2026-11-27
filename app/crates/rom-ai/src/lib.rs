@@ -10,7 +10,9 @@
 //! production), fights with armies (defence, attack, raids, scouting, siege, formations) and,
 //! from the starfaring ages, flies: survey ships claim resource bodies, warships escort and
 //! contest them and attack enemy orbits, transports carry armies and found colonies.
-//! Where an enemy can be reached by water, a naval manager keeps a small navy (task 97).
+//! Where an enemy can be reached by water, a naval manager keeps a small navy (task 97); where
+//! it can be reached only over water on the same planet, a sea lift carries the army across
+//! (task 167).
 //!
 //! The [`governor`] of an automated colony is separate from the brains: it runs for every
 //! owner, people included (`run_governors`), and keeps the colony's sites standing.
@@ -35,6 +37,7 @@ mod plan;
 mod production;
 mod rebuild;
 mod research;
+mod sealift;
 mod sites;
 mod view;
 
