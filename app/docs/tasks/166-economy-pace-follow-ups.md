@@ -1,7 +1,8 @@
-# Task 166 — Economy pace follow-ups: faster research, computer players at slow paces
+# Task 166 — Economy pace follow-ups: research speed, computer players at slow paces
 
 Owner (chat, 2026-11-26):
-- asked about faster research: "i havent seen a research speed of 10,20 or 50%";
+- asked about research speed: "i havent seen a research speed of 10,20 or 50%", then (2026-11-27)
+  "actually 10%,20%,50% is slower research";
 - agreed to fix the computer players' passivity at slow paces ("thats ok").
 
 Builds on task 159 (`crates/rom-sim/src/pace.rs`, release 0.0.145).
@@ -10,16 +11,18 @@ GitHub issue #168.
 
 ## What changes
 
-1. **Faster research.** Add 10, 20 and 50 % to the research time options:
-   - in the code: `EconomyPace::RESEARCH_TIMES` becomes `[10, 20, 50, 100, 200, 400, 1000, 2000]`;
-   - on screen: the Play, Host and Server forms list them in that order;
-   - on the command line: `--research-time` accepts them.
-
-   `research_ticks` must never return less than 1 tick. Age advances and the ascension
-   shorten in the same way. Prices stay as they are, so resources become the brake.
-   - Measure and report how long a single computer player takes to reach the last age at
-     100/10, 100/20 and 100/50. Use the same tool task 159 used for its 2.1 h / 6.5 h / … table.
-   - Add those rows to the pace table in `docs/database.md`.
+1. **Research speed** (owner correction, 2026-11-27: "actually 10%,20%,50% is slower
+   research"). The owner thinks of the option as a *speed* in % of normal, like the gathering
+   rate, where lower is slower. Then: "keep the faster settings if they are already in ...
+   even though 500% is already almost instantaneous ... good to have though".
+   - **Rename** the option to **Research speed** on the Play, Host and Server forms, in the
+     lobby and in the match report. On the command line, `--research-speed` replaces
+     `--research-time`. No backward compatibility is needed.
+   - **Values:** 1000, 500, 200, 100, 50, 25, 20, 10, 5 %. Internally research time =
+     10000 / speed (10, 20, 50, 100, 200, 400, 500, 1000, 2000), so the simulation and saves
+     keep their meaning. `research_ticks` never goes below 1 tick.
+   - **Timing:** the timing table in `docs/database.md` is relabelled by speed and covers
+     every value.
 2. **Claimed bodies at 2 %.** `body_yield` rounds to 0 at a 2 % gathering rate. Carry its
    remainder in hundredths like the other incomes (`World::credit_gathered`), so every income
    adds up at every rate. Test: a claimed body at 2 % pays over time.
@@ -58,6 +61,6 @@ only).
 - The playthrough hash at 100/100 is unchanged, or explained. The fight matrix stays at
   `unanswered=0`.
 - The duel tables from point 3 are in the report.
-- One screenshot: the Play form with the new research options open, in
+- One screenshot: the Play form with the Research speed options open, in
   `docs/img/166-research-time.png`.
 - Report as AGENTS.md says. Log only in your scratchpad folder; do not write `gate*.sh`.
