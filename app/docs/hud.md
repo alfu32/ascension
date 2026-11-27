@@ -192,12 +192,15 @@ attack-move when slot A is empty. Hidden `--script <file>` replays pick events (
 Order buttons by slot (hotkey in brackets; a button shows only when a selected entity can use
 it): Stop (Q), Attack-move (W), Orbit (E) and Travel (R) in a system's space, Release (R) for a
 gather building, Unload or Launch craft (T), **Lift off** / **Climb to orbit** / **Take off**
-(A: a landed ship, an orbital craft in the air, a landed aircraft), **Land** (S: a ship or craft
+(A: a landed ship, an orbital craft in the air, a landed aircraft; **Lift off** for a building
+with its lift-off engines, task 170, whose Order tab opens only when chosen), **Land** (S: a ship or craft
 in orbit comes straight down; aircraft arm a pick, then land on the open ground clicked or beside
-the own airfield clicked, or where they are when Land is pressed again; task 123), Patrol (D) or Pause /
+the own airfield clicked, or where they are when Land is pressed again; task 123; a building in
+the air arms its landing ghost, turned with R, task 170), Patrol (D) or Pause /
 Resume governor, Trade route (F), the combat stances on the bottom row; a market shows Buy on
 the middle row and Sell on the bottom row. Right-clicking an own airfield with aircraft
-selected lands them beside it.
+selected lands them beside it. With a building in the air selected (task 170), a right click on
+the ground flies it there.
 
 **Delete, attack ground (task 142).** **Attack ground** (G; a reticle over the ground, `icons/cmd_attack_ground`) shows for units
 whose weapons throw a projectile; it arms a pick with a crosshair cursor, and the next click (or

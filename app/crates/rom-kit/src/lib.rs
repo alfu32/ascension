@@ -3,6 +3,7 @@
 //! renderer, the command-line tools and the model files share one bake and one fingerprint.
 
 pub mod custom;
+pub mod engines;
 pub mod kit;
 pub mod material;
 pub mod models;

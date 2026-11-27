@@ -154,6 +154,8 @@ pub struct EntityView {
     /// A unit falling from orbit in a drop pod (task 169): the share of its fall done, above 0
     /// and up to 1; 0 for everything else. The pod streaks down with a re-entry trail.
     pub pod: f32,
+    /// A building in the air (task 170): drawn with lift engines under it, firing.
+    pub engines: bool,
     /// A carry-mode node drawn as a gold-capped plinth.
     pub carry_node: bool,
     /// Construction progress 0 to 1 for a site, `None` when complete.
@@ -630,6 +632,21 @@ fn cross3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
 pub(crate) fn heading_of(frame: &GroundFrame, facing_deg: f32) -> [f32; 3] {
     let (sin, cos) = facing_deg.to_radians().sin_cos();
     std::array::from_fn(|i| frame.ex[i] * cos + frame.ey[i] * sin)
+}
+
+/// Where the lift engines of a building in the air hang (task 170): four points under its
+/// underside, near the corners of a square within its footprint, along its facing; and the
+/// size of each engine in tiles (an engine model is one tile across).
+pub(crate) fn lift_engine_spots(view: &EntityView, frame: &GroundFrame) -> ([[f32; 3]; 4], f32) {
+    let side = f32::from(view.footprint.0.min(view.footprint.1).max(1));
+    let size = (side * 0.3).clamp(0.6, 2.4);
+    let reach = (side / 2.0 - size * 0.55).max(size * 0.3);
+    let along = heading_of(frame, view.facing_deg);
+    let across = heading_of(frame, view.facing_deg + 90.0);
+    let spots = [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)].map(|(a, b)| {
+        std::array::from_fn(|i| frame.origin[i] + (along[i] * a + across[i] * b) * reach)
+    });
+    (spots, size)
 }
 
 /// Height of a building body in tiles; it varies with the entity type and the footprint.
@@ -1520,6 +1537,7 @@ mod tests {
             swimming: false,
             lift: 0.0,
             pod: 0.0,
+            engines: false,
             carry_node: false,
             under_construction: None,
             model: None,

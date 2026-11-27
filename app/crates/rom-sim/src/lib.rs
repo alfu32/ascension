@@ -1,6 +1,7 @@
 //! Deterministic game simulation.
 
 mod aircraft;
+mod airlift;
 mod alerts;
 mod ascension;
 mod attrition;
@@ -66,6 +67,7 @@ mod wealth;
 mod world;
 
 pub use aircraft::LANDING_MARGIN;
+pub use airlift::BuildingFlight;
 pub use alerts::{Alert, AlertKind};
 pub use ascension::AscensionProject;
 pub use capture::CaptureCountdown;
@@ -463,8 +465,19 @@ pub enum SimError {
     /// Task 169: troops are dropped onto visible free land of the planet below.
     #[error("drop onto visible open land of the planet below")]
     DropZone,
+    /// Task 170: only a finished building with lift-off engines lifts off.
+    #[error("this building cannot lift off: it needs its lift-off engines")]
+    CannotLiftOff,
+    /// Task 170: the order is for a building in the air.
+    #[error("the building is not in the air")]
+    NotAirborne,
+    /// Task 170: the building is in the air; it must land first.
+    #[error("the building is in the air: land it first")]
+    Airborne,
 }
 
+#[cfg(test)]
+mod airlift_tests;
 #[cfg(test)]
 mod ascension_tests;
 #[cfg(test)]

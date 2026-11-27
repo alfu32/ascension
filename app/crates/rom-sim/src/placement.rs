@@ -76,7 +76,9 @@ impl World {
         &'a self,
         types: impl Fn(DefId) -> bool + Copy + 'a,
     ) -> impl Iterator<Item = Placed> + 'a {
+        // A building in the air stands nowhere until it lands (task 170).
         self.entities_of_types(types)
+            .filter(|e| !self.airborne(e.id))
             .map(|e| (e.owner, e.type_id, e.pos))
             .chain(
                 self.queued_constructions()

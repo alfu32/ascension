@@ -1322,3 +1322,75 @@ fn a_type_change_waiting_for_its_unit() {
     let outcome = check("waiting_retype", &rules, w, 800, |_| {});
     assert_ne!(outcome.hash_before, outcome.hash_after_run);
 }
+
+/// Task 170: buildings in the air are saved and loaded: a barracks rising with marines queued,
+/// one flying to a point and one settling onto its landing; both worlds land them alike.
+#[test]
+fn buildings_in_the_air() {
+    let rules = rules();
+    let players = (1..=2)
+        .map(|n| Player {
+            id: PlayerId(n),
+            team: n,
+            faction: rules.id_of("nation.romans").unwrap(),
+            age: rules.id_of("age.starfaring").unwrap(),
+            resources: rules.resources.keys().map(|r| (*r, 100_000)).collect(),
+            techs: [
+                (rules.id_of("tech.lift_engines.barracks").unwrap(), 1),
+                (rules.id_of("tech.up.marine").unwrap(), 1),
+            ]
+            .into(),
+        })
+        .collect();
+    let plain = rules.id_of("ter.plain").unwrap();
+    let mut w = World::new(
+        rules.clone(),
+        MapGrid::new(64, 64, vec![plain; 64 * 64]).unwrap(),
+        5,
+        players,
+    )
+    .unwrap();
+    let flat = |x: i32, y: i32| Pos::flat(x * 1000 + 500, y * 1000 + 500);
+    let corner = |x: i32, y: i32| Pos::flat(x * 1000 + 2000, y * 1000 + 2000);
+    w.place_for_setup(id(&w, "bld.city"), P1, flat(32, 32))
+        .unwrap();
+    let barracks: Vec<rom_sim::EntityId> = [(16, 16), (16, 40), (44, 16)]
+        .into_iter()
+        .map(|(x, y)| {
+            w.place_for_setup(id(&w, "bld.barracks"), P1, flat(x, y))
+                .unwrap()
+        })
+        .collect();
+    w.submit(Command {
+        subject: Some(id(&w, "unit.marine")),
+        queue: true,
+        ..command(&w, barracks[0], "train")
+    })
+    .unwrap();
+    ticks(&mut w, 20);
+    for b in &barracks {
+        w.submit(command(&w, *b, "lift_off")).unwrap();
+    }
+    ticks(&mut w, 70);
+    w.submit(Command {
+        target_pos: Some(flat(30, 50)),
+        ..command(&w, barracks[1], "fly")
+    })
+    .unwrap();
+    w.submit(Command {
+        target_pos: Some(corner(46, 18)),
+        facing: Some(90),
+        ..command(&w, barracks[2], "touch_down")
+    })
+    .unwrap();
+    ticks(&mut w, 30);
+    w.submit(Command {
+        target_pos: Some(corner(20, 20)),
+        ..command(&w, barracks[0], "touch_down")
+    })
+    .unwrap();
+    ticks(&mut w, 30);
+    assert_eq!(w.building_flights().count(), 3);
+    let outcome = check("lifted", &rules, w, 400, |_| {});
+    assert_ne!(outcome.hash_before, outcome.hash_after_run);
+}

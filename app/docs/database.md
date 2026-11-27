@@ -2327,6 +2327,9 @@ back. No SQL runs in `rom-sim`.
 - **Rally points.** `entity_rally(entity_id, target_entity_id | x, y, face, body)`
   (task 64). Not part of the state hash while no producer has one, so worlds
   without rally points keep their hashes.
+- **Buildings in the air of task 170 (format 28).** `entity_lift(entity_id, climbed, goal_x..body,
+  land_x..body, land_facing, remainder)` (see "Buildings that lift off"). Formats 13 to 27 load with
+  no building in the air.
 - **Units in the air of task 169 (format 26).** `entity_leap(entity_id, from_*, to_*, start,
   ticks, dropped)` and `entity_jump_ready(entity_id, ready_tick)` (see "Jetpacks and orbital
   drop"). Formats 13 to 25 load with nobody in the air.
@@ -3564,3 +3567,95 @@ forest upgraded into an armoured car, a scout car or a light tank was stuck ther
   (`tasks/172-vehicle-plant-refused-script.txt`: the red ghost of a vehicle plant over the small
   forest north-west of the city, "Cannot stand in Forest: the units trained here cannot move through
   it").
+
+## Buildings that lift off (task 170)
+
+The owner (2026-11-25): "i want buildings to have an 'upgrade to ship' that enbles them to take off
+and fly: on the same planet on age 9, in the solar system on age 11 and through hyperspace in age
+13"; ages from 0 as set on 2026-11-26: across the planet from the Spacefaring age (10,
+`age.starfaring`), within the star system from the Starfaring age (11), to other stars from the Age
+of Galactic War (13). **This release (170a) is the first stage: across the planet.** The system and
+the stars (170b) follow; see "Not yet" below. Rows written by hand at the end of `db/seed.sql`, after
+every other definition, so earlier ids stay.
+
+- **Who.** A building tagged **`liftable`** (new, category `movement`): every building that takes
+  production orders (`et_producer`) and is none of a city or colony (`et_territory.is_city`,
+  `et_colony`), a gather site (`et_gather_site`, which covers every resource building on a
+  deposit), a wall, gate or shield emitter (`et_fortification`), a minefield (`et_minefield`), a
+  building placed `on_node`, nor tagged `city`, `gather`, `fortification` or `wonder`. In the seed:
+  library, market, granary, lumber mill, temple, smelter, refinery, barracks, tower (bastion,
+  bunker, defence turret), dock, stable (vehicle plant), siege workshop (factory), fort (star fort,
+  fortress, citadel), airfield, spaceport and the jump detector. Not: cities, colonies, farms,
+  mines, oil wells, universities, power plants, walls, gates, emitters, minefields, the ground
+  battery and the jump inhibitor (no production orders). Nothing in the code reads the tag or a
+  key: a building may lift off when its stat `lift_off` is above 0.
+- **Stat** (new, scope `entity`): **`lift_off`**, above 0 = the building has lift-off engines.
+- **Researches** (kind `upgrade`, one a line, offered by every step of the line at the first free
+  place of its research pages, the Spacefaring age required): **Lift-off Engines**,
+  `tech.lift_engines.<the line's first building>` (`tech.lift_engines.barracks`,
+  `tech.lift_engines.siege_workshop` for the siege workshop and the factory, …). It adds
+  `lift_off` +1 to every step of its line (`modifier.target_def_id`), so a building upgraded in
+  place keeps its engines. **Price**: a third of the line's first building's own price, rounded up
+  to fives (barracks 20 timber, airfield 70 timber and 35 metal, spaceport 100 timber and 50 metal,
+  jump detector 100 metal and 50 energy); **time**: twice its build time (300 to 800 ticks).
+- **Constants** (new): **`air.building_speed`** 1 000 milli-tiles a second (a tile a second);
+  **`air.building_climb_ticks`** 60 (3 s to rise to its flight height, and 3 s to settle).
+- **Orders** (new `order_kind` rows, `needs` '' — checked in code: only a building that may):
+  - **`lift_off`** (none): a finished own building with engines, not disabled, not being
+    assimilated, rises where it stands. Refused: `CannotLiftOff` (no engines, unfinished), or
+    `Airborne` (it is in the air).
+  - **`fly`** (point): a building in the air flies in a straight line to the point on its planet
+    and hovers there. Refused: `NotAirborne`, `OtherBody`, `OutsideMap`.
+  - **`touch_down`** (point, the order's `facing` snapped to 45°): a building in the air flies to
+    the point, settles there for the climb's ticks and lands. Refused where **the placement check
+    of construction** fails for its footprint at that point and facing: the terrain (forests for
+    the buildings that may stand in them, task 172), the face, other buildings and queued sites,
+    and every placement rule of its type (own territory, a city's area, the terrain beside it, the
+    distance from its kind and from enemy cities) — the same errors as a construction
+    (`PlacementOverlap`, `UnbuildableTerrain`, `NotInOwnTerritory`, …). The check runs again when it
+    touches the ground; a building put there meanwhile (or a site queued) makes it climb back and
+    hover.
+  All three are settings applied at the next tick boundary: they never touch the building's queue.
+- **On the ground again** it takes its footprint, its borders (a fort's, a temple's) and its city
+  (the city whose area covers it now) again, facing the landing's facing. Every unit standing
+  under its footprint is moved at once to the nearest tile its path class can stand on, with no
+  building or field on it, within 12 tiles (`World::nearest_footing`, the search of task 172's
+  `footing.rs`), nearest first, ties to the lower tile index; what stands on no ground (in orbit,
+  in space, flying, in a jump) stays.
+- **In the air** (`rom-sim/src/airlift.rs`, `World::lifted`, `BuildingFlight { climbed, goal,
+  landing, remainder }`): the building gives up its footprint (walkers cross where it stood), its
+  borders and its place among the buildings (placement checks and the minimum distances do not
+  count it). It keeps its id, hit points, armour, upgrades, rally point and its queue, which is
+  **paused**: it trains, researches and fires nothing; orders given meanwhile join the queue and
+  wait. It is on the **`air` layer** for the weapons that hit it, so anti-air reaches it and
+  ground weapons do not (`World::target_layer`). Nobody boards it, nobody mends it, it cannot be
+  deleted or razed (`Airborne`): land it first. **Units inside** (a garrison: no liftable building
+  of the seed has one) stay inside while it flies, cannot step out, and die with it if it is shot
+  down, as aboard a sunk transport; **queued units** are not made until it lands, then come out
+  beside its new place.
+- **State and saves.** Hashed only while a building is in the air, so other worlds keep their
+  hashes. **Save format 28**, PART B table `entity_lift(entity_id, climbed, goal_*, land_*,
+  land_facing, remainder)`; formats 13 to 27 load with no building in the air.
+- **Drawing** (`rom-render`): `EntityView::engines` (new) and `EntityView::lift` (task 169's field):
+  the building's own model raised up to 5 tiles (`BUILDING_FLIGHT_HEIGHT`, eased while it rises
+  and settles), with four **lift engines** under it: a kit model of their own
+  (`rom-kit/src/engines.rs`, `kit.lift_engine`: a strut, a nacelle with a band in the owner's
+  colour, a flared nozzle and its glowing throat), appended after every model of the rules and
+  placed at draw time under the four corners of a square within the footprint, each 0.3 of its
+  shorter side across. No building model changed: every locked model keeps its fingerprint. The
+  overlay draws each engine's exhaust (a flickering plume and its white core) and, low over the
+  ground, a ring of dust (`overlay/effects.rs`, `draw_lift_exhaust`). On the ground nothing is
+  drawn differently.
+- **Interface** (`rom-app`): an own building that can lift off shows **Lift off** (A) on its Order
+  tab, which it still opens on its training pages; a building in the air opens the Order tab:
+  **Land** (S) arms a **landing ghost**, the building's footprint green or red as the placement
+  check says (and why, on the help line), turned with R or Ctrl with the wheel like any placement;
+  a click lands it there. A right click on the ground flies it there.
+- **Computer players**: `docs/computer-player.md`, "Buildings that lift off (task 170)".
+- **Counters** (card 71): no weapon changed and no unit's layer, so the fight matrix is unchanged; a
+  building in the air is answered by anti-air.
+- **Not yet (170b).** Climbing to orbit and travelling to another planet of the system (from the
+  Starfaring age, its owner having a city there or the planet unclaimed), and jumping along
+  routes to other stars (from the Age of Galactic War, under the jump rules: charge, inhibitors,
+  the cluster tier; slow, and not below half its hit points). The state above (`goal`, `landing`
+  on another body) and the save table are meant to carry them.

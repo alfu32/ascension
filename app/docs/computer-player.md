@@ -1786,3 +1786,25 @@ Otherwise it is never researched.
   dropped. The space manager wishes a transport for it as for a colony. An enemy world that is
   not known (no enemy building remembered there) is not invaded, and a colonising transport that
   finds nothing in sight below lands as before.
+
+## Buildings that lift off (task 170)
+
+`rom-ai/src/airlift.rs`. Data only: whether a building can lift off is `World::check_lift_off`,
+where it may land `World::check_touch_down`; no definition is named.
+
+- **Research.** A modifier on `lift_off` is worth a fixed 40 as a side research (before its
+  price), not its size times the army share: the engines are bought late, when little else is
+  left, and never before the Spacefaring age (their prerequisite).
+- **Only under siege.** A production building (one that trains units), finished and on the
+  ground, with its engines, lifts off when the enemy fighters it has seen in the last 400 ticks
+  within 16 tiles of it outweigh its own fighters there, and another of its finished cities on
+  the same planet, more than 31 tiles away, has no enemy seen within 30 tiles. At most one
+  building lifts off a thought.
+- **Landing.** A building of its in the air without a landing is set down beside the nearest such
+  safe city: the first point, the city's centre and then 16 points on each of the square rings 9,
+  13, 17 and 21 tiles about it, where `World::check_touch_down` passes; with no safe city, or no
+  room there, as near as it fits to where it is. It never flies a building toward enemies or
+  into combat.
+- **In the air** a producer is offered no training and no research (`View::producers`, the
+  research manager's free producers).
+

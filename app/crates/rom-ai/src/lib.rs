@@ -17,6 +17,7 @@
 //! The [`governor`] of an automated colony is separate from the brains: it runs for every
 //! owner, people included (`run_governors`), and keeps the colony's sites standing.
 
+mod airlift;
 mod army;
 mod ascension;
 mod brain;

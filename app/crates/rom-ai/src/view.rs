@@ -267,7 +267,8 @@ impl<'a> View<'a> {
         self.own
             .iter()
             .copied()
-            .filter(|e| operational(e) && e.container_id.is_none())
+            // A building in the air produces nothing until it lands (task 170).
+            .filter(|e| operational(e) && e.container_id.is_none() && !self.world.airborne(e.id))
             .filter(|e| {
                 self.rules
                     .production

@@ -314,6 +314,8 @@ pub(super) struct ModelGpu {
     pub(super) time: f32,
     /// Every entity at the same point of its cycle (the review gallery).
     pub(super) lockstep: bool,
+    /// The index of the lift engine model drawn under a building in the air (task 170).
+    engine: Option<usize>,
 }
 
 impl ModelGpu {
@@ -322,6 +324,14 @@ impl ModelGpu {
         if models.is_empty() {
             return None;
         }
+        // The lift engines come last, after every model of the rules (task 170).
+        let models: Vec<ModelLook> = models
+            .iter()
+            .cloned()
+            .chain([rom_kit::engines::lift_engine()])
+            .collect();
+        let engine = Some(models.len() - 1);
+        let models = models.as_slice();
         let bakes: Vec<_> = models.iter().map(|look| bake_model(&look.spec)).collect();
         let rigs: Vec<&Rig> = bakes.iter().map(|b| &b.rig).collect();
         let (origins, size) = pack_poses(&rigs);
@@ -374,6 +384,7 @@ impl ModelGpu {
             poses,
             time: 0.0,
             lockstep: false,
+            engine,
         })
     }
 
@@ -464,6 +475,58 @@ impl ModelGpu {
                 model: index,
                 transform,
                 progress,
+            });
+            if view.engines && view.building {
+                self.place_engines(view, &frame, owner, phase);
+            }
+        }
+    }
+
+    /// Hangs the lift engines under a building in the air (task 170).
+    fn place_engines(
+        &mut self,
+        view: &EntityView,
+        frame: &crate::entities::GroundFrame,
+        owner: [f32; 3],
+        phase: f32,
+    ) {
+        let Some(index) = self
+            .engine
+            .filter(|i| matches!(self.models.get(*i), Some(Some(_))))
+        else {
+            return;
+        };
+        let (spots, size) = crate::entities::lift_engine_spots(view, frame);
+        let x = heading_of(frame, view.facing_deg);
+        let z = heading_of(frame, view.facing_deg + 90.0);
+        let up = frame.up;
+        for o in spots {
+            let transform = Matrix {
+                m0: x[0] * size,
+                m1: x[1] * size,
+                m2: x[2] * size,
+                m3: owner[0],
+                m4: up[0] * size,
+                m5: up[1] * size,
+                m6: up[2] * size,
+                m7: owner[1],
+                m8: z[0] * size,
+                m9: z[1] * size,
+                m10: z[2] * size,
+                m11: owner[2],
+                m12: o[0],
+                m13: o[1],
+                m14: o[2],
+                m15: 1.0,
+            };
+            self.casters[index].push(transform);
+            self.placed.push(Placed {
+                model: index,
+                transform: Matrix {
+                    m15: phase.min(0.999),
+                    ..transform
+                },
+                progress: None,
             });
         }
     }

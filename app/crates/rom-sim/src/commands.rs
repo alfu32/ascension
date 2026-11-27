@@ -18,6 +18,10 @@ impl World {
         if e.neutralised {
             return Err(SimError::InactiveExecutor);
         }
+        // A building in the air lands first (task 170).
+        if self.airborne(id) {
+            return Err(SimError::Airborne);
+        }
         let et = &self.rules.entity_types[&e.type_id];
         if et.class == EntityClass::Building
             && e.build_progress.is_none()

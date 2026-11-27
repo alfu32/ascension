@@ -86,6 +86,11 @@ fn worth(view: &View<'_>, weights: &Weights, eco: &Economy, tech: DefId) -> i64 
             value += worth;
             continue;
         }
+        // So are lift-off engines (task 170).
+        if let Some(worth) = crate::airlift::stat_worth(&modifier.stat_key, scope) {
+            value += worth;
+            continue;
+        }
         value += match (modifier.stat_key.as_str(), scope) {
             ("pop_cap", _) => size * if crowded { 12 } else { 2 },
             // More cities matter most when every allowed city stands, and most of all when
@@ -166,6 +171,7 @@ pub(crate) fn wishes(
             operational(e)
                 && view.queue_len.get(&e.id).copied().unwrap_or(0) < 2
                 && !view.researching_at.contains(&e.id)
+                && !view.world.airborne(e.id)
         })
         .map(|e| e.type_id)
         .collect();

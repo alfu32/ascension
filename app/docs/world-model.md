@@ -714,6 +714,17 @@ planet below within thirty tiles of the point under it, without landing; they fa
 seconds, in reach of anti-air and the planet's ground batteries. Without the research a ship
 lands first, as before. Rules and numbers: `database.md`, "Jetpacks and orbital drop".
 
+### Buildings that lift off (task 170)
+
+From the Spacefaring age (10) a production or military building fitted with its line's Lift-off
+Engines (researched at the building) lifts off: its queue pauses, it rises on four engines and
+flies across its planet at a tile a second, on the air layer where anti-air can hit it, and lands
+where its footprint passes the placement check of construction, turned as the player chose;
+units under it are moved aside, and its queue resumes. Climbing to orbit to land on another
+planet of the system (from the Starfaring age, 11) and jumping along routes to other stars (from
+the Age of Galactic War, 13) are the card's second stage (170b), not yet built. Rules and numbers:
+`database.md`, "Buildings that lift off".
+
 ### What a star system looks like (task 56)
 
 - **Orbits grow geometrically.** The generator spaces orbit slots from the

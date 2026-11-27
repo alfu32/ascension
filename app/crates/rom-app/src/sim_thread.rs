@@ -1930,6 +1930,9 @@ fn leap_lift(world: &World, leap: &rom_sim::Leap) -> f32 {
     4.0 * jump_peak(length) * t * (1.0 - t)
 }
 
+/// Tiles above the ground a building in the air flies at (task 170).
+const BUILDING_FLIGHT_HEIGHT: f32 = 5.0;
+
 /// Ticks a fallen building takes to sink into its foundations (task 75).
 const COLLAPSE_TICKS: u64 = 40;
 
@@ -2201,6 +2204,13 @@ pub fn snapshot_on(
                 view.pod = leap_share(world, leap).max(0.001);
             }
         }
+        // A building in the air (task 170): raised to its share of the flight height, eased,
+        // its lift engines firing under it.
+        if let Some(pct) = world.building_height_pct(entity.id) {
+            let t = pct as f32 / 100.0;
+            view.lift = BUILDING_FLIGHT_HEIGHT * t * t * (3.0 - 2.0 * t);
+            view.engines = true;
+        }
         views.push(view);
     }
     for sighting in sightings {
@@ -2238,6 +2248,7 @@ pub fn snapshot_on(
                 swimming: false,
                 lift: 0.0,
                 pod: 0.0,
+                engines: false,
                 carry_node: false,
                 under_construction: None,
                 model: model_of(building.owner, building.type_id),
@@ -2294,6 +2305,7 @@ pub fn snapshot_on(
             swimming: false,
             lift: 0.0,
             pod: 0.0,
+            engines: false,
             carry_node: false,
             under_construction: Some((left * left).max(0.02)),
             model: model_of(wreck.owner, wreck.type_id),
@@ -2591,6 +2603,7 @@ fn view_of(
         swimming: false,
         lift: 0.0,
         pod: 0.0,
+        engines: false,
         carry_node: et
             .node
             .as_ref()

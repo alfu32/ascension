@@ -152,7 +152,12 @@ impl World {
     fn desired_emitter(&self, id: EntityId) -> Option<(Pos, i64, PlayerId)> {
         let e = self.entity(id)?;
         let territory = self.rules.entity_types[&e.type_id].territory.as_ref()?;
-        if territory.border_radius <= 0 || e.build_progress.is_some() || e.neutralised {
+        // A building in the air holds no borders until it lands (task 170).
+        if territory.border_radius <= 0
+            || e.build_progress.is_some()
+            || e.neutralised
+            || self.airborne(id)
+        {
             return None;
         }
         let radius = self.effective_stat(id, "border_radius", territory.border_radius);
@@ -234,7 +239,8 @@ impl World {
                 && et.minefield.is_none()
                 && !is_city
                 && e.build_progress.is_none()
-                && !e.neutralised;
+                && !e.neutralised
+                && !self.airborne(id);
             counts.then_some((e.owner, e.pos))
         });
         let changed = match widening {

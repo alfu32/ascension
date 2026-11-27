@@ -1619,6 +1619,20 @@ CREATE TABLE entity_retype (
   type_id   INTEGER NOT NULL
 ) STRICT;
 
+-- A building in the air (task 170, format 28): the ticks it has climbed toward its flight height
+-- (0 on the ground, up to `air.building_climb_ticks`), where it flies to and hovers (`goal_*`,
+-- NULL when it hovers where it is), where it lands and its facing there (`land_*`, NULL when it
+-- is not landing), and the movement carried to the next tick (milli-tiles times the tick rate).
+-- Its position, hit points, queue and rally point are the entity's own rows.
+CREATE TABLE entity_lift (
+  entity_id   INTEGER PRIMARY KEY,
+  climbed     INTEGER NOT NULL CHECK (climbed >= 0),
+  goal_x INTEGER, goal_y INTEGER, goal_face INTEGER, goal_body INTEGER,
+  land_x INTEGER, land_y INTEGER, land_face INTEGER, land_body INTEGER,
+  land_facing INTEGER CHECK (land_facing BETWEEN 0 AND 359),
+  remainder   INTEGER NOT NULL CHECK (remainder >= 0)
+) STRICT;
+
 -- The pool of a shield (task 157, format 23): the points it holds now and the tick it last
 -- took damage (it recharges `et_shield.recharge_delay_ticks` after that). Only shields whose
 -- pool has been charged have a row.

@@ -312,7 +312,7 @@ impl FeatureGpu {
     pub(super) fn set_buildings(&mut self, globe: &Globe, views: &[crate::entities::EntityView]) {
         let key: Vec<(u8, i32, i32, u8, u8)> = views
             .iter()
-            .filter(|v| v.building && v.altitude <= 0.0)
+            .filter(|v| v.building && v.altitude <= 0.0 && v.lift <= 0.0)
             .map(|v| {
                 (
                     v.face,

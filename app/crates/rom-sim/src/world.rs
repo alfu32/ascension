@@ -148,6 +148,8 @@ pub struct World {
     pub(crate) swim: crate::swimming::SwimRules,
     /// Units in the air after a jump or a drop and the jetpacks cooling down (task 169).
     pub(crate) leap: crate::leap::LeapState,
+    /// Buildings in the air (task 170; hashed while not empty, saved).
+    pub(crate) lifted: BTreeMap<EntityId, crate::airlift::BuildingFlight>,
     /// Buildings pulled down by their owners this tick (no stain); empty between ticks.
     pub(crate) razed: Vec<EntityId>,
     /// Market constants from the rules; `None` when the rules have no complete set (task 107).
@@ -400,6 +402,7 @@ impl World {
             stain_rules,
             swim,
             leap,
+            lifted: BTreeMap::new(),
             razed: Vec::new(),
             market_rules,
             market: BTreeMap::new(),
@@ -668,17 +671,21 @@ impl World {
         self.index_entity(owner, new, id, site);
         let slot = self.slot(pos.body);
         let side = self.side_of(owner);
+        // A building in the air (task 170) holds no footprint until it lands.
+        let grounded = !self.airborne(id);
         let pathing = &mut self.surfaces[slot].pathing;
         let before = &self.rules.entity_types[&old];
-        pathing.occupy(
-            before,
-            pos.face,
-            footprint(before, pos, facing),
-            false,
-            side,
-        );
         let after = &self.rules.entity_types[&new];
-        pathing.occupy(after, pos.face, footprint(after, pos, facing), true, side);
+        if grounded {
+            pathing.occupy(
+                before,
+                pos.face,
+                footprint(before, pos, facing),
+                false,
+                side,
+            );
+            pathing.occupy(after, pos.face, footprint(after, pos, facing), true, side);
+        }
         let motion = self.walks(id).then(|| self.motion_of(id)).flatten();
         self.avoid.set(id, motion, pos);
         if after.gather_site.is_some() {
@@ -706,10 +713,10 @@ impl World {
         self.refresh_site(id);
         self.refresh_trade_income(id);
         self.economy.dirty.insert(id);
-        if self.is_building(old) {
+        if self.is_building(old) && grounded {
             self.index_building(id, pos, false);
         }
-        if self.is_building(new) {
+        if self.is_building(new) && grounded {
             self.index_building(id, pos, true);
         }
         if self.is_city_type(old) && !self.is_city_type(new) {
@@ -770,6 +777,8 @@ impl World {
         self.retype_waiting.remove(&id);
         self.leap.flights.remove(&id);
         self.leap.ready.remove(&id);
+        // A building in the air holds no footprint and is in no building index (task 170).
+        let airborne = self.lifted.remove(&id).is_some();
         self.shield.pools.remove(&id);
         // An operator's death ends its grid and the drones it sent (task 128).
         if self.clouds.remove(&id).is_some() {
@@ -787,13 +796,15 @@ impl World {
         let surface = &mut self.surfaces[slot];
         surface.spatial.remove(id, entity.pos);
         let et = &self.rules.entity_types[&entity.type_id];
-        surface.pathing.occupy(
-            et,
-            entity.pos.face,
-            footprint(et, entity.pos, entity.facing),
-            false,
-            side,
-        );
+        if !airborne {
+            surface.pathing.occupy(
+                et,
+                entity.pos.face,
+                footprint(et, entity.pos, entity.facing),
+                false,
+                side,
+            );
+        }
         self.avoid.set(id, None, entity.pos);
         self.economy.idle.remove(&id);
         self.economy.dirty.remove(&id);
@@ -816,7 +827,7 @@ impl World {
         if self.is_city_type(entity.type_id) {
             self.release_city(id);
         }
-        if self.is_building(entity.type_id) {
+        if self.is_building(entity.type_id) && !airborne {
             self.index_building(id, entity.pos, false);
         }
         self.stats.orders_cancelled += entity.orders.len() as u64;
@@ -932,6 +943,7 @@ impl World {
         self.validate_space_order(&command)?;
         self.validate_transport(&command)?;
         self.validate_leap(&command)?;
+        self.validate_airlift(&command)?;
         // Orbit can name a body's surface; an orbiting ship can attack that surface, and what
         // stands on a planet can attack what orbits it.
         let body = entity.pos.body;
@@ -1033,8 +1045,8 @@ impl World {
         } else {
             None
         };
-        // Only a construction keeps a facing (task 147).
-        let facing = if command.kind == "construct" {
+        // Only a construction and a building's landing keep a facing (tasks 147, 170).
+        let facing = if matches!(command.kind.as_str(), "construct" | "touch_down") {
             command.facing.unwrap_or(0)
         } else {
             0
@@ -1145,6 +1157,11 @@ impl World {
                 self.apply_trade(&order);
                 continue;
             }
+            // So are a building's lift-off, flight and landing (task 170): its queue stays.
+            if matches!(order.kind.as_str(), "lift_off" | "fly" | "touch_down") {
+                self.apply_airlift(&order);
+                continue;
+            }
             // A colony's governor switch is a setting too.
             if matches!(order.kind.as_str(), "pause_governor" | "resume_governor") {
                 self.apply_governor(&order);
@@ -1207,6 +1224,14 @@ impl World {
             // A unit in the air (task 169) flies on; its orders wait until it lands.
             let landed = if self.leaping(id) {
                 self.fly_leap(id)
+            } else if self.airborne(id) {
+                // So does a building in the air (task 170): its queue is paused.
+                self.fly_building(id);
+                let new = self.entity(id).map(|e| e.pos);
+                if let Some(new) = new.filter(|new| *new != old) {
+                    self.relocate(id, old, new);
+                }
+                continue;
             } else {
                 self.advance_executor(id);
                 self.fire_turret(id);

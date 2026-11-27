@@ -156,8 +156,8 @@ impl World {
     pub(crate) fn aboard_in_space(&self, e: &Entity) -> bool {
         e.container_id.is_some_and(|carrier| {
             self.rules.entity_types[&e.type_id].class == EntityClass::Unit
-                && !self.is_landed(carrier)
-                && self.ashore_tile(carrier, e.type_id).is_none()
+                && ((!self.is_landed(carrier) && self.ashore_tile(carrier, e.type_id).is_none())
+                    || self.airborne(carrier))
         })
     }
 
@@ -414,6 +414,7 @@ impl World {
                         s.id != e.id
                             && s.owner == e.owner
                             && s.build_progress.is_none()
+                            && !self.airborne(s.id)
                             && e.container_id.is_none()
                             && self.is_carrier_type(s.type_id)
                             && self.may_ride(s.type_id, e.type_id)
@@ -696,6 +697,10 @@ impl World {
         else {
             return true;
         };
+        // Inside a building in the air it stays until the building lands (task 170).
+        if self.airborne(carrier) {
+            return false;
+        }
         if !self.is_landed(carrier) {
             // From a ship at sea it steps onto the nearest land in reach (task 167).
             let Some(pos) = self.ashore_tile(carrier, e.type_id) else {

@@ -1215,6 +1215,32 @@ fn snapshot(conn: &Connection, rules: &Rules) -> Result<Snapshot, SaveError> {
     } else {
         Vec::new()
     };
+    // Saves before format 28 (task 170) had no building in the air.
+    let lifted = if format >= 28 {
+        query_vec(
+            conn,
+            "SELECT entity_id, climbed, goal_x, goal_y, goal_face, goal_body, land_x, land_y, \
+             land_face, land_body, land_facing, remainder FROM entity_lift ORDER BY entity_id",
+            |r| {
+                let landing = match (opos_at(r, 6)?, oint(r, 10)?) {
+                    (Some(at), Some(facing)) => Some((at, n(facing, "landing facing")?)),
+                    (None, None) => None,
+                    _ => return Err(bad("landing of a building in the air")),
+                };
+                Ok((
+                    EntityId(uint(r, 0, "lifted building")?),
+                    rom_sim::BuildingFlight {
+                        climbed: int(r, 1)? as u64,
+                        goal: opos_at(r, 2)?,
+                        landing,
+                        remainder: int(r, 11)?,
+                    },
+                ))
+            },
+        )?
+    } else {
+        Vec::new()
+    };
     // Saves before format 23 (task 157) had no shields.
     let shields = if format >= 23 {
         query_vec(
@@ -1447,6 +1473,7 @@ fn snapshot(conn: &Connection, rules: &Rules) -> Result<Snapshot, SaveError> {
         flight,
         leaps,
         jump_ready,
+        lifted,
         retype_waiting,
         clouds,
         shields,

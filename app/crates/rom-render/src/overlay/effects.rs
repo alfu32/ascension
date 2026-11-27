@@ -8,6 +8,8 @@
 //! Task 169: drop pods falling from orbit like ballistic missiles, with a re-entry trail of fire
 //! and smoke, and their impact: a hard flash, a ring of dust, clods thrown up, a scorch that
 //! fades, and the pod opening on the ground.
+//!
+//! Task 170: the exhaust of the lift engines under a building in the air.
 
 use super::{LIFT, OverlayGeometry};
 use crate::entities::{EntityView, Footing, building_height};
@@ -93,6 +95,10 @@ pub(super) fn bombardment(
     for view in views.iter().filter(|v| v.pod > 0.0) {
         draw_pod_fall(out, ground, right, view, clock);
     }
+    // The exhaust of buildings in the air (task 170).
+    for view in views.iter().filter(|v| v.engines && v.building) {
+        draw_lift_exhaust(out, ground, right, view, clock);
+    }
     for wreck in &hud.wrecks {
         draw_wreck(
             out,
@@ -105,7 +111,11 @@ pub(super) fn bombardment(
     }
     // Ruined and badly hurt buildings still standing burn and smoke.
     for view in views.iter().filter(|v| {
-        v.building && v.altitude == 0.0 && v.under_construction.is_none() && v.hp_frac < 0.35
+        v.building
+            && v.altitude == 0.0
+            && v.lift <= 0.0
+            && v.under_construction.is_none()
+            && v.hp_frac < 0.35
     }) {
         let strength = if view.hp_frac <= 0.0 {
             1.0
@@ -510,6 +520,59 @@ fn draw_pod_fall(
         glow * 0.6,
         rgba([255, 252, 235], 0.95),
     );
+}
+
+/// The exhaust of a building's lift engines (task 170): a flickering plume under each nozzle,
+/// a hot core in it, and near the ground a ring of dust blown out under the building.
+fn draw_lift_exhaust(
+    out: &mut OverlayGeometry,
+    ground: &dyn Footing,
+    right: [f32; 3],
+    view: &EntityView,
+    clock: f32,
+) {
+    let frame = crate::entities::entity_frame(view, ground);
+    let (spots, size) = crate::entities::lift_engine_spots(view, &frame);
+    let seed = view.id.wrapping_mul(2_654_435_761);
+    let down = frame.up.map(|v| -v);
+    for (k, spot) in spots.iter().enumerate() {
+        let flicker = 0.8 + 0.2 * (clock * 19.0 + noise(seed, k as u32) * 6.0).sin();
+        let nozzle = add(*spot, frame.up, -rom_kit::engines::LIFT_ENGINE_DEPTH * size);
+        let length = size * 1.8 * flicker;
+        flame_down(
+            out,
+            nozzle,
+            right,
+            down,
+            size * 0.9,
+            length,
+            rgba([255, 140, 50], 0.7),
+        );
+        flame_down(
+            out,
+            nozzle,
+            right,
+            down,
+            size * 0.45,
+            length * 0.6,
+            rgba([255, 236, 190], 0.9),
+        );
+    }
+    // Low over the ground the blast raises dust.
+    let low = (1.0 - view.lift / 4.0).clamp(0.0, 1.0);
+    if low > 0.0 {
+        let under = ground.point(view.face, view.x, view.y, (0.0, 0.0), LIFT);
+        let width = f32::from(view.footprint.0.max(view.footprint.1)) * (1.1 + 0.15 * clock.sin());
+        puff(
+            out,
+            add(under, frame.up, -0.2),
+            right,
+            frame.up,
+            width,
+            0.9 * low,
+            rgba([168, 150, 122], 0.45 * low),
+        );
+    }
 }
 
 /// A tongue of flame `width` across trailing `length` up from `tip` (the way a falling pod

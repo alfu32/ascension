@@ -1,0 +1,16 @@
+# Task 170: a factory flying over the land. Seed 1, player one in the Spacefaring age with the
+# Lift-off Engines of the siege workshop's line (the factory's); a factory south-east of the city lifts
+# off and is sent with a right click to a point far to the east; the game is slowed to 5 % while it
+# flies, the camera on its way.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun fixed --size 1600x900 \
+#     --script app/docs/tasks/170-factory-flight-script.txt --after 30 --screenshot app/docs/img/170-factory-flying.png
+0 grant-age age.starfaring
+0 grant-tech tech.lift_engines.siege_workshop
+0 place 1 bld.factory @10,10
+4 producers
+5 hud tab 1
+6 hud slot 5
+80 rclick @40,14
+300 look @22,11
+301 cam wheel 3 800,450
+302 speed 5

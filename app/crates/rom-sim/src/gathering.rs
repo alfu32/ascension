@@ -205,6 +205,7 @@ impl World {
                         && b.hp > 0
                         && !b.neutralised
                         && b.assimilation_until.is_none()
+                        && !self.airborne(b.id)
                         && geo.within(worker.pos, b.pos, radius)
                         && self.reachable_for(owner, worker.type_id, worker.pos, b.pos)
                             == Some(true)

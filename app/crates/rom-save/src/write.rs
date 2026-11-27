@@ -252,6 +252,26 @@ fn write_all(
             params![id.0, w(*ready)],
         )?;
     }
+    for (id, flight) in &s.lifted {
+        let (goal, land) = (opos(flight.goal), opos(flight.landing.map(|(at, _)| at)));
+        tx.execute(
+            "INSERT INTO entity_lift VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            params![
+                id.0,
+                w(flight.climbed),
+                goal[0],
+                goal[1],
+                goal[2],
+                goal[3],
+                land[0],
+                land[1],
+                land[2],
+                land[3],
+                flight.landing.map(|(_, facing)| i64::from(facing)),
+                flight.remainder
+            ],
+        )?;
+    }
     for (id, type_id) in &s.retype_waiting {
         tx.execute(
             "INSERT INTO entity_retype VALUES (?,?)",

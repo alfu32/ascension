@@ -549,6 +549,8 @@ pub struct Snapshot {
     pub leaps: Vec<(EntityId, crate::Leap)>,
     /// The tick each unit that jumped lately may jump again, in id order (task 169).
     pub jump_ready: Vec<(EntityId, u64)>,
+    /// Buildings in the air, in id order (task 170).
+    pub lifted: Vec<(EntityId, crate::BuildingFlight)>,
     /// Units whose type change waits until they stand where the new type can, with that type,
     /// in id order (task 172).
     pub retype_waiting: Vec<(EntityId, DefId)>,
@@ -1079,6 +1081,7 @@ impl World {
             flight: self.flight.iter().map(|(id, c)| (*id, *c)).collect(),
             leaps: self.leaps().map(|(id, l)| (id, *l)).collect(),
             jump_ready: self.leap.ready.iter().map(|(id, t)| (*id, *t)).collect(),
+            lifted: self.building_flights().map(|(id, f)| (id, *f)).collect(),
             retype_waiting: self.waiting_retypes().collect(),
             clouds: self.clouds.iter().map(|(id, c)| (*id, *c)).collect(),
             shields: self.shield_pools().collect(),
@@ -1139,6 +1142,7 @@ impl World {
             flight,
             leaps,
             jump_ready,
+            lifted,
             retype_waiting,
             clouds,
             shields,
@@ -1576,6 +1580,29 @@ impl World {
                 return Err(bad("a jetpack cooldown of an unknown entity"));
             }
             world.leap.ready.insert(id, ready);
+        }
+        // A building in the air (task 170) holds no footprint: the rebuild above gave it one.
+        for (id, flight) in lifted {
+            let Some(e) = world.entity(id).filter(|e| {
+                world.rules.entity_types[&e.type_id].class == EntityClass::Building
+                    && e.container_id.is_none()
+            }) else {
+                return Err(bad("a flight of an entity that is not a building"));
+            };
+            if flight.climbed > world.building_climb_ticks() || flight.remainder < 0 {
+                return Err(bad("a building flight past its height"));
+            }
+            let (pos, facing, side) = (e.pos, e.facing, world.side_of(e.owner));
+            let et = &world.rules.entity_types[&e.type_id];
+            let slot = world.slot(pos.body);
+            world.surfaces[slot].pathing.occupy(
+                et,
+                pos.face,
+                footprint(et, pos, facing),
+                false,
+                side,
+            );
+            world.lifted.insert(id, flight);
         }
         for (id, type_id) in retype_waiting {
             let unit = world.entity(id).is_some_and(|e| {
