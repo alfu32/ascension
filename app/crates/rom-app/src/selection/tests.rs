@@ -4752,3 +4752,212 @@ fn a_building_lifts_off_flies_and_lands_through_the_palette() {
     assert_eq!(landed.facing, 90);
     assert!((38_000..43_000).contains(&landed.pos.x), "{:?}", landed.pos);
 }
+
+/// The eight directions, east first, clockwise on the screen.
+const COMPASS: [(i64, i64); 8] = [
+    (1, 0),
+    (1, 1),
+    (0, 1),
+    (-1, 1),
+    (-1, 0),
+    (-1, -1),
+    (0, -1),
+    (1, -1),
+];
+
+/// Task 170b: with the Starfaring age's research a barracks in the air is sent from the system
+/// view to the orbit of another planet of its system by a right click on that planet; with that
+/// planet open, Land arms its ghost there, which says where it fits, and a click lands it beside
+/// the city of the colony. The selection panel says where it is bound.
+#[test]
+fn a_building_flies_to_another_planet_from_the_system_view_and_lands_there() {
+    let options = crate::args::Options {
+        universe: true,
+        seed: 1,
+        ..crate::args::Options::default()
+    };
+    let content = crate::terrain::generate_universe_content(&options).expect("universe");
+    let setup = crate::script::ScriptSetup {
+        age: Some("age.expansion".into()),
+        techs: vec![
+            "tech.lift_engines.barracks".into(),
+            "tech.age.expansion".into(),
+        ],
+        colonies: vec![1],
+        ..crate::script::ScriptSetup::default()
+    };
+    let game = crate::match_setup::build_universe_match(
+        &content.rules,
+        &content.universe,
+        &content.factions,
+        1,
+        None,
+        &setup,
+    )
+    .expect("match");
+    let mut fx = Fx {
+        rules: game.world.rules().clone(),
+        world: game.world,
+        ctl: Controller::new(),
+    };
+    let home = fx.world.home_body(PLAYER).expect("home");
+    let system = fx.world.body(home).unwrap().system;
+    let cities: Vec<Pos> = fx
+        .world
+        .entities()
+        .filter(|e| e.owner == PLAYER && is_city(&fx.world, e))
+        .map(|e| e.pos)
+        .collect();
+    let city = *cities.iter().find(|p| p.body == home).expect("home city");
+    let colony = *cities.iter().find(|p| p.body != home).expect("colony");
+    // A barracks beside the home city, lifted off.
+    let barracks_type = fx.key("bld.barracks");
+    let spot = (1..12)
+        .flat_map(|r| (0..8).map(move |k| (r, k)))
+        .map(|(r, k)| {
+            let (dx, dy) = COMPASS[k];
+            fx.world.offset(city, dx * r * 1000, dy * r * 1000)
+        })
+        .find(|p| fx.world.check_placement(PLAYER, barracks_type, *p).is_ok())
+        .expect("room for a barracks");
+    let barracks = fx
+        .world
+        .place_for_setup(barracks_type, PLAYER, spot)
+        .expect("barracks");
+    fx.world
+        .submit(Command {
+            player: PLAYER,
+            executor: barracks,
+            kind: "lift_off".into(),
+            subject: None,
+            target_entity: None,
+            target_pos: None,
+            queue: false,
+            text: None,
+            facing: None,
+        })
+        .unwrap();
+    fx.step(70);
+    assert!(fx.world.airborne(barracks));
+    // From the system view: a right click on the colony's planet.
+    fx.ctl.set_view(ViewCtx {
+        planet: home,
+        system: Some(system),
+        in_space: true,
+        frame: crate::space_view::SpaceFrame::of(&fx.world, system),
+    });
+    // A click on it in the system view selects it, as a ship.
+    fx.ctl.handle(
+        &mut fx.world,
+        PickEvent::Click {
+            world_point: (0.0, 0.0),
+            surface: SurfacePos {
+                face: 0,
+                x: 0,
+                y: 0,
+            },
+            entity: Some(barracks.0),
+            modifiers: Modifiers::default(),
+            double: false,
+            on_screen: Vec::new(),
+        },
+    );
+    assert_eq!(fx.ctl.selection(), &[barracks]);
+    fx.ctl.handle(
+        &mut fx.world,
+        PickEvent::SpaceRightClick {
+            surface: SurfacePos {
+                face: 0,
+                x: 0,
+                y: 0,
+            },
+            entity: None,
+            body: Some(colony.body.0),
+            system: None,
+            modifiers: Modifiers::default(),
+        },
+    );
+    fx.step(1);
+    let place = fx.world.body_position(colony.body);
+    assert_eq!(fx.world.building_flight(barracks).unwrap().goal, place);
+    let card = |fx: &Fx| match fx.hud_snapshot().selection {
+        HudSelection::Single(card) => card.wealth.join(" | "),
+        _ => String::new(),
+    };
+    assert!(
+        card(&fx).contains("Bound for the orbit of"),
+        "{}",
+        card(&fx)
+    );
+    for _ in 0..8000 {
+        if fx
+            .world
+            .orbit(barracks)
+            .is_some_and(|o| o.body == colony.body)
+        {
+            break;
+        }
+        fx.step(1);
+    }
+    assert!(
+        fx.world
+            .orbit(barracks)
+            .is_some_and(|o| o.body == colony.body),
+        "in the colony's orbit"
+    );
+    assert!(card(&fx).contains("In orbit of"), "{}", card(&fx));
+    // The colony's planet open: Land arms the ghost there; beside the city it fits.
+    fx.ctl.set_view(ViewCtx {
+        planet: colony.body,
+        system: Some(system),
+        in_space: false,
+        frame: None,
+    });
+    fx.hud(HudRegionKind::CommandSlot, 6, PointerButton::Left, false);
+    assert!(
+        fx.ctl
+            .placement
+            .as_ref()
+            .is_some_and(|p| p.landing == Some(barracks))
+    );
+    let landing = (3..14)
+        .flat_map(|r| (0..8).map(move |k| (r, k)))
+        .map(|(r, k)| {
+            let (dx, dy) = COMPASS[k];
+            fx.world.offset(colony, dx * r * 1000, dy * r * 1000)
+        })
+        .find(|p| fx.world.check_touch_down(barracks, *p, 0).is_ok())
+        .expect("room to land beside the colony");
+    for _ in 0..2 {
+        if let Some(p) = fx.ctl.placement.as_mut() {
+            p.checked = None;
+        }
+        fx.ctl.handle(
+            &mut fx.world,
+            PickEvent::Hover {
+                entity: None,
+                world_point: (0.0, 0.0),
+                surface: surface_of(landing),
+            },
+        );
+    }
+    let ghost = fx.hud_snapshot().placement.expect("ghost");
+    assert_eq!(ghost.valid, Some(true));
+    fx.ctl.handle(
+        &mut fx.world,
+        PickEvent::Click {
+            world_point: (0.0, 0.0),
+            surface: surface_of(landing),
+            entity: None,
+            modifiers: Modifiers::default(),
+            double: false,
+            on_screen: Vec::new(),
+        },
+    );
+    assert!(fx.ctl.placement.is_none());
+    fx.step(1);
+    assert!(card(&fx).contains("Landing on"), "{}", card(&fx));
+    fx.step(600);
+    assert!(!fx.world.airborne(barracks), "it has landed");
+    assert_eq!(fx.world.entity(barracks).unwrap().pos.body, colony.body);
+}

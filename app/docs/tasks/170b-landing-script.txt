@@ -1,0 +1,26 @@
+# Task 170b: a building landing on another planet. Seed 1, player one in the Starfaring age with the
+# barracks's Lift-off Engines and the Starfaring age's research, and a colony on the nearest other
+# planet of its system; a barracks north-east of the home city lifts off and is sent to that
+# planet's orbit (a right click on the planet in the system view). Once it holds there the camera
+# goes to it and zooms into the planet; Land arms its landing ghost on that planet and a click puts
+# it down beside the colony's city; the game slows while it comes down from orbit and settles.
+#   rise-of-man --universe --seed 1 --ai none --sun fixed --size 1600x900 --view system,home \
+#     --script app/docs/tasks/170b-landing-script.txt --after 63 --screenshot app/docs/img/170b-landing.png
+0 grant-age age.expansion
+0 grant-tech tech.lift_engines.barracks
+0 grant-tech tech.age.expansion
+0 colony 1
+0 place 1 bld.barracks @12,-8
+4 producers
+5 hud tab 1
+6 hud slot 5
+10 orbit planet1
+12 speed 400
+3790 speed 100
+3800 cam focus
+3840 cam wheel 14 800,450
+3960 hud slot 6
+3962 click touchdown1
+3966 cam focus
+4040 cam focus
+4042 cam wheel -3 800,450

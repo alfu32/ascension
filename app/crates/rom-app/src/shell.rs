@@ -651,6 +651,7 @@ pub(crate) fn read_script(
             .collect();
         planets.sort_unstable();
         context.planets = planets.into_iter().map(|(_, id)| id).collect();
+        context.home = Some(home.id.0);
         let mut neighbours: Vec<(i32, u32)> = world
             .routes()
             .iter()

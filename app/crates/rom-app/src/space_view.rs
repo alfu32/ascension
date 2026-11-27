@@ -450,6 +450,65 @@ pub fn charge_line(world: &World, ship: &rom_sim::Entity) -> Option<String> {
     Some(format!("Charging jump{name}: {seconds} s"))
 }
 
+/// Where a building of player one that lifted off is and where it is bound (task 170b): "Bound
+/// for Body 3: in the system's plane"; `None` on the ground and for a flight over its planet.
+pub fn flight_line(world: &World, building: &rom_sim::Entity) -> Option<String> {
+    use rom_sim::FlightStage;
+    let flight = world.building_flight(building.id)?;
+    let name = |body: BodyId| world.body(body).map(|b| b.name.clone());
+    let system_name = |system: u32| {
+        world
+            .systems()
+            .iter()
+            .find(|s| s.id == system)
+            .map(|s| s.name.clone())
+    };
+    let stage = match flight.stage {
+        FlightStage::Air => "in the air",
+        FlightStage::Climbing => "climbing to orbit",
+        FlightStage::Orbit => "in orbit",
+        FlightStage::Descending => "coming down",
+        FlightStage::Space => "in the system's plane",
+        FlightStage::Charging => "charging a jump",
+        FlightStage::Transit => "between the stars",
+    };
+    let Some(target) = flight.target() else {
+        return match flight.stage {
+            FlightStage::Orbit => world
+                .orbit(building.id)
+                .and_then(|o| name(o.body))
+                .map(|planet| format!("In orbit of {planet}")),
+            FlightStage::Space => Some("Holding in the system's plane".into()),
+            _ => None,
+        };
+    };
+    if flight.stage == FlightStage::Air
+        && flight.landing.is_none()
+        && target.body == building.pos.body
+    {
+        return None;
+    }
+    let info = world.body(target.body)?;
+    let place =
+        if info.kind == BodyKind::Star {
+            // The place of a planet in the plane is its orbit.
+            match world.bodies().iter().find(|b| {
+                b.kind == BodyKind::Habitable && world.body_position(b.id) == Some(target)
+            }) {
+                Some(planet) => format!("the orbit of {}", planet.name),
+                None => system_name(info.system)?,
+            }
+        } else {
+            name(target.body)?
+        };
+    let verb = if flight.landing.is_some() {
+        "Landing on"
+    } else {
+        "Bound for"
+    };
+    Some(format!("{verb} {place}: {stage}"))
+}
+
 /// Gives every ship of `snapshot` the composed model of its owner's faction and age from
 /// `models`, the one the planet view draws it with; a ship type without one keeps none.
 pub fn dress_ships(snapshot: &mut SpaceSnapshot, world: &World, models: &crate::looks::ModelBook) {

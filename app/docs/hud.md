@@ -200,7 +200,11 @@ the air arms its landing ghost, turned with R, task 170), Patrol (D) or Pause /
 Resume governor, Trade route (F), the combat stances on the bottom row; a market shows Buy on
 the middle row and Sell on the bottom row. Right-clicking an own airfield with aircraft
 selected lands them beside it. With a building in the air selected (task 170), a right click on
-the ground flies it there.
+the ground flies it there; from the Starfaring age (task 170b) a right click in the system view or
+on the star map on a planet sends it to that planet's orbit, on a star to that star, on a point of a
+plane to that point, and with another planet open, Land arms its landing ghost on that planet. Its
+selection card says where it is bound ("Bound for the orbit of …: in the system's plane", "Landing
+on …: coming down").
 
 **Delete, attack ground (task 142).** **Attack ground** (G; a reticle over the ground, `icons/cmd_attack_ground`) shows for units
 whose weapons throw a projectile; it arms a pick with a crosshair cursor, and the next click (or

@@ -530,8 +530,12 @@ impl World {
         (i128::from(ticks) * i128::from(100 + pct) / 100).clamp(0, i128::from(u32::MAX)) as u64
     }
 
-    /// The jump `ship` is charging, if it is (not while a landed ship lifts off first).
+    /// The jump `ship` is charging, if it is (not while a landed ship lifts off first); also a
+    /// building that lifted off (task 170b).
     pub fn jump_charge(&self, ship: EntityId) -> Option<JumpCharge> {
+        if self.airborne(ship) {
+            return self.building_jump_charge(ship);
+        }
         let e = self.entity(ship)?;
         let order = e.orders.front().filter(|o| o.kind == "travel")?;
         let required = order.total_ticks?;

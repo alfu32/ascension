@@ -966,9 +966,18 @@ impl World {
                     .is_some_and(|p| p.body == orbit.body && self.geo(orbit.body).contains(p))
             });
         // Boarding, landing, unloading and trade check their own bodies.
+        // So do a building's flight and landing (task 170b).
         let cross_body = matches!(
             command.kind.as_str(),
-            "travel" | "orbit" | "enter" | "land" | "unload" | "trade" | "drop"
+            "travel"
+                | "orbit"
+                | "enter"
+                | "land"
+                | "unload"
+                | "trade"
+                | "drop"
+                | "fly"
+                | "touch_down"
         ) || orbital_attack
             || orbital_ground
             || orbit_move;

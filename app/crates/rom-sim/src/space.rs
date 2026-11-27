@@ -373,7 +373,8 @@ impl World {
         }
         Ok(())
     }
-    pub(crate) fn system_space(&self, body: BodyId) -> Option<u32> {
+    /// The system whose plane `body` is: `Some` for a star's plane, `None` for any other body.
+    pub fn system_space(&self, body: BodyId) -> Option<u32> {
         self.body(body)
             .filter(|b| b.kind == BodyKind::Star)
             .map(|b| b.system)
@@ -788,24 +789,6 @@ impl World {
                 .system_space(ship.orders[0].target_pos.expect("target").body)
                 .expect("destination");
             let next = self.travel_path(owner, origin, destination).expect("route")[1];
-            // A route the player does not know takes longer: the ship charts it.
-            let pct = if self.charting(owner, origin, next) {
-                self.rules
-                    .constant("space.charting_pct")
-                    .unwrap_or(100)
-                    .max(100) as u128
-            } else {
-                100
-            };
-            let length = self
-                .routes()
-                .iter()
-                .find(|r| {
-                    (r.system_a == origin && r.system_b == next)
-                        || (r.system_b == origin && r.system_a == next)
-                })
-                .expect("leg")
-                .length;
             let speed = self
                 .effective_stat(
                     id,
@@ -817,17 +800,7 @@ impl World {
                         .speed,
                 )
                 .max(1);
-            // speed_factor = movement speed in tiles per second (speed / 1000).
-            let duration = (u128::from(length as u32)
-                * self
-                    .rules
-                    .constant("space.route_ticks_per_unit")
-                    .expect("route time") as u128
-                * 1000
-                * pct)
-                .div_ceil(speed as u128 * 100)
-                .max(1)
-                .min(u128::from(u64::MAX - self.tick - 1)) as u64;
+            let duration = self.leg_ticks(owner, origin, next, speed);
             // On the last leg the ship comes out where its order says if the player has
             // explored that system, at its edge if not; decided now, for the whole group.
             let arrival = (next == destination)
@@ -836,34 +809,86 @@ impl World {
                     self.jump_arrival(owner, origin, destination, wanted)
                 })
                 .flatten();
-            let mut entity = self.entities[id.0 as usize].take().expect("departing ship");
-            if arrival.is_some() {
-                entity.orders[0].target_pos = arrival;
-            }
-            let pos = entity.pos;
-            entity.orders[0].movement = None;
-            entity.orders[0].status = OrderStatus::Active;
-            entity.orders[0].total_ticks = None;
-            entity.orders[0].progress_ticks = 0;
-            let slot = self.slot(pos.body);
-            self.surfaces[slot].spatial.remove(id, pos);
-            self.avoid.set(id, None, pos);
-            self.economy.idle.remove(&id);
-            self.economy.dirty.remove(&id);
-            self.refresh_income(id);
-            self.refresh_viewer(id);
-            self.refresh_territory(id);
-            self.space.transits.insert(
-                id,
-                Transit {
-                    entity,
-                    origin,
-                    destination: next,
-                    departed: self.tick + 1,
-                    arrives: self.tick + 1 + duration,
-                },
-            );
+            self.begin_transit(id, origin, next, duration, |entity| {
+                if arrival.is_some() {
+                    entity.orders[0].target_pos = arrival;
+                }
+                entity.orders[0].movement = None;
+                entity.orders[0].status = OrderStatus::Active;
+                entity.orders[0].total_ticks = None;
+                entity.orders[0].progress_ticks = 0;
+            });
         }
+        // Buildings that lifted off jump alone (task 170b).
+        self.depart_buildings();
+    }
+
+    /// Ticks a leg of `owner` from `origin` to the neighbouring system `next` takes at `speed`
+    /// milli-tiles a second: the route's length at one tile a second, longer along a route the
+    /// player has not charted.
+    pub(crate) fn leg_ticks(&self, owner: PlayerId, origin: u32, next: u32, speed: i64) -> u64 {
+        // A route the player does not know takes longer: the ship charts it.
+        let pct = if self.charting(owner, origin, next) {
+            self.rules
+                .constant("space.charting_pct")
+                .unwrap_or(100)
+                .max(100) as u128
+        } else {
+            100
+        };
+        let length = self
+            .routes()
+            .iter()
+            .find(|r| {
+                (r.system_a == origin && r.system_b == next)
+                    || (r.system_b == origin && r.system_a == next)
+            })
+            .expect("leg")
+            .length;
+        // speed_factor = movement speed in tiles per second (speed / 1000).
+        (u128::from(length as u32)
+            * self
+                .rules
+                .constant("space.route_ticks_per_unit")
+                .expect("route time") as u128
+            * 1000
+            * pct)
+            .div_ceil(speed.max(1) as u128 * 100)
+            .max(1)
+            .min(u128::from(u64::MAX - self.tick - 1)) as u64
+    }
+
+    /// Takes entity `id` off its system's plane into a transit from `origin` to `next` that
+    /// lasts `duration` ticks, after `prepare` has set its orders for the voyage.
+    pub(crate) fn begin_transit(
+        &mut self,
+        id: EntityId,
+        origin: u32,
+        next: u32,
+        duration: u64,
+        prepare: impl FnOnce(&mut Entity),
+    ) {
+        let mut entity = self.entities[id.0 as usize].take().expect("departing ship");
+        prepare(&mut entity);
+        let pos = entity.pos;
+        let slot = self.slot(pos.body);
+        self.surfaces[slot].spatial.remove(id, pos);
+        self.avoid.set(id, None, pos);
+        self.economy.idle.remove(&id);
+        self.economy.dirty.remove(&id);
+        self.refresh_income(id);
+        self.refresh_viewer(id);
+        self.refresh_territory(id);
+        self.space.transits.insert(
+            id,
+            Transit {
+                entity,
+                origin,
+                destination: next,
+                departed: self.tick + 1,
+                arrives: self.tick + 1 + duration,
+            },
+        );
     }
     /// Brings home the ships whose route leg ends now, in id order: at the point their order
     /// names on the last leg (decided on departure, task 111), at the edge facing the system
@@ -887,21 +912,28 @@ impl World {
             self.space.arrivals.insert(id, transit.origin);
             let mut entity = transit.entity;
             let space = self.space_of(transit.destination).expect("arrival space");
-            let pos = match entity
-                .orders
-                .front()
-                .and_then(|o| o.target_pos)
-                .filter(|p| p.body == space)
-            {
-                Some(at) => self.onto_plane(space, at),
-                None => self
-                    .system_edge(transit.destination, transit.origin)
-                    .expect("arrival edge"),
+            // A building that lifted off (task 170b) flies on to where it is bound; its queue
+            // stays as it is.
+            let building = self.airborne(id);
+            let pos = if building {
+                self.building_arrival(id, entity.owner, transit.origin, transit.destination)
+            } else {
+                match entity
+                    .orders
+                    .front()
+                    .and_then(|o| o.target_pos)
+                    .filter(|p| p.body == space)
+                {
+                    Some(at) => self.onto_plane(space, at),
+                    None => self
+                        .system_edge(transit.destination, transit.origin)
+                        .expect("arrival edge"),
+                }
             };
             entity.pos = pos;
             if let Some(mut order) = entity
                 .orders
-                .pop_front_if(|o| o.target_pos.is_some_and(|p| p.body == pos.body))
+                .pop_front_if(|o| !building && o.target_pos.is_some_and(|p| p.body == pos.body))
             {
                 order.status = OrderStatus::Done;
                 self.finish_order(&order);

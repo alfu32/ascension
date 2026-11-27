@@ -345,6 +345,12 @@ impl World {
                     None => hash.bytes(&[0]),
                 }
                 hash.u64(flight.remainder as u64);
+                // Beyond the air of its planet only (task 170b), so flights there keep their
+                // hashes.
+                if flight.stage != crate::FlightStage::Air || flight.stage_ticks != 0 {
+                    hash.u32(flight.stage as u32);
+                    hash.u64(flight.stage_ticks);
+                }
             }
         }
         // Hashed only once a type change waits for its unit, so other worlds keep their hashes

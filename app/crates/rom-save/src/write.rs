@@ -255,7 +255,7 @@ fn write_all(
     for (id, flight) in &s.lifted {
         let (goal, land) = (opos(flight.goal), opos(flight.landing.map(|(at, _)| at)));
         tx.execute(
-            "INSERT INTO entity_lift VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO entity_lift VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             params![
                 id.0,
                 w(flight.climbed),
@@ -268,7 +268,9 @@ fn write_all(
                 land[2],
                 land[3],
                 flight.landing.map(|(_, facing)| i64::from(facing)),
-                flight.remainder
+                flight.remainder,
+                flight.stage.key(),
+                w(flight.stage_ticks)
             ],
         )?;
     }

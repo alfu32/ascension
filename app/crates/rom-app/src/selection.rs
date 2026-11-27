@@ -2221,6 +2221,34 @@ impl Controller {
             self.bring_life(world, BodyId(body));
             return;
         }
+        // A building that lifted off (task 170b) flies to the place of the body clicked (the
+        // orbit of a planet), to the star of the system clicked, or to the point; it never
+        // attacks.
+        let buildings: Vec<EntityId> = self
+            .own_selected(world)
+            .iter()
+            .filter(|e| world.airborne(e.id))
+            .map(|e| e.id)
+            .collect();
+        if !buildings.is_empty() {
+            let point = self
+                .view
+                .frame
+                .map(|f| f.pos_of(surface.x as f32 / 1000.0, surface.y as f32 / 1000.0));
+            let to = body
+                .and_then(|b| world.body_position(BodyId(b)))
+                .or_else(|| {
+                    system
+                        .and_then(|s| world.space_of(s))
+                        .and_then(|star| world.body_position(star))
+                })
+                .or(point);
+            if let Some(to) = to {
+                for id in buildings {
+                    self.submit(world, id, "fly", None, None, Some(to), false);
+                }
+            }
+        }
         let ships = self.selected_ships(world);
         let foe = entity
             .map(EntityId)
@@ -2963,7 +2991,12 @@ impl Controller {
                 {
                     actions.push((6, Action::Land));
                 }
-                if armed_mover || own.iter().any(|e| world.orbit(e.id).is_some()) {
+                // A building in orbit (task 170b) does not patrol.
+                if armed_mover
+                    || own
+                        .iter()
+                        .any(|e| world.orbit(e.id).is_some() && !world.airborne(e.id))
+                {
                     actions.push((7, Action::Patrol));
                 }
                 if own
@@ -4204,9 +4237,10 @@ impl Controller {
         if hud.help.is_empty()
             && !self.view.in_space
             && own.iter().any(|e| {
-                world
-                    .orbit(e.id)
-                    .is_some_and(|o| o.body == self.view.planet)
+                !world.airborne(e.id)
+                    && world
+                        .orbit(e.id)
+                        .is_some_and(|o| o.body == self.view.planet)
             })
         {
             hud.help = if own.iter().any(|e| lands(world, e)) {
@@ -4241,9 +4275,23 @@ impl Controller {
         }
         // A building in the air (task 170) says what it can and cannot do there.
         if hud.help.is_empty() && own.iter().any(|e| world.airborne(e.id)) {
-            hud.help = "In the air: it trains and researches nothing until it lands; \
-                        right-click to fly, Land to come down"
-                .into();
+            // In orbit or in space (task 170b) it is sent from the space views.
+            let away = own.iter().any(|e| {
+                world.flight_stage(e.id).is_some_and(|s| {
+                    !matches!(
+                        s,
+                        rom_sim::FlightStage::Air | rom_sim::FlightStage::Climbing
+                    )
+                })
+            });
+            hud.help = if away {
+                "Away from the ground: it trains and researches nothing; right-click a planet \
+                 or a star in the space views to send it, Land to pick where it comes down"
+            } else {
+                "In the air: it trains and researches nothing until it lands; \
+                 right-click to fly, Land to come down"
+            }
+            .into();
         }
         if hud.help.is_empty() && own.iter().any(|e| world.jump_charge(e.id).is_some()) {
             hud.help = "Charging a jump: it cannot move or fire until it leaves; \
@@ -4383,6 +4431,7 @@ impl Controller {
                     }
                     if !foreign {
                         lines.extend(crate::space_view::charge_line(world, e));
+                        lines.extend(crate::space_view::flight_line(world, e));
                     }
                     lines
                 },
