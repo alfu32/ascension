@@ -43,6 +43,20 @@ Ages counted from 0, as the owner set them on 2026-11-26:
 7. **Computer players.** They lift a production building only when its planet is lost or under
    siege, and move it to a safe own planet. They never fly buildings into combat.
 
+## Recent work to fit with (orchestrator, 2026-11-27)
+
+- **Buildings in forests (task 172):** `crates/rom-rules/src/cover.rs`; landing placement must
+  apply the same rule. `crates/rom-sim/src/footing.rs` moves units that cannot stand where they
+  are; a building landing must never trap units under its footprint (move them with the same
+  search).
+- **Turned buildings (task 165):** a building keeps its facing when it lands, or the landing
+  ghost turns with R like any placement.
+- **Cluster jumps (task 163):** jumps between clusters need the galactic tier.
+- **Jetpacks and orbital drop (task 169):** `entity_leap` shows how in-flight state is saved;
+  follow the same pattern.
+- **Sea transports (task 167):** a building's garrison or queued units travel inside it; say what
+  happens to them.
+
 ## Crates
 
 Seed (the upgrade, the tags), schema if a building-in-flight needs a column (stop and report
