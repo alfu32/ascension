@@ -1594,6 +1594,24 @@ CREATE TABLE entity_flight (
   climbed   INTEGER NOT NULL CHECK (climbed >= 0)
 ) STRICT;
 
+-- A unit in the air after a jump or a drop (task 169, format 26): where it took off and comes
+-- down (a dropped unit falls onto `to`, which `from` repeats), the tick it took off, its ticks in
+-- the air, and 1 for a fall from orbit.
+CREATE TABLE entity_leap (
+  entity_id INTEGER PRIMARY KEY,
+  from_x INTEGER NOT NULL, from_y INTEGER NOT NULL, from_face INTEGER NOT NULL, from_body INTEGER NOT NULL,
+  to_x   INTEGER NOT NULL, to_y   INTEGER NOT NULL, to_face   INTEGER NOT NULL, to_body   INTEGER NOT NULL,
+  start  INTEGER NOT NULL,
+  ticks  INTEGER NOT NULL CHECK (ticks > 0),
+  dropped INTEGER NOT NULL CHECK (dropped IN (0,1))
+) STRICT;
+
+-- The tick a unit that jumped lately may jump again (task 169, format 26); no row once passed.
+CREATE TABLE entity_jump_ready (
+  entity_id  INTEGER PRIMARY KEY,
+  ready_tick INTEGER NOT NULL
+) STRICT;
+
 -- The pool of a shield (task 157, format 23): the points it holds now and the tick it last
 -- took damage (it recharges `et_shield.recharge_delay_ticks` after that). Only shields whose
 -- pool has been charged have a row.

@@ -104,6 +104,45 @@ pub struct PlayerResult {
     pub space: ClusterReach,
     /// Task 167: what its sea transports carried (sampled).
     pub sea: SeaLift,
+    /// Task 169: its units' jumps and drops from orbit.
+    pub leaps: Leaps,
+}
+
+/// The jumps a player's units made and the units it dropped from orbit (task 169).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Leaps {
+    /// Jumps begun.
+    pub jumps: u64,
+    /// Units dropped from orbit.
+    pub drops: u64,
+    /// The tick of the first jump.
+    pub first_jump: Option<u64>,
+    /// The tick of the first drop.
+    pub first_drop: Option<u64>,
+}
+
+/// Counts the jumps and drops begun in the step just taken, for every player (index `i` is
+/// player `i + 1`).
+fn count_leaps(world: &World, leaps: &mut [Leaps]) {
+    let tick = world.tick();
+    for (id, leap) in world.leaps() {
+        if leap.start + 1 != tick {
+            continue;
+        }
+        let Some(owner) = world.entity(id).map(|e| e.owner.0 as usize) else {
+            continue;
+        };
+        let Some(l) = owner.checked_sub(1).and_then(|i| leaps.get_mut(i)) else {
+            continue;
+        };
+        if leap.drop {
+            l.drops += 1;
+            l.first_drop.get_or_insert(leap.start);
+        } else {
+            l.jumps += 1;
+            l.first_jump.get_or_insert(leap.start);
+        }
+    }
 }
 
 /// What a player's sea transports carried over a match (task 167), sampled.
@@ -563,6 +602,7 @@ pub fn run_match(rules: &Arc<Rules>, request: &Request) -> Result<MatchResult, S
         .collect();
     let mut reach = vec![ClusterReach::default(); count];
     let mut sea = vec![SeaLift::default(); count];
+    let mut leaps = vec![Leaps::default(); count];
     // Task 167: where each player's first city stands, and whether they can walk to each other.
     let homes: Vec<Option<Pos>> = brains
         .iter()
@@ -635,6 +675,7 @@ pub fn run_match(rules: &Arc<Rules>, request: &Request) -> Result<MatchResult, S
         }
         rom_ai::run_governors(&mut world);
         world.step();
+        count_leaps(&world, &mut leaps);
         if tick % SAMPLE_TICKS == 0 {
             sample_sea(&world, &homes, &riders, &mut sea);
         }
@@ -731,6 +772,7 @@ pub fn run_match(rules: &Arc<Rules>, request: &Request) -> Result<MatchResult, S
                 max_think_us: max_think_us[i],
                 space: reach[i].clone(),
                 sea: sea[i].clone(),
+                leaps: leaps[i].clone(),
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
@@ -939,6 +981,17 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
             p.sea.aboard,
             p.sea.abroad,
             p.sea.first_abroad.map_or("-".to_owned(), |t| t.to_string())
+        );
+    }
+    for p in &result.players {
+        let tick = |t: Option<u64>| t.map_or("-".to_owned(), |t| t.to_string());
+        println!(
+            "leaps player={} jumps={} first_jump_tick={} dropped={} first_drop_tick={}",
+            p.player.0,
+            p.leaps.jumps,
+            tick(p.leaps.first_jump),
+            p.leaps.drops,
+            tick(p.leaps.first_drop)
         );
     }
     for p in &result.players {

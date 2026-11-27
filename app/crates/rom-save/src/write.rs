@@ -226,6 +226,32 @@ fn write_all(
             params![id.0, *climbed as i64],
         )?;
     }
+    for (id, leap) in &s.leaps {
+        let (from, to) = (pos(leap.from), pos(leap.to));
+        tx.execute(
+            "INSERT INTO entity_leap VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            params![
+                id.0,
+                from[0],
+                from[1],
+                from[2],
+                from[3],
+                to[0],
+                to[1],
+                to[2],
+                to[3],
+                w(leap.start),
+                w(leap.ticks),
+                i64::from(leap.drop)
+            ],
+        )?;
+    }
+    for (id, ready) in &s.jump_ready {
+        tx.execute(
+            "INSERT INTO entity_jump_ready VALUES (?,?)",
+            params![id.0, w(*ready)],
+        )?;
+    }
     for (id, pool) in &s.shields {
         tx.execute(
             "INSERT INTO entity_shield VALUES (?,?,?)",

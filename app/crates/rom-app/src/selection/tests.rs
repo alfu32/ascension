@@ -4607,3 +4607,54 @@ fn short_hints_stay_on_screen_while_each_tool_is_armed() {
     fx.ctl.handle(&mut fx.world, PickEvent::Escape);
     assert!(!fx.hud_snapshot().help.contains("R turns"));
 }
+
+/// Task 169: Jump arms a pick for units with jetpacks; the next click on the ground orders
+/// those that can to jump there, and they take off. A vehicle has no Jump.
+#[test]
+fn jump_arms_a_pick_and_the_soldiers_take_off() {
+    let mut fx = fixture_config(10_000, "age.starfaring", &["tech.jetpacks"]);
+    let marine = fx.rules.id_of("unit.marine").expect("marine");
+    let car = fx.rules.id_of("unit.armoured_car").expect("armoured car");
+    let a = fx.spawn(marine, 1, 3, 3);
+    let b = fx.spawn(car, 1, 5, 3);
+    fx.select(&[b]);
+    let palette = fx.hud_snapshot().palette.expect("orders");
+    assert!(
+        !palette
+            .buttons
+            .iter()
+            .any(|btn| btn.icon == "icons/cmd_jump"),
+        "a vehicle does not jump"
+    );
+    fx.select(&[a, b]);
+    let palette = fx.hud_snapshot().palette.expect("orders");
+    let jump = palette
+        .buttons
+        .iter()
+        .find(|btn| btn.icon == "icons/cmd_jump")
+        .expect("a Jump button");
+    assert_eq!(jump.slot, JUMP_SLOTS[0]);
+    assert!(!fx.ctl.aiming(&fx.world));
+    fx.hud(
+        HudRegionKind::CommandSlot,
+        JUMP_SLOTS[0],
+        PointerButton::Left,
+        false,
+    );
+    assert!(fx.ctl.aiming(&fx.world));
+    fx.ground_click();
+    assert!(!fx.ctl.aiming(&fx.world), "a plain click ends the pick");
+    fx.step(2);
+    assert!(fx.world.leaping(a), "the marine jumps");
+    assert!(!fx.world.leaping(b));
+    // In the air the button says when it can jump again.
+    let palette = fx.hud_snapshot().palette.expect("orders");
+    assert!(
+        palette
+            .buttons
+            .iter()
+            .any(|btn| btn.icon == "icons/cmd_jump" && btn.name.contains("ready in 20 s")),
+        "{:?}",
+        palette.buttons.iter().map(|b| &b.name).collect::<Vec<_>>()
+    );
+}

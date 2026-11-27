@@ -550,7 +550,7 @@ impl Scene {
                 let floor = least_pixels(BodyViewKind::Habitable, 0.0, one.fades.space);
                 (pixels >= floor).then(|| {
                     let eye = match &one.planet_camera {
-                        Some(camera) => GlobeEye::of_orbit(camera),
+                        Some(camera) => GlobeEye::of_orbit(camera).shaken(self.shake),
                         None => GlobeEye::of_view(view, orbit.radius),
                     };
                     (eye, one.system.distance_to(place.centre))

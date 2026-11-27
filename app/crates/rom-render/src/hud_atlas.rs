@@ -243,6 +243,14 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../assets/hud/icons/cmd_build.svg"),
     ),
     (
+        "icons/cmd_jump",
+        include_str!("../../../assets/hud/icons/cmd_jump.svg"),
+    ),
+    (
+        "icons/cmd_drop",
+        include_str!("../../../assets/hud/icons/cmd_drop.svg"),
+    ),
+    (
         "icons/cmd_cancel",
         include_str!("../../../assets/hud/icons/cmd_cancel.svg"),
     ),

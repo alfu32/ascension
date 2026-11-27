@@ -123,6 +123,8 @@ pub enum Job {
     /// Carry the main army over the water to an enemy it cannot walk to, on the same planet
     /// (task 167); the voyage's body is then that enemy building's entity id.
     Ferry,
+    /// Carry troops to an enemy planet and drop them from orbit (task 169).
+    Invade,
 }
 
 /// One ship's errand: the job, the body it is for, the stage reached and since when.
@@ -480,6 +482,7 @@ impl Memory {
                     0 => Job::Claim,
                     1 => Job::Colonise,
                     2 => Job::Ferry,
+                    3 => Job::Invade,
                     _ => return Err(AiError::CorruptState),
                 };
                 Ok(Voyage {

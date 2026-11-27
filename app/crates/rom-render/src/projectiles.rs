@@ -1404,6 +1404,8 @@ mod tests {
             capacity: 0,
             aboard: 0,
             swimming: false,
+            lift: 0.0,
+            pod: 0.0,
             carry_node: false,
             under_construction: None,
             model: None,

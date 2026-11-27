@@ -90,6 +90,10 @@ const DELETE_SLOT: usize = 14;
 const DELETE_SLOTS: [usize; 3] = [14, 4, 9];
 /// Where Attack ground sits on the Order tab (G).
 const GROUND_SLOT: usize = 9;
+/// Where Jump sits on the Order tab (S), or the first free slot after it (task 169).
+const JUMP_SLOTS: [usize; 4] = [6, 5, 4, 2];
+/// Where Drop sits on the Order tab (F), or the first free slot after it (task 169).
+const DROP_SLOTS: [usize; 4] = [8, 5, 2, 3];
 /// Where Call up sits on the Order tab (F), or the first free slot after it (task 141).
 const CALL_UP_SLOTS: [usize; 4] = [8, 4, 6, 2];
 /// Where Stand down sits on the Order tab (R), or the first free slot after it.
@@ -172,6 +176,11 @@ enum Action {
     Sell(DefId),
     /// The next point clicked is fired at by the selected units' projectile weapons (task 142).
     AttackGround,
+    /// The next point clicked is where the selected jumpers jump (task 169).
+    Jump,
+    /// The next point clicked on the planet below is where the selected ships in orbit drop
+    /// their infantry (task 169).
+    Drop,
     /// The selected own units and buildings leave; a finished building asks first (task 142).
     Delete,
     /// The answer to "Delete?": yes.
@@ -358,6 +367,11 @@ pub struct Controller {
     trade_pick: bool,
     /// The next click on the ground is fired at by the selected units (task 142).
     ground_pick: bool,
+    /// The next click on the ground is where the selected jumpers jump (task 169).
+    jump_pick: bool,
+    /// The next click on the planet below is where the selected ships drop their troops
+    /// (task 169).
+    drop_pick: bool,
     /// A delete waiting for its "yes": the entities it takes and the slot of its button.
     delete_confirm: Option<(Vec<EntityId>, usize)>,
     /// The person chose the Order tab for this selection: it stays open even when deleting is
@@ -1058,6 +1072,8 @@ impl Controller {
                 self.trade_pick = false;
                 self.land_pick = false;
                 self.ground_pick = false;
+                self.jump_pick = false;
+                self.drop_pick = false;
                 self.delete_confirm = None;
             }
         }
@@ -1104,6 +1120,17 @@ impl Controller {
         self.ground_pick &= !self.ground_attackers(world).is_empty();
         if self.ground_pick {
             self.attack_ground(world, at, mods.shift);
+            return;
+        }
+        // So do the jump and the drop once nothing selected can (task 169).
+        self.jump_pick &= !self.jumpers(world).is_empty();
+        if self.jump_pick {
+            self.leap(world, "jump", at, mods.shift);
+            return;
+        }
+        self.drop_pick &= !self.droppers(world).is_empty();
+        if self.drop_pick {
+            self.leap(world, "drop", at, mods.shift);
             return;
         }
         if self.patrol {
@@ -1499,6 +1526,7 @@ impl Controller {
                 radius: b.radius.clamp(0, i64::from(i32::MAX)) as i32,
                 age_ticks: tick.saturating_sub(b.tick).min(u64::from(u32::MAX)) as u32,
                 seed: seed(b.tick, b.pos),
+                pod: b.drop,
             })
             .collect();
         let rules = world.rules();
@@ -1750,6 +1778,17 @@ impl Controller {
             self.attack_ground(world, target, mods.shift);
             return;
         }
+        // And armed for a jump or a drop, it jumps or drops there (task 169).
+        self.jump_pick &= !self.jumpers(world).is_empty();
+        if self.jump_pick {
+            self.leap(world, "jump", target, mods.shift);
+            return;
+        }
+        self.drop_pick &= !self.droppers(world).is_empty();
+        if self.drop_pick {
+            self.leap(world, "drop", target, mods.shift);
+            return;
+        }
         let (kind, mend) = self.right_target(world, entity);
         // A group walks in the formation picked for it (task 143).
         let formation = self.group_formation(world);
@@ -1808,9 +1847,52 @@ impl Controller {
         }
     }
 
-    /// Whether the next click on the ground fires at it (task 142).
+    /// Whether the next click on the ground fires at it (task 142), or is where the selection
+    /// jumps or drops its troops (task 169).
     pub fn aiming(&self, world: &World) -> bool {
-        self.ground_pick && !self.ground_attackers(world).is_empty()
+        (self.ground_pick && !self.ground_attackers(world).is_empty())
+            || (self.jump_pick && !self.jumpers(world).is_empty())
+            || (self.drop_pick && !self.droppers(world).is_empty())
+    }
+
+    /// The selected own units that can jump (task 169).
+    fn jumpers(&self, world: &World) -> Vec<EntityId> {
+        self.own_selected(world)
+            .iter()
+            .filter(|e| world.jump_range(e.id) > 0)
+            .map(|e| e.id)
+            .collect()
+    }
+
+    /// The selected own ships in orbit with troops aboard that can be dropped (task 169).
+    fn droppers(&self, world: &World) -> Vec<EntityId> {
+        self.own_selected(world)
+            .iter()
+            .filter(|e| world.orbit(e.id).is_some() && !world.droppable_passengers(e.id).is_empty())
+            .map(|e| e.id)
+            .collect()
+    }
+
+    /// Orders every selected jumper to jump to `at`, or every selected ship in orbit to drop
+    /// its troops there (`kind`); Shift queues the order and keeps the pick on (task 169).
+    fn leap(&mut self, world: &mut OrderSink<'_>, kind: &str, at: Pos, shift: bool) {
+        let executors = if kind == "jump" {
+            self.jumpers(world)
+        } else {
+            self.droppers(world)
+        };
+        let mut issued = false;
+        for id in executors {
+            issued |= self.submit(world, id, kind, None, None, Some(at), shift);
+        }
+        if issued {
+            self.marker(world, at, MarkerKind::Move);
+        }
+        if kind == "jump" {
+            self.jump_pick = shift;
+        } else {
+            self.drop_pick = shift;
+        }
     }
 
     /// The selected own units whose weapons can fire at the ground (task 142).
@@ -1901,6 +1983,8 @@ impl Controller {
             self.attack_move = false;
             self.patrol = false;
             self.ground_pick = false;
+            self.jump_pick = false;
+            self.drop_pick = false;
             return;
         }
         self.delete_confirm = None;
@@ -2879,6 +2963,17 @@ impl Controller {
                 {
                     actions.push((GROUND_SLOT, Action::AttackGround));
                 }
+                // Jump and drop (task 169), before the militia and Delete take free slots.
+                if !self.jumpers(world).is_empty()
+                    && let Some(slot) = JUMP_SLOTS.into_iter().find(|s| free(&actions, *s))
+                {
+                    actions.push((slot, Action::Jump));
+                }
+                if !self.droppers(world).is_empty()
+                    && let Some(slot) = DROP_SLOTS.into_iter().find(|s| free(&actions, *s))
+                {
+                    actions.push((slot, Action::Drop));
+                }
                 // Call up and stand down (task 141), before Delete takes the last free slot.
                 for (action, kind, slots) in [
                     (Action::CallUp, rom_sim::CALL_UP, CALL_UP_SLOTS),
@@ -2967,6 +3062,30 @@ impl Controller {
                 button.name = "Attack ground: fire at a point".into();
                 button.icon = "icons/cmd_attack_ground".into();
                 button.armed = self.ground_pick;
+            }
+            Action::Jump => {
+                // The soonest any selected jumper is ready again.
+                let wait = self
+                    .jumpers(world)
+                    .iter()
+                    .map(|id| world.jump_cooldown_left(*id))
+                    .min()
+                    .unwrap_or(0);
+                button.name = if wait > 0 {
+                    format!(
+                        "Jump: over walls and water to a point (ready in {} s)",
+                        wait.div_ceil(u64::from(crate::sim_thread::TICKS_PER_SECOND))
+                    )
+                } else {
+                    "Jump: over walls and water to a point".into()
+                };
+                button.icon = "icons/cmd_jump".into();
+                button.armed = self.jump_pick;
+            }
+            Action::Drop => {
+                button.name = "Drop troops from orbit onto a point below".into();
+                button.icon = "icons/cmd_drop".into();
+                button.armed = self.drop_pick;
             }
             Action::Delete => {
                 button.name = delete_label(world, &self.deletable(world));
@@ -3216,6 +3335,22 @@ impl Controller {
             Action::AttackMove => self.attack_move = !self.attack_move,
             Action::AttackGround => {
                 self.ground_pick = !self.ground_pick;
+                self.jump_pick = false;
+                self.drop_pick = false;
+                self.patrol = false;
+                self.attack_move = false;
+                self.trade_pick = false;
+                self.land_pick = false;
+            }
+            Action::Jump | Action::Drop => {
+                if action == Action::Jump {
+                    self.jump_pick = !self.jump_pick;
+                    self.drop_pick = false;
+                } else {
+                    self.drop_pick = !self.drop_pick;
+                    self.jump_pick = false;
+                }
+                self.ground_pick = false;
                 self.patrol = false;
                 self.attack_move = false;
                 self.trade_pick = false;
@@ -3252,6 +3387,8 @@ impl Controller {
                 self.patrol_started = false;
                 self.attack_move = false;
                 self.ground_pick = false;
+                self.jump_pick = false;
+                self.drop_pick = false;
                 self.trade_pick = false;
                 self.land_pick = false;
             }
@@ -3907,6 +4044,12 @@ impl Controller {
             hud.help =
                 "Attack ground: click a point to fire at it until stopped; hold Shift to queue more points"
                     .into();
+        } else if self.jump_pick && !self.jumpers(world).is_empty() {
+            hud.help = "Jump: click free land; out of range they walk closer first. Shield fields block the jump"
+                .into();
+        } else if self.drop_pick && !self.droppers(world).is_empty() {
+            hud.help = "Drop: click open land you can see on the planet below; the ship moves over it first"
+                .into();
         }
         if hud.help.is_empty() && self.trade_pick && !self.selected_traders(world).is_empty() {
             hud.help = self.trade_hint(world);

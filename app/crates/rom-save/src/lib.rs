@@ -15,7 +15,7 @@ use std::{collections::BTreeMap, fmt::Write as _, path::Path, sync::Arc};
 use thiserror::Error;
 
 /// Layout version of the PART B tables this crate writes and reads.
-pub const FORMAT: i64 = 25;
+pub const FORMAT: i64 = 26;
 
 /// The oldest layout this crate still reads: format 13 saves load without the match end, the
 /// players' counters and their history (task 117); formats 13 and 14 with every aircraft in the
@@ -25,7 +25,8 @@ pub const FORMAT: i64 = 25;
 /// ground (task 142); formats 13 to 19 name no city (task 144: the cities are named on load from
 /// their owners' lists in id order); formats 13 to 20 had no facing on a construction order (task
 /// 147: such orders face 0); formats 13 to 21 had no city area option (task 158: they load with
-/// the city area limiting building, as it did); formats 13 to 22 had no shields (task 157).
+/// the city area limiting building, as it did); formats 13 to 22 had no shields (task 157);
+/// formats 13 to 25 had nobody in the air after a jump or a drop (task 169).
 /// Files written before format 25 (task 162: each star system's cluster) are refused: the
 /// conversions above apply to such files only once they carry its columns.
 pub const OLDEST_FORMAT: i64 = 13;

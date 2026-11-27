@@ -302,6 +302,25 @@ impl World {
                 hash.u64(*climbed);
             }
         }
+        // Hashed only once a unit has jumped or been dropped, so other worlds keep their hashes
+        // (task 169).
+        if !self.leap.flights.is_empty() || !self.leap.ready.is_empty() {
+            hash.bytes(b"leaps");
+            hash.u64(self.leap.flights.len() as u64);
+            for (id, leap) in &self.leap.flights {
+                hash.u32(id.0);
+                hash.pos(leap.from);
+                hash.pos(leap.to);
+                hash.u64(leap.start);
+                hash.u64(leap.ticks);
+                hash.bytes(&[u8::from(leap.drop)]);
+            }
+            hash.u64(self.leap.ready.len() as u64);
+            for (id, ready) in &self.leap.ready {
+                hash.u32(id.0);
+                hash.u64(*ready);
+            }
+        }
         // Hashed only once a drone operator exists, so other worlds keep their hashes (task 120).
         if !self.clouds.is_empty() {
             hash.bytes(b"clouds");

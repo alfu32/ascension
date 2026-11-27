@@ -61,6 +61,9 @@ const STAT_WORDS: &[(&str, &str, Unit)] = &[
     ("jump_charge", "jump charge time", Unit::Seconds),
     ("detector", "jump detection", Unit::Flag),
     ("mine_detection", "mine detection", Unit::Flag),
+    ("jump_range", "jump range", Unit::Tiles),
+    ("jump_cooldown", "time between jumps", Unit::Seconds),
+    ("orbital_drop", "orbital drop", Unit::Flag),
 ];
 
 /// Game ticks per second, for amounts in ticks.

@@ -413,6 +413,9 @@ pub(crate) struct Scene {
     projectile_scratch: Vec<Matrix>,
     /// Whether projectiles are drawn (`--projectiles`).
     pub(crate) show_projectiles: bool,
+    /// How far the planet camera is shaken this frame by a drop pod striking near the point
+    /// looked at (task 169); zero most of the time.
+    shake: [f32; 3],
 }
 
 /// A chunk mesh whose vertex colours follow the player's fog of war and borders.
@@ -802,6 +805,7 @@ impl Scene {
             projectile_instances: Vec::new(),
             projectile_scratch: Vec::new(),
             show_projectiles: true,
+            shake: [0.0; 3],
         }
     }
 
@@ -839,7 +843,9 @@ impl Scene {
             self.projectiles.clear();
             self.projectile_geometry = ProjectileGeometry::default();
         }
+        self.shake = [0.0; 3];
         if let (Some(gpu), Some(orbit)) = (&self.globe, orbit) {
+            self.shake = pod_shake(hud, &*gpu.globe, orbit, render_tick);
             build_overlays_on(views, &*gpu.globe, orbit.right(), hud, &mut self.overlay);
             crate::overlay::pointer_marks(
                 views,
@@ -1560,7 +1566,7 @@ impl Scene {
         self.screen_bars.clear();
         self.screen_emblems.clear();
         self.screen_names.clear();
-        let eye = GlobeEye::of_orbit(orbit);
+        let eye = GlobeEye::of_orbit(orbit).shaken(self.shake);
         if let Some(frame) = self.globe_backdrop(rl, thread, target, orbit, &eye) {
             self.globe_world(rl, thread, target, orbit, &eye, &frame);
         }
@@ -2289,6 +2295,51 @@ fn shift_projection(centre_y: f32) {
         projection.m9 = -centre_y;
         raylib::ffi::rlSetMatrixProjection(projection);
     }
+}
+
+/// Ticks a drop pod's impact shakes the camera (task 169).
+const SHAKE_TICKS: u32 = 8;
+/// The most a pod's impact moves the camera, tiles.
+const SHAKE_TILES: f32 = 0.18;
+/// A pod striking farther from the point looked at than this, in tiles, or a camera farther from
+/// it than `SHAKE_FAR`, shakes nothing.
+const SHAKE_REACH: f32 = 24.0;
+const SHAKE_FAR: f32 = 90.0;
+
+/// A short, subtle shake of the planet camera for drop pods striking near the point it looks
+/// at (task 169): strongest for the nearest and freshest, none from far away.
+fn pod_shake(hud: &HudSnapshot, ground: &dyn Footing, orbit: &OrbitCamera, now: f64) -> [f32; 3] {
+    if orbit.distance > SHAKE_FAR {
+        return [0.0; 3];
+    }
+    let target = orbit.target();
+    let strength = hud
+        .blasts
+        .iter()
+        .filter(|b| b.pod && b.age_ticks < SHAKE_TICKS)
+        .map(|b| {
+            let at = ground.point(
+                b.face,
+                b.x as f32 / 1000.0,
+                b.y as f32 / 1000.0,
+                (0.0, 0.0),
+                0.0,
+            );
+            let d = (0..3)
+                .map(|i| (at[i] - target[i]).powi(2))
+                .sum::<f32>()
+                .sqrt();
+            (1.0 - d / SHAKE_REACH).max(0.0) * (1.0 - b.age_ticks as f32 / SHAKE_TICKS as f32)
+        })
+        .fold(0.0_f32, f32::max);
+    if strength <= 0.0 {
+        return [0.0; 3];
+    }
+    let near = 1.0 - orbit.distance / SHAKE_FAR;
+    let amount = SHAKE_TILES * strength * near;
+    let (right, up) = (orbit.right(), orbit.view_up());
+    let (a, b) = ((now as f32 * 2.9).sin(), (now as f32 * 3.7).cos());
+    std::array::from_fn(|i| (right[i] * a + up[i] * b * 0.6) * amount)
 }
 
 #[cfg(test)]

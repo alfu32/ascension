@@ -2327,6 +2327,9 @@ back. No SQL runs in `rom-sim`.
 - **Rally points.** `entity_rally(entity_id, target_entity_id | x, y, face, body)`
   (task 64). Not part of the state hash while no producer has one, so worlds
   without rally points keep their hashes.
+- **Units in the air of task 169 (format 26).** `entity_leap(entity_id, from_*, to_*, start,
+  ticks, dropped)` and `entity_jump_ready(entity_id, ready_tick)` (see "Jetpacks and orbital
+  drop"). Formats 13 to 25 load with nobody in the air.
 - **Economy pace of task 159 (format 24).** `match.gather_rate`, `match.research_time` and
   `gather_remainder(player_id, resource_id, remainder)` (hundredths, 1 to 99). Files written
   before format 24 have none of them and are refused (owner: no conversion).
@@ -3189,6 +3192,9 @@ table; no save table and no save-format bump. Both lint views stay empty and the
   facing over at most `gap` (**2**) tiles to the first tile of a standing, finished emitter of
   the same owner (another owner's emitter cuts it). Those tiles block every walker as a
   segment does (`Pathing::block_tile`, one count a tile in the path occupancy); flyers pass.
+  Task 169: a standing field also blocks the air above its line for a **jump**: a jump whose
+  straight line crosses a field tile, or an emitter holding a standing stretch, is refused
+  (`World::crosses_field`). Aircraft are unchanged; walls and gates do not stop a jump.
   The owner's team passes the shield gate as any gate (147b); the gate stays a gate when the
   field is down. A stretch stands while **both** its emitters are powered and not neutralised.
 - **Upkeep.** At the end of every tick, each finished emitter in id order whose paid time has
@@ -3367,3 +3373,111 @@ is two tags, two stats and two technologies, written by hand at the end of `db/s
   straits: on the Planet style, seeds 1 to 16, six seeds (1, 8, 9, 11, 14, 15) have land within
   100 tiles of player one's city that a citizen cannot walk to but can swim to, and on three of
   them (1, 9, 14) it lies within 11 tiles of the home shore.
+
+## Jetpacks and orbital drop (task 169)
+
+The owner (2026-11-25): "infantry units can swim from age 9, fly short distances from age 10
+(research jetpacks) and be deployed from orbit directly from age 11 (research orbital drop)".
+Ages from 0: jetpacks from the Spacefaring age (10, `age.starfaring`), orbital drop from the
+Starfaring age (11, `age.expansion`). Rows written by hand at the end of `db/seed.sql`, after
+every other definition, so earlier ids stay.
+
+- **Who.** A unit type tagged **`jumper`** (new, category `movement`) may learn to jump: every
+  type tagged `infantry` that walks (`foot`) with a `biological` body, militia included (the
+  swimmers less the citizen). Wheeled infantry (combat robots, gun drones, flak, missile and
+  laser batteries) and the recon drone never jump; nor do riders and vehicles. Any unit with a
+  positive **`orbital_drop`** stat can be dropped; the research gives it to the tag `infantry`,
+  wheeled infantry included (they ride in capsules too); vehicles are not dropped and stay
+  aboard.
+- **Stats** (new, scope `entity`): **`jump_range`**, the farthest jump in milli-tiles (0, the
+  base: cannot jump); **`jump_cooldown`**, ticks from a jump's take-off before the next;
+  **`orbital_drop`**, above 0: can be dropped from orbit.
+- **Constants** (new): **`air.jump_speed`** 4 000 milli-tiles a second (a jump of 6 tiles is in
+  the air 30 ticks, 1.5 s; never less than 10 ticks); **`space.drop_ticks`** 80 (4 s of fall);
+  **`space.drop_range`** 30 000 milli-tiles (how far from the point under its ship a unit lands).
+- **Researches** (kind `upgrade`, the barracks' second research page, the next free places):
+
+  | Key | Name | At | Age | Ticks | Price | Modifiers (tag `infantry`) |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | `tech.jetpacks` | Jetpacks | barracks, research_2 (2, 2) | Spacefaring (10) | 800 | 600 metal, 400 energy, 550 knowledge | `jump_range` +6 000, `jump_cooldown` +400 |
+  | `tech.orbital_drop` | Orbital Drop | barracks, research_2 (3, 2) | Starfaring (11) | 900 | 900 metal, 600 energy, 700 knowledge | `orbital_drop` +1 |
+
+- **Orders** (new `order_kind` rows; no other schema change in PART A):
+  - **`jump`** (`movement`, point, line `move`): the unit walks until the point is within its
+    jump range (the path search takes it as near as it can get when the point cannot be
+    walked to), waits out its cooldown, then flies there in a straight line over walls, gates,
+    water, cliffs and units and comes down on **free land**: the point itself when its tile is
+    land its movement class walks with no building and no field on it, else the nearest such
+    tile centre within 1.5 tiles (`World::jump_landing`). Units sent to one point in one tick
+    come down on distinct tiles near it (the walk's spread). Refused at submission:
+    `CannotJump` (not a jumper, or no jetpacks), `JumpCooling` (in the air, or jumped less than
+    the cooldown ago; a queued jump waits instead), `NoLandingGround`, `FieldInTheWay` (within
+    range and across a standing shield field). A queued jump that meets a field fails with
+    `field`.
+  - **`drop`** (`container`, point): a ship **in orbit** moves within its orbit until the point
+    is within `space.drop_range` of the point under it, then sets every passenger with a
+    positive `orbital_drop` down on free land around the point, each on its own tile, nearest
+    first, within 6 tiles of it and within the drop range (others stay aboard). Refused:
+    `NotInOrbit`, `CannotDrop` (no passenger can be dropped), `DropZone` (not on the planet
+    below, not visible to the player now, or no free land within 6 tiles). Without the research
+    the ship lands first, as before (task 72).
+- **In the air** (`rom-sim/src/leap.rs`, `World::leap`, `Leap { from, to, start, ticks, drop }`):
+  a jumper moves along the straight line each tick; a dropped unit stands at its landing point
+  from the start and falls. In the air a unit is on the **`air` layer** for the weapons that
+  hit it, so anti-air reaches it and ground weapons do not (`World::target_layer`); a falling
+  unit is reached by `orbit` rows too (`layer_row`): ground batteries, planetary defences. It
+  does not fire, nothing pushes it, and its orders wait until it lands (the step flies it
+  instead of running them); a new order given in the air replaces the queue but not the flight.
+  Landing on a tile that a building has taken meanwhile, it comes down on the nearest free land.
+- **Walls, fields, water and transports.** Fortifications (task 147) and gates do not stop a
+  jump; a standing shield field (task 156) does, above its field tiles and its emitters. A jump
+  crosses water and cliffs but lands only on land. A **swimming soldier may jump out of the
+  water** (task 168): the jump starts wherever the unit stands. A unit aboard a ship does not
+  jump from it: given the order it steps out first as for any order (a landed ship, or a sea
+  transport with land in reach) and then walks and jumps; aboard a ship in space the order is
+  refused (`Aboard`). Nobody jumps onto a ship.
+- **State and saves.** `World::leap` holds the units in the air and the tick each unit that
+  jumped lately may jump again (dropped once passed). Both are hashed only while not empty, so
+  worlds without a jump keep their hashes. **Save format 26**, PART B tables `entity_leap` and
+  `entity_jump_ready`; formats 13 to 25 load with nobody in the air.
+- **Drawing** (`rom-render`, `EntityView::lift` and `EntityView::pod`, new): tiles above the
+  ground. A jump arcs on a parabola as high as a third of its length (1 to 3 tiles). A dropped
+  unit falls in a **drop pod** (the owner's request on issue #172, 2026-11-27: "pods dropping
+  like ballistic missiles from above with speed, punch, kaboom and fury"), presentation only: a
+  plain box in its owner's colour falling from 36 tiles up, faster and faster (36 × (1 − t²)
+  over the simulation's 80 ticks), its nose white-hot, a tongue of re-entry fire behind it and a
+  column of smoke above (`overlay/effects.rs`, `draw_pod_fall`). Its landing is reported as a
+  `Blast` with `drop` set (radius 1.5 tiles; a report, not hashed, not saved, as every blast) and
+  drawn as a pod's impact (`draw_pod_impact`): a hard flash and a light column, a bright shock
+  ring and a ring of dust rolling out to 3.6 tiles, clods thrown up, a scorch fading over 8 s,
+  and the pod's four petals swinging open around the soldier (0.5 to 1.3 s after it struck),
+  glowing hot and cooling to grey, gone after 6 s. A strike within 24 tiles of the point the
+  planet camera looks at, the camera within 90 tiles, shakes it for 8 ticks, at most 0.18 tiles
+  (`scene.rs`, `pod_shake`). Sounds: `docs/sound.md`, "Drop pods". **Interface**: the Order tab's **Jump** (S, or the next free of A, T, E) and
+  **Drop** (F, or A, E, R) buttons arm a pick; a click (or right click) on the ground gives the
+  order to every selected unit that can, Shift queues and keeps the pick. Icons
+  `icons/cmd_jump`, `icons/cmd_drop` (new SVGs).
+- **Computer players**: `docs/computer-player.md`, "Jetpacks and orbital drop (task 169)".
+- **Counters** (card 71). No weapon changed and no unit's layer outside a flight, so
+  `rom fight-matrix` is unchanged (`unanswered=0`); jumping infantry are answered by anti-air
+  in the air and by area weapons on the ground.
+
+- **Measured.** `rom playthrough --seed 1` hash `11f026379334122a`, ascension `82f7b9c50c3fd7c8`
+  (were `fe20e5716eb82f40`, `ad57c72834ff8abb`): the playthrough researches every technology, now
+  206 (was 204); every age is reached at the same tick and the ascension ends with the same
+  resources. The same binary on the seed of 0.154.0 gives the old hashes exactly, so nothing else
+  moved. `rom fight-matrix`: `strengths=305 unanswered=0`, unchanged. `rom duel`
+  moderate–easiest, seeds 1–20: 20–0, mean tick 46 393, unchanged (duels end long before the
+  Spacefaring age). `rom ai-match --universe --style map.one_world --start-age age.expansion
+  --players balanced:tough,balanced:tough --ticks 24000 --seed 1`: player one jumped 40 times
+  (first at tick 12 401), player two 21 (12 302); in `map.solar` (separate planets) seeds 2 and 3
+  show 28 and 16 jumps on the enemy's planet, and no drop: in none of these matches does a
+  player ever learn of an enemy building on another planet (the space manager does not scout
+  enemy worlds), so no invasion or drop is ordered. The drop is shown by
+  `rom-ai/tests/space.rs`, `a_transport_drops_its_marines_on_an_enemy_world_from_orbit` (a
+  player that sees everything).
+- **Screenshots** (the game's own paths, `--script`, release build): `img/169-jump-over-wall.png`
+  (`tasks/169-jump-script.txt`: six marines in the air over a stone wall of player two, the game
+  at 5 %), `img/169-pods-falling.png` (`tasks/169-drop-script.txt`: six pods streaking down with
+  their trails, the camera pulled back), `img/169-pods-impact.png`
+  (`tasks/169-impact-script.txt`: the moment they strike, close up).

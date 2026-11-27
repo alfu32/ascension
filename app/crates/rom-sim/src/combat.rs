@@ -37,6 +37,8 @@ pub struct Blast {
     pub owner: PlayerId,
     /// The type that fired it.
     pub source_type: rom_rules::DefId,
+    /// A drop pod's impact (task 169): the unit of `source_type` landed there from orbit.
+    pub drop: bool,
 }
 
 /// A building that fell (destroyed, not neutralised), kept `BLAST_MEMORY_TICKS` so the views
@@ -198,6 +200,10 @@ impl World {
         if self.is_grounded(id) {
             return Layer::Ground;
         }
+        // A unit jumping or falling from orbit is in the air (task 169).
+        if self.leaping(id) {
+            return Layer::Air;
+        }
         let et = &self.rules.entity_types[&e.type_id];
         if et
             .movement
@@ -237,11 +243,20 @@ impl World {
         id: EntityId,
     ) -> Option<&'a WeaponTarget> {
         let layer = self.target_layer(id);
-        targets.iter().find(|t| t.layer == layer).or_else(|| {
-            self.is_grounded(id)
-                .then(|| targets.iter().find(|t| t.layer == Layer::Air))
-                .flatten()
-        })
+        targets
+            .iter()
+            .find(|t| t.layer == layer)
+            .or_else(|| {
+                self.is_grounded(id)
+                    .then(|| targets.iter().find(|t| t.layer == Layer::Air))
+                    .flatten()
+            })
+            // A unit falling from orbit (task 169) is reached by planetary defences too.
+            .or_else(|| {
+                self.dropping(id)
+                    .then(|| targets.iter().find(|t| t.layer == Layer::Orbit))
+                    .flatten()
+            })
     }
 
     /// Whether any weapon of `attacker` can aim at `target` where it stands now (its layer,
@@ -369,7 +384,8 @@ impl World {
     pub(crate) fn can_fire_at(&self, id: EntityId, target: EntityId) -> bool {
         // An aircraft fires only in the air (task 123); a swimmer from the water only when its
         // research says so (task 168).
-        if self.is_grounded(id) || self.holds_fire_in_water(id) {
+        // Nor does a unit in the air after a jump or a drop (task 169).
+        if self.is_grounded(id) || self.holds_fire_in_water(id) || self.leaping(id) {
             return false;
         }
         let e = self.entity(id).expect("attacker");
@@ -878,6 +894,7 @@ impl World {
             radius,
             owner: hit.owner,
             source_type: hit.source_type,
+            drop: false,
         });
         // Buildings are found by their centre: reach as far as the largest half footprint.
         let reach = self.splash_reach(radius);

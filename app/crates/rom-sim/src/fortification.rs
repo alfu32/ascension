@@ -609,6 +609,7 @@ impl World {
                 radius: 500,
                 owner,
                 source_type: type_id,
+                drop: false,
             });
             spent.push(mine);
         }

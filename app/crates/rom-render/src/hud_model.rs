@@ -241,6 +241,9 @@ pub struct HudBlast {
     pub age_ticks: u32,
     /// Varies the debris, the secondary bursts and the flames.
     pub seed: u32,
+    /// A drop pod's impact (task 169): a hard flash, a ring of dust and a scorch, then the pod
+    /// opens; no fireball.
+    pub pod: bool,
 }
 
 /// A building that fell lately on the shown surface (task 75): it collapses, then its ruin

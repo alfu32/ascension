@@ -28,6 +28,7 @@ mod fleet;
 mod formations;
 mod fortify;
 pub mod governor;
+mod jetpacks;
 mod market;
 mod memory;
 mod militia;

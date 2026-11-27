@@ -1904,6 +1904,32 @@ pub fn snapshot_of(world: &World) -> EntitySnapshot {
 /// Height of an orbit above the planet in the planet view, in tiles.
 const ORBIT_HEIGHT: f32 = 8.0;
 
+/// The highest a jump arcs, in tiles: a third of its length, at least one tile and at most
+/// three (task 169).
+fn jump_peak(length: f32) -> f32 {
+    (length / 3.0).clamp(1.0, 3.0)
+}
+
+/// Tiles above its landing point a drop pod starts its fall from (task 169): high above the
+/// orbit drawn in the planet view, so it streaks in from the sky.
+const POD_HEIGHT: f32 = 36.0;
+
+/// The share of its time in the air a unit has flown (task 169).
+fn leap_share(world: &World, leap: &rom_sim::Leap) -> f32 {
+    (world.tick().saturating_sub(leap.start) as f32 / leap.ticks.max(1) as f32).clamp(0.0, 1.0)
+}
+
+/// Tiles above the ground of a unit in the air (task 169): on a parabola over a jump; after a
+/// drop, falling like a ballistic missile, faster and faster (`POD_HEIGHT` × (1 − t²)).
+fn leap_lift(world: &World, leap: &rom_sim::Leap) -> f32 {
+    let t = leap_share(world, leap);
+    if leap.drop {
+        return POD_HEIGHT * (1.0 - t * t);
+    }
+    let length = world.distance(leap.from, leap.to).unwrap_or(0) as f32 / 1000.0;
+    4.0 * jump_peak(length) * t * (1.0 - t)
+}
+
 /// Ticks a fallen building takes to sink into its foundations (task 75).
 const COLLAPSE_TICKS: u64 = 40;
 
@@ -2166,6 +2192,15 @@ pub fn snapshot_on(
         }
         // Drawn waist-deep in the water it swims (task 168).
         view.swimming = !view.building && world.swimming(entity.id);
+        // In the air (task 169): a jump arcs over its way; a fall from orbit comes straight down
+        // in a drop pod (the plain box), faster and faster, its trail drawn by the overlay.
+        if let Some(leap) = world.leap(entity.id) {
+            view.lift = leap_lift(world, leap);
+            if leap.drop {
+                view.model = None;
+                view.pod = leap_share(world, leap).max(0.001);
+            }
+        }
         views.push(view);
     }
     for sighting in sightings {
@@ -2201,6 +2236,8 @@ pub fn snapshot_on(
                 capacity: 0,
                 aboard: 0,
                 swimming: false,
+                lift: 0.0,
+                pod: 0.0,
                 carry_node: false,
                 under_construction: None,
                 model: model_of(building.owner, building.type_id),
@@ -2255,6 +2292,8 @@ pub fn snapshot_on(
             capacity: 0,
             aboard: 0,
             swimming: false,
+            lift: 0.0,
+            pod: 0.0,
             carry_node: false,
             under_construction: Some((left * left).max(0.02)),
             model: model_of(wreck.owner, wreck.type_id),
@@ -2550,6 +2589,8 @@ fn view_of(
         capacity: et.keeper.as_ref().map_or(0, |k| clamp_u8(k.capacity)),
         aboard: 0,
         swimming: false,
+        lift: 0.0,
+        pod: 0.0,
         carry_node: et
             .node
             .as_ref()

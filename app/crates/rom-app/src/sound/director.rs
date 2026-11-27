@@ -75,6 +75,11 @@ const FIELD_SWITCH_GAIN: f32 = 0.45;
 const FIELD_HUM_GAIN: f32 = 0.25;
 /// At most this many fields rising or dropping are heard in one pass.
 const FIELD_SOUNDS_PER_PASS: usize = 2;
+/// Drop pods (task 169): the whistle and roar of a pod falling from orbit, the boom of its
+/// impact; at most this many of each start in one pass.
+const POD_FALL_GAIN: f32 = 0.55;
+const POD_IMPACT_GAIN: f32 = 0.7;
+const POD_SOUNDS_PER_PASS: usize = 2;
 const AMBIENT_GAIN: f32 = 0.9;
 
 const LINE_PRIORITY: u8 = 240;
@@ -195,6 +200,11 @@ pub struct Director {
     field_down: Vec<SoundId>,
     field_hum: Vec<SoundId>,
     fields_standing: Option<BTreeSet<u32>>,
+    /// Drop pods (task 169): the fall and the impact, and the units falling at the last look
+    /// (`None` before the first).
+    pod_fall: Vec<SoundId>,
+    pod_impact: Vec<SoundId>,
+    pods_falling: Option<BTreeSet<u32>>,
     /// The world's tick at the last look, and when that was.
     moved: Option<(u64, Instant)>,
 }
@@ -251,6 +261,9 @@ impl Director {
             field_down: family("act.field_down"),
             field_hum: family("act.field_hum"),
             fields_standing: None,
+            pod_fall: family("act.drop_fall"),
+            pod_impact: family("act.drop_impact"),
+            pods_falling: None,
             moved: None,
         }
     }
@@ -401,6 +414,7 @@ impl Director {
             self.shots(&engine, &book, world, snapshot, ear, hearing, now);
             self.shield_sounds(&engine, world, snapshot, ear, hearing, now);
             self.field_sounds(&engine, world, snapshot, ear, hearing, now);
+            self.pod_sounds(&engine, world, snapshot, ear, hearing, now);
         }
         if self
             .activity_at
@@ -758,6 +772,72 @@ impl Director {
             self.started.insert(name, now);
             engine.play_as(
                 Category::Buildings,
+                id,
+                Placement { gain, pan },
+                activity_priority(gain),
+            );
+        }
+    }
+
+    /// Drop pods in view (task 169): a pod that began to fall since the last look whistles and
+    /// roars down, one that landed booms; the nearest few of each, heard where the unit is.
+    fn pod_sounds(
+        &mut self,
+        engine: &AudioEngine,
+        world: &World,
+        snapshot: &EntitySnapshot,
+        ear: &Ear,
+        hearing: &Hearing,
+        now: Instant,
+    ) {
+        let falling: BTreeSet<u32> = world
+            .leaps()
+            .filter(|(_, leap)| leap.drop)
+            .map(|(id, _)| id.0)
+            .collect();
+        let Some(before) = self.pods_falling.replace(falling.clone()) else {
+            // The first look only remembers.
+            return;
+        };
+        if before == falling {
+            return;
+        }
+        let mut heard: Vec<(f32, f32, bool)> = Vec::new();
+        for (id, fall) in falling
+            .difference(&before)
+            .map(|id| (*id, true))
+            .chain(before.difference(&falling).map(|id| (*id, false)))
+        {
+            let Ok(i) = snapshot.entities.binary_search_by_key(&id, |v| v.id) else {
+                continue;
+            };
+            let p = hearing.place(ear, &snapshot.entities[i]);
+            if p.gain > AUDIBLE {
+                let gain = if fall { POD_FALL_GAIN } else { POD_IMPACT_GAIN };
+                heard.push((p.gain * gain, p.pan, fall));
+            }
+        }
+        heard.sort_by(|a, b| b.0.total_cmp(&a.0));
+        let (mut falls, mut impacts) = (0, 0);
+        for (gain, pan, fall) in heard {
+            let (files, name, count) = if fall {
+                (&self.pod_fall, "act.drop_fall", &mut falls)
+            } else {
+                (&self.pod_impact, "act.drop_impact", &mut impacts)
+            };
+            if *count >= POD_SOUNDS_PER_PASS
+                || self
+                    .started
+                    .get(name)
+                    .is_some_and(|at| now.duration_since(*at) < FAMILY_INTERVAL)
+            {
+                continue;
+            }
+            let Some(id) = variant(files) else { continue };
+            *count += 1;
+            self.started.insert(name, now);
+            engine.play_as(
+                Category::Units,
                 id,
                 Placement { gain, pan },
                 activity_priority(gain),

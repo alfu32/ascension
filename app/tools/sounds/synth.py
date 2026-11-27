@@ -700,6 +700,39 @@ def explosion_large(r):
     return rumble + blast + thump + debris(r, n, 10, 0.2, 1.4) * 0.6
 
 
+def drop_fall(r):
+    """A drop pod falling from orbit (task 169): a high whistle sliding down as it comes, under a
+    roar of air and fire that swells to the end (it stops short of the pod's four-second fall)."""
+    n = n_of(3.7)
+    t = np.arange(n) / SR
+    k = t / t[-1]
+    f = r.uniform(2100, 2500) * (1 - 0.72 * k ** 1.4) * (1 + 0.006 * np.sin(2 * np.pi * 6.5 * t))
+    ph = 2 * np.pi * np.cumsum(f) / SR
+    whistle = (np.sin(ph) + 0.25 * np.sin(2 * ph)) * (0.15 + 0.45 * k) * 0.5
+    roar = lowpass(brown(r, n), 900)
+    roar = roar / (np.std(roar) or 1)
+    hiss = sweeping_bandpass(r.standard_normal(n), 400 + 2600 * k, q=0.8)
+    hiss = hiss / (np.std(hiss) or 1)
+    crackle = bandpass(r.standard_normal(n), 1500, 6000) * (r.random(n) < 0.02) * 2.0
+    swell = (0.1 + 0.9 * k ** 2) * np.minimum(t / 0.3, 1)
+    out = whistle + (roar * 0.45 + hiss * 0.25 + crackle * 0.15) * swell
+    return out * np.minimum((t[-1] - t) / 0.08, 1)
+
+
+def drop_impact(r):
+    """A drop pod striking the ground (task 169): a hard crack, a heavy low boom and a rumble,
+    clods raining down."""
+    n = n_of(2.4)
+    t = np.arange(n) / SR
+    crack = bandpass(r.standard_normal(n), 900, 7000) * env_ad(n, 0.0005, 0.03) * 1.4
+    f = r.uniform(58, 66) - 28 * np.minimum(t / 0.5, 1)
+    boom = np.sin(2 * np.pi * np.cumsum(f) / SR) * env_ad(n, 0.002, 0.35) * 1.8
+    rumble = lowpass(brown(r, n), 180)
+    rumble = rumble / (np.std(rumble) or 1) * env_ad(n, 0.01, 0.5) * 0.5
+    blast = lowpass(r.standard_normal(n), 1800) * env_ad(n, 0.001, 0.12)
+    return crack + boom + rumble + blast + debris(r, n, 8, 0.15, 1.1) * 0.5
+
+
 def shield_zap(r):
     """A projectile shot down by a city's shield (task 157): a hard electric crack, a bright
     falling sizzle and a small pop of the projectile breaking up."""
@@ -1320,6 +1353,9 @@ def main():
     save("act.field_hum", field_hum(), "loop", peak=0.85, rms=0.12)
     variants("act.field_up", field_up, 46, 2)
     variants("act.field_down", field_down, 48, 2)
+    # Task 169: drop pods falling from orbit and striking the ground.
+    variants("act.drop_fall", drop_fall, 49, 2)
+    variants("act.drop_impact", drop_impact, 50, 2)
 
     ui = dict(peak=0.6)
     variants("ui.click", click, 70, 3, **ui)

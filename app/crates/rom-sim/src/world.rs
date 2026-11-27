@@ -143,6 +143,8 @@ pub struct World {
     pub(crate) stain_rules: crate::stains::StainRules,
     /// Who swims where (task 168), derived from the rules.
     pub(crate) swim: crate::swimming::SwimRules,
+    /// Units in the air after a jump or a drop and the jetpacks cooling down (task 169).
+    pub(crate) leap: crate::leap::LeapState,
     /// Buildings pulled down by their owners this tick (no stain); empty between ticks.
     pub(crate) razed: Vec<EntityId>,
     /// Market constants from the rules; `None` when the rules have no complete set (task 107).
@@ -336,6 +338,7 @@ impl World {
         let fields = crate::fields::FieldState::of(&rules);
         let stain_rules = crate::stains::StainRules::of(&rules);
         let swim = crate::swimming::SwimRules::of(&rules);
+        let leap = crate::leap::LeapState::of(&rules);
         // Rules with a market need a complete, valid set of market constants (task 107).
         let market_rules = crate::market::MarketRules::of(&rules);
         if market_rules.is_none() && rules.entity_types.values().any(|e| e.market.is_some()) {
@@ -392,6 +395,7 @@ impl World {
             alert: crate::alerts::AlertState::default(),
             stain_rules,
             swim,
+            leap,
             razed: Vec::new(),
             market_rules,
             market: BTreeMap::new(),
@@ -759,6 +763,8 @@ impl World {
         self.rallies.remove(&id);
         self.governors_paused.remove(&id);
         self.flight.remove(&id);
+        self.leap.flights.remove(&id);
+        self.leap.ready.remove(&id);
         self.shield.pools.remove(&id);
         // An operator's death ends its grid and the drones it sent (task 128).
         if self.clouds.remove(&id).is_some() {
@@ -920,6 +926,7 @@ impl World {
         self.validate_aircraft(&command)?;
         self.validate_space_order(&command)?;
         self.validate_transport(&command)?;
+        self.validate_leap(&command)?;
         // Orbit can name a body's surface; an orbiting ship can attack that surface, and what
         // stands on a planet can attack what orbits it.
         let body = entity.pos.body;
@@ -944,7 +951,7 @@ impl World {
         // Boarding, landing, unloading and trade check their own bodies.
         let cross_body = matches!(
             command.kind.as_str(),
-            "travel" | "orbit" | "enter" | "land" | "unload" | "trade"
+            "travel" | "orbit" | "enter" | "land" | "unload" | "trade" | "drop"
         ) || orbital_attack
             || orbital_ground
             || orbit_move;
@@ -1191,12 +1198,20 @@ impl World {
             if self.entity(id).is_some_and(|e| e.container_id.is_some()) {
                 continue;
             }
-            self.advance_executor(id);
-            self.fire_turret(id);
-            self.heal_idle(id);
+            // A unit in the air (task 169) flies on; its orders wait until it lands.
+            let landed = if self.leaping(id) {
+                self.fly_leap(id)
+            } else {
+                self.advance_executor(id);
+                self.fire_turret(id);
+                self.heal_idle(id);
+                false
+            };
             let new = self.entity(id).expect("executor persists").pos;
             if old != new {
                 self.relocate(id, old, new);
+            }
+            if old != new || landed {
                 moved.push(id);
             }
         }
@@ -1223,6 +1238,7 @@ impl World {
         self.forget_blasts();
         self.forget_shield_events();
         self.forget_alerts();
+        self.forget_jumps();
         self.update_captures();
         self.remember_touched();
         self.update_intel();
