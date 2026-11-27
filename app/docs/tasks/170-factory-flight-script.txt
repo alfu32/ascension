@@ -11,6 +11,6 @@
 5 hud tab 1
 6 hud slot 5
 80 rclick @40,14
-300 look @22,11
-301 cam wheel 3 800,450
+300 look @22,6
+301 cam wheel 2 800,450
 302 speed 5

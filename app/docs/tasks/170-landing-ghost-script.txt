@@ -12,6 +12,7 @@
 6 hud slot 5
 80 hud slot 6
 82 key r
+83 key r
 84 hover @18,2
-86 look @15,-3
-87 cam wheel 3 800,450
+86 look @15,-6
+87 cam wheel 2 800,450

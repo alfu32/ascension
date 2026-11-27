@@ -3641,7 +3641,7 @@ every other definition, so earlier ids stay.
   and settles), with four **lift engines** under it: a kit model of their own
   (`rom-kit/src/engines.rs`, `kit.lift_engine`: a strut, a nacelle with a band in the owner's
   colour, a flared nozzle and its glowing throat), appended after every model of the rules and
-  placed at draw time under the four corners of a square within the footprint, each 0.3 of its
+  placed at draw time under the four corners of a square within the footprint, each a fifth of its
   shorter side across. No building model changed: every locked model keeps its fingerprint. The
   overlay draws each engine's exhaust (a flickering plume and its white core) and, low over the
   ground, a ring of dust (`overlay/effects.rs`, `draw_lift_exhaust`). On the ground nothing is

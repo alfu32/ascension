@@ -639,7 +639,7 @@ pub(crate) fn heading_of(frame: &GroundFrame, facing_deg: f32) -> [f32; 3] {
 /// size of each engine in tiles (an engine model is one tile across).
 pub(crate) fn lift_engine_spots(view: &EntityView, frame: &GroundFrame) -> ([[f32; 3]; 4], f32) {
     let side = f32::from(view.footprint.0.min(view.footprint.1).max(1));
-    let size = (side * 0.3).clamp(0.6, 2.4);
+    let size = (side * 0.2).clamp(0.5, 1.6);
     let reach = (side / 2.0 - size * 0.55).max(size * 0.3);
     let along = heading_of(frame, view.facing_deg);
     let across = heading_of(frame, view.facing_deg + 90.0);

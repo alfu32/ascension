@@ -10,5 +10,5 @@
 5 hud tab 1
 6 hud slot 5
 8 look @12,-8
-9 cam wheel 4 800,450
+9 cam wheel 2 800,450
 36 speed 5

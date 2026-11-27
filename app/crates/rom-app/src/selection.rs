@@ -4239,6 +4239,12 @@ impl Controller {
         {
             hud.help = crate::hud::market_help(world, me);
         }
+        // A building in the air (task 170) says what it can and cannot do there.
+        if hud.help.is_empty() && own.iter().any(|e| world.airborne(e.id)) {
+            hud.help = "In the air: it trains and researches nothing until it lands; \
+                        right-click to fly, Land to come down"
+                .into();
+        }
         if hud.help.is_empty() && own.iter().any(|e| world.jump_charge(e.id).is_some()) {
             hud.help = "Charging a jump: it cannot move or fire until it leaves; \
                         any new order cancels the charge"

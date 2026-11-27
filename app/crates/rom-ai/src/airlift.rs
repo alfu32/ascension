@@ -114,20 +114,18 @@ pub(crate) fn command(plan: &mut Plan<'_>, memory: &Memory) {
     let lift = view
         .own
         .iter()
-        .filter(|e| {
-            e.build_progress.is_none()
-                && !world.airborne(e.id)
-                && world.check_lift_off(e.id).is_ok()
-                && trains(view, e)
-        })
+        .filter(|e| e.build_progress.is_none() && !world.airborne(e.id) && trains(view, e))
         .filter(|e| {
             let enemies = enemy_power_near(view, memory, e.pos, SIEGE_RADIUS);
+            if enemies <= 0 || world.check_lift_off(e.id).is_err() {
+                return false;
+            }
             let own: i64 = army::fighters(view)
                 .iter()
                 .filter(|f| f.pos.body == e.pos.body && view.distance(f.pos, e.pos) <= SIEGE_RADIUS)
                 .map(|f| army::power(view, f))
                 .sum();
-            enemies > 0 && enemies > own
+            enemies > own
         })
         .find(|e| safe_city(view, memory, e.pos).is_some())
         .map(|e| e.id);
