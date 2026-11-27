@@ -2137,9 +2137,16 @@ pub fn snapshot_on(
             world.is_spacecraft_type(entity.type_id) || world.is_craft_type(entity.type_id);
         view.shot = recent_shot(world, entity, &motions.places, &in_flight);
         // Orbit is eight tiles up; a ship landing or lifting off is drawn on its way.
+        // A building climbs from its flight height to orbit and comes back down to it (task
+        // 170b).
+        let low = if world.airborne(entity.id) {
+            BUILDING_FLIGHT_HEIGHT
+        } else {
+            0.0
+        };
         let altitude = world
             .altitude_pct(entity.id)
-            .map_or(0.0, |pct| ORBIT_HEIGHT * pct as f32 / 100.0);
+            .map_or(0.0, |pct| low + (ORBIT_HEIGHT - low) * pct as f32 / 100.0);
         view.altitude = altitude;
         // An aircraft is drawn at its share of its flight height (task 123).
         let flight = world.flight_pct(entity.id);

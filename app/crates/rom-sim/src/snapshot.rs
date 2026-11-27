@@ -1583,14 +1583,36 @@ impl World {
         }
         // A building in the air (task 170) holds no footprint: the rebuild above gave it one.
         for (id, flight) in lifted {
+            if flight.climbed > world.building_climb_ticks() || flight.remainder < 0 {
+                return Err(bad("a building flight past its height"));
+            }
+            // Between two systems (task 170b) it holds nothing on any surface.
+            if flight.stage == crate::FlightStage::Transit {
+                let building = world.space.transits.get(&id).is_some_and(|t| {
+                    world.rules.entity_types[&t.entity.type_id].class == EntityClass::Building
+                });
+                if !building {
+                    return Err(bad("a building between systems without its transit"));
+                }
+                world.lifted.insert(id, flight);
+                continue;
+            }
             let Some(e) = world.entity(id).filter(|e| {
                 world.rules.entity_types[&e.type_id].class == EntityClass::Building
                     && e.container_id.is_none()
             }) else {
                 return Err(bad("a flight of an entity that is not a building"));
             };
-            if flight.climbed > world.building_climb_ticks() || flight.remainder < 0 {
-                return Err(bad("a building flight past its height"));
+            let in_orbit = world.space.orbits.contains_key(&id);
+            let in_plane = world.system_space(e.pos.body).is_some();
+            let placed = match flight.stage {
+                crate::FlightStage::Air | crate::FlightStage::Climbing => !in_orbit && !in_plane,
+                crate::FlightStage::Orbit | crate::FlightStage::Descending => in_orbit,
+                crate::FlightStage::Space | crate::FlightStage::Charging => !in_orbit && in_plane,
+                crate::FlightStage::Transit => false,
+            };
+            if !placed {
+                return Err(bad("a building flight where its stage does not put it"));
             }
             let (pos, facing, side) = (e.pos, e.facing, world.side_of(e.owner));
             let et = &world.rules.entity_types[&e.type_id];

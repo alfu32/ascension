@@ -1394,3 +1394,64 @@ fn buildings_in_the_air() {
     let outcome = check("lifted", &rules, w, 400, |_| {});
     assert_ne!(outcome.hash_before, outcome.hash_after_run);
 }
+
+/// Task 170b: buildings that lifted off are saved and loaded in every stage of a flight to
+/// another star: in the air, climbing to orbit, in orbit, in the system's plane, charging, between
+/// the systems and in the other system's plane; and in another building's way down from orbit.
+/// Each loaded world runs on alike.
+#[test]
+fn buildings_through_the_system_and_the_stars() {
+    let rules = rules();
+    let mut w = universe(&rules);
+    let barracks: Vec<rom_sim::EntityId> = [(20, 20), (28, 44)]
+        .into_iter()
+        .map(|(x, y)| {
+            w.place_for_setup(
+                id(&w, "bld.barracks"),
+                P1,
+                at(HOME, x * 1000 + 500, y * 1000 + 500),
+            )
+            .unwrap()
+        })
+        .collect();
+    for b in &barracks {
+        w.submit(command(&w, *b, "lift_off")).unwrap();
+    }
+    ticks(&mut w, 70);
+    let (far, down) = (barracks[0], barracks[1]);
+    let star = w.body_position(w.space_of(2).unwrap()).unwrap();
+    order(&mut w, far, "fly", None, Some(star));
+    let place = w.body_position(HOME).unwrap();
+    order(&mut w, down, "fly", None, Some(place));
+    let mut seen = Vec::new();
+    let mut ordered_down = false;
+    for _ in 0..6000 {
+        if !ordered_down && w.flight_stage(down) == Some(rom_sim::FlightStage::Orbit) {
+            order(&mut w, down, "fly", None, Some(at(HOME, 30_500, 30_500)));
+            ordered_down = true;
+        }
+        let stages = (w.flight_stage(far), w.flight_stage(down));
+        if seen.last() != Some(&stages) {
+            seen.push(stages);
+            let copy = World::restore(rules.clone(), w.snapshot()).unwrap();
+            check(&format!("lifted_{}", seen.len()), &rules, copy, 30, |_| {});
+        }
+        let came_down = ordered_down && w.flight_stage(down) == Some(rom_sim::FlightStage::Air);
+        if came_down
+            && w.entity(far)
+                .is_some_and(|e| w.system_space(e.pos.body) == Some(2))
+        {
+            break;
+        }
+        w.step();
+    }
+    use rom_sim::FlightStage::*;
+    let far_stages: Vec<_> = seen.iter().filter_map(|(f, _)| *f).collect::<Vec<_>>();
+    for stage in [Air, Climbing, Orbit, Space, Charging, Transit] {
+        assert!(
+            far_stages.contains(&stage),
+            "saved while {stage:?}: {seen:?}"
+        );
+    }
+    assert!(seen.iter().any(|(_, d)| *d == Some(Descending)), "{seen:?}");
+}

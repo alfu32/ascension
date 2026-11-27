@@ -720,10 +720,13 @@ From the Spacefaring age (10) a production or military building fitted with its 
 Engines (researched at the building) lifts off: its queue pauses, it rises on four engines and
 flies across its planet at a tile a second, on the air layer where anti-air can hit it, and lands
 where its footprint passes the placement check of construction, turned as the player chose;
-units under it are moved aside, and its queue resumes. Climbing to orbit to land on another
-planet of the system (from the Starfaring age, 11) and jumping along routes to other stars (from
-the Age of Galactic War, 13) are the card's second stage (170b), not yet built. Rules and numbers:
-`database.md`, "Buildings that lift off".
+units under it are moved aside, and its queue resumes. From the Starfaring age (11) it may climb
+to its planet's orbit, cross the system's plane at 1.3 tiles a second (half a transport) to another
+planet's orbit and come down there, landing only where its owner has a city or nobody has one; from
+the Age of Galactic War (13) it also jumps along routes to other stars under the jump rules of ships
+(the charge, inhibitors, the cluster tier), never below half its hit points (task 170b). In orbit
+and in space it is a target for space weapons, as a ship is. Rules and numbers: `database.md`,
+"Buildings that lift off".
 
 ### What a star system looks like (task 56)
 

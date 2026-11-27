@@ -67,7 +67,7 @@ mod wealth;
 mod world;
 
 pub use aircraft::LANDING_MARGIN;
-pub use airlift::BuildingFlight;
+pub use airlift::{BuildingFlight, FlightStage};
 pub use alerts::{Alert, AlertKind};
 pub use ascension::AscensionProject;
 pub use capture::CaptureCountdown;
@@ -474,8 +474,21 @@ pub enum SimError {
     /// Task 170: the building is in the air; it must land first.
     #[error("the building is in the air: land it first")]
     Airborne,
+    /// Task 170b: the building's engines do not reach that far in its owner's age (its stat
+    /// `lift_reach`: its planet, its star system, other stars).
+    #[error("the building cannot fly that far yet")]
+    BeyondReach,
+    /// Task 170b: a building lands on another planet only where its owner has a city or nobody
+    /// has one.
+    #[error("another player's cities hold that planet")]
+    ForeignPlanet,
+    /// Task 170b: a building below half its hit points does not jump.
+    #[error("the building is too damaged to jump: below half its hit points")]
+    TooDamagedToJump,
 }
 
+#[cfg(test)]
+mod airlift_space_tests;
 #[cfg(test)]
 mod airlift_tests;
 #[cfg(test)]

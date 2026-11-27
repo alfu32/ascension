@@ -32,7 +32,7 @@
 //! These component-based aliases replace a dependency on the last trained type.
 //!
 //! Space commands: `ships` selects every ship of player one, `producers` its finished
-//! training buildings (not cities), `orbit <rockN|=body>` and
+//! training buildings (not cities), `orbit <rockN|planetN|home|=body>` and
 //! `travel <systemN|outsideN|=system>` order the selected ships (`rockN` is the N-th nearest
 //! resource body of the home system, `systemN` the N-th nearest neighbouring system,
 //! `outsideN` the N-th nearest system of another star cluster, task 163), `speed <percent>` sets
@@ -52,7 +52,9 @@
 //! player one's home system, generating the planet first (task 68's freighter route), and
 //! `auto-colony <owner id>` puts a finished automated colony there instead (task 73). `craft` selects player one's orbital craft that are not
 //! aboard a carrier; `craftN` names the N-th of them for `click` and `rclick`, `aircraftN` the N-th
-//! of player one's aircraft (task 123).
+//! of player one's aircraft (task 123). `touchdownN` names a point where the N-th of player
+//! one's buildings in the air may land beside its own city on the planet it is bound for (task
+//! 170b), for `click` with the landing ghost armed.
 //!
 //! `point <entity> [dx,dy]` moves the pointer onto an entity as it is drawn now (the centre of
 //! its pick box, offset by `dx`, `dy` canvas pixels), on the planet, in orbit or in space, so a
@@ -97,6 +99,8 @@ pub struct ScriptContext {
     pub systems: Vec<u32>,
     /// The other habitable planets of the home system, nearest to the home planet first.
     pub planets: Vec<u32>,
+    /// The home planet (universe worlds; task 170b).
+    pub home: Option<u32>,
     /// Systems of other star clusters than the home's, nearest to the home system first (task
     /// 163; universe worlds).
     pub outside: Vec<u32>,
@@ -208,6 +212,7 @@ impl ScriptContext {
             rocks: Vec::new(),
             systems: Vec::new(),
             planets: Vec::new(),
+            home: None,
             outside: Vec::new(),
         }
     }
@@ -722,6 +727,8 @@ fn parse_line(
                 None if command == "orbit" && word.starts_with("planet") => {
                     nth("planet", &context.planets)
                 }
+                // Task 170b: the home planet, whose orbit a building in the air climbs to.
+                None if command == "orbit" && word == "home" => context.home,
                 None if command == "travel" && word.starts_with("outside") => {
                     nth("outside", &context.outside)
                 }
@@ -885,6 +892,7 @@ fn dynamic_name(word: &str) -> bool {
         "enemy",
         "gather",
         "landing",
+        "touchdown",
         "colony",
         "landed",
         "foecity",
@@ -942,6 +950,51 @@ fn live_point(
             .next()
             .map(Some)
             .ok_or_else(|| format!("no open ground below {target}"));
+    }
+    // Task 170b: where the N-th own building in the air may land beside an own city of the
+    // planet it is bound for, orbits or flies over: the city's centre or the first point on
+    // the rings about it where the landing check passes.
+    if target.starts_with("touchdown") {
+        let building = nth("touchdown", &|e| world.airborne(e.id))
+            .ok_or_else(|| format!("there is no {target}"))?;
+        let flight = world
+            .building_flight(building)
+            .expect("building in the air");
+        let planet = flight
+            .target()
+            .map(|t| t.body)
+            .filter(|b| world.system_space(*b).is_none())
+            .or_else(|| world.flight_planet(building))
+            .ok_or_else(|| format!("{target} is bound for no planet"))?;
+        let city = world
+            .entities()
+            .filter(|e| e.owner == player && e.pos.body == planet)
+            .find(|e| {
+                world.rules().entity_types[&e.type_id]
+                    .territory
+                    .as_ref()
+                    .is_some_and(|t| t.is_city)
+            })
+            .map(|e| e.pos)
+            .ok_or_else(|| format!("no own city where {target} is bound"))?;
+        let rings = (6..=20).step_by(2).flat_map(|r| {
+            let d = r * 1000;
+            [
+                (d, 0),
+                (-d, 0),
+                (0, d),
+                (0, -d),
+                (d, d),
+                (-d, d),
+                (d, -d),
+                (-d, -d),
+            ]
+        });
+        return rings
+            .map(|(dx, dy)| world.offset(city, dx, dy))
+            .find(|at| world.check_touch_down(building, *at, 0).is_ok())
+            .map(Some)
+            .ok_or_else(|| format!("no room to land {target}"));
     }
     if target.starts_with("colony") {
         let ship = nth("colony", &|e| world.is_landed(e.id))
@@ -1176,6 +1229,7 @@ mod tests {
             rocks: vec![40, 41],
             systems: vec![7],
             planets: vec![9],
+            home: None,
             outside: vec![12],
         }
     }

@@ -1,0 +1,15 @@
+# Task 170b: a building in orbit. Seed 1, player one in the Starfaring age with the barracks's
+# Lift-off Engines and the Starfaring age's research (`lift_reach` 1); a barracks north-east of the
+# city lifts off and is sent to its own planet's orbit, as a right click on the home planet in the
+# system view sends it; it climbs above the city and holds there, its engines firing.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun fixed --size 1600x900 \
+#     --script app/docs/tasks/170b-orbit-script.txt --after 16 --screenshot app/docs/img/170b-orbit.png
+0 grant-age age.expansion
+0 grant-tech tech.lift_engines.barracks
+0 grant-tech tech.age.expansion
+0 place 1 bld.barracks @12,-8
+4 producers
+5 hud tab 1
+6 hud slot 5
+10 orbit home
+12 look @12,-8

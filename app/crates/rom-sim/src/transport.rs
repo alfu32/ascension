@@ -107,6 +107,10 @@ impl World {
     /// carrier above); `None` for anything on the ground or elsewhere.
     pub fn altitude_pct(&self, id: EntityId) -> Option<i64> {
         let e = self.entity(id)?;
+        // A building that lifted off climbs to orbit and comes down by itself (task 170b).
+        if self.airborne(id) {
+            return self.building_altitude_pct(id);
+        }
         let front = e.orders.front();
         let craft = self.climb_ticks(e.type_id);
         let progress = |key: &str| {

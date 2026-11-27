@@ -1624,13 +1624,20 @@ CREATE TABLE entity_retype (
 -- NULL when it hovers where it is), where it lands and its facing there (`land_*`, NULL when it
 -- is not landing), and the movement carried to the next tick (milli-tiles times the tick rate).
 -- Its position, hit points, queue and rally point are the entity's own rows.
+-- Task 170b (format 29): `stage`, where it is: in the air over a planet, climbing to orbit, in a
+-- planet's orbit (its `entity_orbit` row), coming down from orbit, in a system's plane, charging
+-- a jump there, or between two systems (its `entity_transit` row); `stage_ticks`, the
+-- ticks spent climbing, coming down or charging. Its goal and landing may lie on another body.
 CREATE TABLE entity_lift (
   entity_id   INTEGER PRIMARY KEY,
   climbed     INTEGER NOT NULL CHECK (climbed >= 0),
   goal_x INTEGER, goal_y INTEGER, goal_face INTEGER, goal_body INTEGER,
   land_x INTEGER, land_y INTEGER, land_face INTEGER, land_body INTEGER,
   land_facing INTEGER CHECK (land_facing BETWEEN 0 AND 359),
-  remainder   INTEGER NOT NULL CHECK (remainder >= 0)
+  remainder   INTEGER NOT NULL CHECK (remainder >= 0),
+  stage       TEXT NOT NULL DEFAULT 'air' CHECK (stage IN
+                ('air','climbing','orbit','descending','space','charging','transit')),
+  stage_ticks INTEGER NOT NULL DEFAULT 0 CHECK (stage_ticks >= 0)
 ) STRICT;
 
 -- The pool of a shield (task 157, format 23): the points it holds now and the tick it last

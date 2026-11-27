@@ -7789,4 +7789,22 @@ INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_ro
  ORDER BY l.type_id;
 DROP TABLE lift_line;
 
+-- ── buildings that lift off: the star system and other stars (task 170b) ─────
+-- How far a building with lift-off engines may go is the stat `lift_reach` of the tag `liftable`:
+-- 0 its own planet (task 170a), 1 its star system (the Starfaring age, ordinal 11: it climbs to
+-- orbit, flies slowly through the system's plane and comes down on another planet), 2 other stars
+-- (the Age of Galactic War, ordinal 13: it jumps along routes under the jump rules of ships).
+INSERT INTO stat(key,scope,note) VALUES
+ ('lift_reach','entity','task 170b: how far a building with lift-off engines may fly: 0 its planet, 1 its star system, 2 other stars');
+INSERT INTO modifier(source_def_id,target_tag_id,stat_key,op,value) VALUES
+ ((SELECT id FROM def WHERE key='tech.age.expansion'),(SELECT id FROM tag WHERE key='liftable'),'lift_reach','add',1),
+ ((SELECT id FROM def WHERE key='tech.age.galactic'),(SELECT id FROM tag WHERE key='liftable'),'lift_reach','add',1);
+INSERT INTO game_constant(key,value,unit,note) VALUES
+ ('space.building_speed',1300,'milli-tiles/second','task 170b: speed of a building in a system''s plane, half a transport''s; its jumps take as long as a ship''s of this speed'),
+ ('space.building_climb_ticks',100,'ticks','task 170b: a building in the air climbing to its planet''s orbit, and coming down from it');
+UPDATE order_kind SET note='task 170: a building in the air flies to the point and hovers there: over its planet; with the reach (task 170b) over another planet, in a system''s plane, or in the orbit of the planet whose place in the plane the point is; applied at once, the queue stays'
+ WHERE key='fly';
+UPDATE order_kind SET note='task 170: a building in the air flies to the point and lands there, facing the order''s facing, where its placement check passes (with the reach, task 170b, on another planet where its owner has a city or nobody has one); its queue then resumes; applied at once'
+ WHERE key='touch_down';
+
 COMMIT;

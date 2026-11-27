@@ -1215,12 +1215,21 @@ fn snapshot(conn: &Connection, rules: &Rules) -> Result<Snapshot, SaveError> {
     } else {
         Vec::new()
     };
-    // Saves before format 28 (task 170) had no building in the air.
+    // Saves before format 28 (task 170) had no building in the air; format 28 had every one
+    // in the air over its planet (task 170b).
     let lifted = if format >= 28 {
+        let stage = if format >= 29 {
+            "stage, stage_ticks"
+        } else {
+            "'air', 0"
+        };
         query_vec(
             conn,
-            "SELECT entity_id, climbed, goal_x, goal_y, goal_face, goal_body, land_x, land_y, \
-             land_face, land_body, land_facing, remainder FROM entity_lift ORDER BY entity_id",
+            &format!(
+                "SELECT entity_id, climbed, goal_x, goal_y, goal_face, goal_body, land_x, land_y, \
+                 land_face, land_body, land_facing, remainder, {stage} FROM entity_lift \
+                 ORDER BY entity_id"
+            ),
             |r| {
                 let landing = match (opos_at(r, 6)?, oint(r, 10)?) {
                     (Some(at), Some(facing)) => Some((at, n(facing, "landing facing")?)),
@@ -1234,6 +1243,9 @@ fn snapshot(conn: &Connection, rules: &Rules) -> Result<Snapshot, SaveError> {
                         goal: opos_at(r, 2)?,
                         landing,
                         remainder: int(r, 11)?,
+                        stage: rom_sim::FlightStage::from_key(&r.get::<_, String>(12)?)
+                            .ok_or_else(|| bad("stage of a building in the air"))?,
+                        stage_ticks: int(r, 13)? as u64,
                     },
                 ))
             },

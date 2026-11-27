@@ -15,7 +15,7 @@ use std::{collections::BTreeMap, fmt::Write as _, path::Path, sync::Arc};
 use thiserror::Error;
 
 /// Layout version of the PART B tables this crate writes and reads.
-pub const FORMAT: i64 = 28;
+pub const FORMAT: i64 = 29;
 
 /// The oldest layout this crate still reads: format 13 saves load without the match end, the
 /// players' counters and their history (task 117); formats 13 and 14 with every aircraft in the
@@ -28,7 +28,7 @@ pub const FORMAT: i64 = 28;
 /// the city area limiting building, as it did); formats 13 to 22 had no shields (task 157);
 /// formats 13 to 25 had nobody in the air after a jump or a drop (task 169); formats 13 to 26 had
 /// no type change waiting for its unit (task 172); formats 13 to 27 had no building in the air
-/// (task 170).
+/// (task 170), and format 28 had every building in the air over its planet (task 170b).
 /// Files written before format 25 (task 162: each star system's cluster) are refused: the
 /// conversions above apply to such files only once they carry its columns.
 pub const OLDEST_FORMAT: i64 = 13;

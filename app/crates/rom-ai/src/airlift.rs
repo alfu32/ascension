@@ -1,9 +1,12 @@
 //! Buildings that lift off (task 170). A computer player lifts a production building (one that
 //! trains units) only when it is under siege: enemy fighters it has seen lately stand near it
-//! and outweigh its own fighters there, and another of its cities on the same planet stands
-//! clear of enemies. The building lands beside that city. It never flies a building toward
-//! enemies: a building in the air with nowhere to land is set down where it is, or as near as it
-//! fits. The engines are a side research of small worth.
+//! and outweigh its own fighters there, and another of its cities stands clear of enemies: on
+//! the same planet; failing that, when the building's reach allows (task 170b), on another
+//! planet of its star system, the nearest place first; failing that, with the reach of other
+//! stars, in the nearest system its routes lead to. The building lands beside that city. It
+//! never flies a building toward enemies: a building in the air with nowhere to land is set down
+//! where it is, or as near as it fits; in orbit or in space with nowhere to go it stays there.
+//! The engines are a side research of small worth.
 
 use crate::{army, memory::Memory, plan::Plan, view::View};
 use rom_rules::{ProductionMode, StatScope};
@@ -24,9 +27,14 @@ const RINGS: [i64; 4] = [9_000, 13_000, 17_000, 21_000];
 const RING_POINTS: i64 = 16;
 
 /// The worth of a modifier on `stat` when it fits lift-off engines: `Some(LIFT_WORTH)` for the
-/// stat `lift_off`, `None` for any other.
+/// stat `lift_off`; `Some(0)` for `lift_reach` (task 170b: the reach comes with the ages, which
+/// are chosen for themselves); `None` for any other.
 pub(crate) fn stat_worth(stat: &str, scope: Option<StatScope>) -> Option<i64> {
-    (stat == "lift_off" && scope == Some(StatScope::Entity)).then_some(LIFT_WORTH)
+    match (stat, scope) {
+        ("lift_off", Some(StatScope::Entity)) => Some(LIFT_WORTH),
+        ("lift_reach", Some(StatScope::Entity)) => Some(0),
+        _ => None,
+    }
 }
 
 /// The power of the enemy fighters seen lately within `radius` of `at`.
@@ -60,6 +68,57 @@ fn safe_city(view: &View<'_>, memory: &Memory, from: Pos) -> Option<Pos> {
         .filter(|c| enemy_power_near(view, memory, c.pos, SAFE_RADIUS) == 0)
         .min_by_key(|c| (view.distance(c.pos, from), c.id))
         .map(|c| c.pos)
+}
+
+/// Where building `id` (on the ground or in the air) may go to be safe: a safe city on its
+/// planet; else, within its reach (task 170b), the safe city on another planet of its star
+/// system whose place in the plane is nearest its own; else, with the reach of other stars, a
+/// safe city in the system fewest legs away along the routes it may take.
+fn safe_haven(view: &View<'_>, memory: &Memory, id: EntityId) -> Option<Pos> {
+    let world = view.world;
+    let e = world.entity(id)?;
+    let planet = if world.airborne(id) {
+        world.flight_planet(id)
+    } else {
+        Some(e.pos.body)
+    };
+    let over = planet == Some(e.pos.body);
+    if over && let Some(city) = safe_city(view, memory, e.pos) {
+        return Some(city);
+    }
+    let reach = world.lift_reach(id);
+    let here = world.body(e.pos.body)?.system;
+    let place = planet.and_then(|p| world.body_position(p)).unwrap_or(e.pos);
+    let safe = view
+        .cities
+        .iter()
+        // Over its planet `safe_city` has looked there; from its orbit that planet comes first.
+        .filter(|c| c.complete && !(over && Some(c.pos.body) == planet))
+        .filter(|c| enemy_power_near(view, memory, c.pos, SAFE_RADIUS) == 0)
+        .filter_map(|c| Some((c, world.body(c.pos.body)?.system)));
+    let mut best: Option<((u64, u64, EntityId), Pos)> = None;
+    for (city, system) in safe {
+        let key = if Some(city.pos.body) == planet {
+            (0, 0, city.id)
+        } else if system == here && reach >= 1 {
+            let at = world.body_position(city.pos.body);
+            let far = at
+                .and_then(|at| world.distance(place, at))
+                .unwrap_or(u64::MAX);
+            (0, far, city.id)
+        } else if system != here && reach >= 2 {
+            let Some(path) = world.travel_path(view.me, here, system) else {
+                continue;
+            };
+            (path.len() as u64, u64::from(system), city.id)
+        } else {
+            continue;
+        };
+        if best.is_none_or(|(b, _)| key < b) {
+            best = Some((key, city.pos));
+        }
+    }
+    best.map(|(_, pos)| pos)
 }
 
 /// The point `k` of `RING_POINTS` on the square ring `r` milli-tiles about the origin, walked
@@ -103,7 +162,7 @@ pub(crate) fn command(plan: &mut Plan<'_>, memory: &Memory) {
         if flight.landing.is_some() {
             continue;
         }
-        let target = safe_city(view, memory, e.pos)
+        let target = safe_haven(view, memory, id)
             .and_then(|city| landing_near(view, id, city))
             .or_else(|| landing_near(view, id, e.pos));
         if let Some(at) = target {
@@ -127,7 +186,7 @@ pub(crate) fn command(plan: &mut Plan<'_>, memory: &Memory) {
                 .sum();
             enemies > own
         })
-        .find(|e| safe_city(view, memory, e.pos).is_some())
+        .find(|e| safe_haven(view, memory, e.id).is_some())
         .map(|e| e.id);
     for (id, at) in landings {
         plan.order(id, "touch_down", None, None, Some(at));

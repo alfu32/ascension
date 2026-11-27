@@ -202,7 +202,8 @@ impl World {
         }
         // A unit jumping or falling from orbit is in the air (task 169), and so is a building
         // that lifted off (task 170).
-        if self.leaping(id) || self.airborne(id) {
+        // In a system's plane it is a target as a ship is there (task 170b).
+        if self.leaping(id) || self.in_planet_air(id) {
             return Layer::Air;
         }
         let et = &self.rules.entity_types[&e.type_id];

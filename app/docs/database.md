@@ -3574,9 +3574,9 @@ The owner (2026-11-25): "i want buildings to have an 'upgrade to ship' that enbl
 and fly: on the same planet on age 9, in the solar system on age 11 and through hyperspace in age
 13"; ages from 0 as set on 2026-11-26: across the planet from the Spacefaring age (10,
 `age.starfaring`), within the star system from the Starfaring age (11), to other stars from the Age
-of Galactic War (13). **This release (170a) is the first stage: across the planet.** The system and
-the stars (170b) follow; see "Not yet" below. Rows written by hand at the end of `db/seed.sql`, after
-every other definition, so earlier ids stay.
+of Galactic War (13). The first stage (170a, 0.157.0) flies across the planet; the second (170b)
+through the star system and to other stars, below. Rows written by hand at the end of `db/seed.sql`,
+after every other definition, so earlier ids stay.
 
 - **Who.** A building tagged **`liftable`** (new, category `movement`): every building that takes
   production orders (`et_producer`) and is none of a city or colony (`et_territory.is_city`,
@@ -3677,8 +3677,75 @@ every other definition, so earlier ids stay.
   `img/170-factory-flying.png` (`tasks/170-factory-flight-script.txt`: a factory flying east over
   the land), `img/170-landing-ghost.png` (`tasks/170-landing-ghost-script.txt`: the barracks in the
   air and its landing ghost turned a quarter, green where it fits).
-- **Not yet (170b).** Climbing to orbit and travelling to another planet of the system (from the
-  Starfaring age, its owner having a city there or the planet unclaimed), and jumping along
-  routes to other stars (from the Age of Galactic War, under the jump rules: charge, inhibitors,
-  the cluster tier; slow, and not below half its hit points). The state above (`goal`, `landing`
-  on another body) and the save table are meant to carry them.
+
+### Through the star system and to other stars (task 170b)
+
+- **Reach** (new stat, scope `entity`): **`lift_reach`**, how far a building with lift-off engines
+  may fly: 0 its planet, 1 its star system, 2 other stars. Two modifier rows on the tag `liftable`:
+  +1 from `tech.age.expansion` (the Starfaring age, 11) and +1 from `tech.age.galactic` (the Age of
+  Galactic War, 13). Nothing reads a key: the reach a flight needs is 0 over the planet it flies
+  over or orbits, 1 elsewhere in its system, 2 in another system (`World::check_flight_target`);
+  beyond it the order is refused (`BeyondReach`, new).
+- **Constants** (new): **`space.building_speed`** 1 300 milli-tiles a second (half a transport's
+  2 600) in a system's plane, also the speed its jumps are timed at; **`space.building_climb_ticks`**
+  100 (5 s to climb from the air to the planet's orbit, and 5 s to come down from it).
+- **Orders.** `fly` and `touch_down` take a point on another body within the reach: a planet of a
+  system (its surface), or a system's plane. **`fly`** to a point of another planet ends in the air
+  over it; to a point of a plane, hovering there in space; to the **place of a planet in its plane**
+  (`World::body_position`, what a right click on a planet in the space views sends), in that
+  planet's orbit. **`touch_down`** on another planet passes `World::check_touch_down` as on the home
+  planet, and may land only where **its owner has a city on that planet, or nobody has one**
+  (`World::may_land_on`; `ForeignPlanet`, new); on a planet nobody has a city on, the borders and the
+  city area are waived, as for a first city (every liftable building of the seed asks for its owner's
+  borders: without the waiver nothing could land on an unclaimed planet). The check runs again when it
+  touches the ground there.
+- **Stages** (`BuildingFlight::stage`, `rom_sim::FlightStage`): **air** (over a planet, as in 170a);
+  bound beyond its planet it rises to its flight height and goes **climbing** to orbit for the
+  climb's ticks, then is in its planet's **orbit** (an `Orbit` row, as a ship's: its position the
+  planet's marker in the system's plane); bound elsewhere it leaves the orbit for **space**, the
+  system's plane, and flies straight to the place of the planet it is bound for (or the point in the
+  plane), enters that planet's orbit above its goal or landing and goes **descending** for the
+  climb's ticks into the air over it, at its flight height; then it flies and lands as in 170a. A new
+  goal while it climbs or comes down turns it back into the air or the orbit.
+- **Jumps.** Bound for another system, in the plane it goes **charging** where it is, under the jump
+  rules of ships (`jumps.rs`): the route plan of its owner (`World::travel_path`, so the cluster tier
+  of task 163: `ClusterClosed` below the galactic tier), its charge (`space.jump_charge_ticks` after
+  the stat `jump_charge` and an enemy inhibitor's lengthening), an enemy inhibitor in the system lets
+  it leave only the way it came (`HeldByInhibitor`), and **never below half its hit points**
+  (`TooDamagedToJump`, new: refused at the order, and a building hit below half while it charges gives
+  the flight up). Charged, it goes into **transit** along the next route (`World::depart_buildings`,
+  after the ships; a `Transit` row holds the entity as a ship's does), timed as a ship's leg at
+  `space.building_speed` (uncharted: `space.charting_pct`). It arrives as a ship does
+  (`World::building_arrival`): on its last leg at the place it is bound for if its owner has explored
+  that system, at the edge facing where it came from otherwise; it charts the route; an enemy
+  inhibitor's blow strikes it on arrival. Then it flies on in that plane. A route of several legs
+  charges again in each system.
+- **In orbit and in space** it is a target as a ship is (`World::target_layer`: the `orbit` layer in
+  orbit, the plane's `space` layer in space): space weapons (and planetary defences across the orbit)
+  hit it, ground weapons and anti-air do not; between systems nothing does. Its queue stays paused,
+  it fires nothing, nobody boards it. It shows in the system view and on the star map as a ship does
+  (its model, class marker and lane), and its selection card says where it is bound
+  (`space_view::flight_line`: "Bound for the orbit of Body 3: in the system's plane", "Landing on
+  …: coming down", "Charging jump to …").
+- **State and saves.** `BuildingFlight` gains `stage` and `stage_ticks` (ticks climbing, coming
+  down or charging), hashed only away from the air of its planet, so the worlds of 170a keep their
+  hashes. **Save format 29**: `entity_lift.stage` (text, `air` … `transit`) and
+  `entity_lift.stage_ticks`; a format 28 save loads with every building in the air over its planet. A
+  building between systems has its `entity_transit` row and no position on a surface.
+- **Interface** (`rom-app`): with a building in the air selected, a right click in the system view
+  or on the star map on a planet sends it to that planet's orbit, on a star (or a system) to that
+  star, on a point of a plane to that point (`fly`); it never attacks. With another planet open, Land
+  arms the landing ghost there (green or red by `World::check_touch_down`, and why), and a click lands
+  it there.
+- **Computer players**: `docs/computer-player.md`, "Buildings that lift off (task 170)".
+- **Tests.** `rom-sim/src/airlift_space_tests.rs` (refused beyond its reach at each age; a barracks
+  with marines queued flies to another planet of its system and lands beside its owner's city there,
+  each stage restored from a snapshot and run on alike, its queue paused in space and resumed;
+  landing refused on a planet with another player's city and allowed on one with none; a flight to a
+  planet's place ends in its orbit; a jump refused to another cluster below the galactic tier and
+  below half its hit points, given up when hit below half while charging, then made, restored in
+  transit; space weapons hit it in the plane), `rom-save/tests/scenarios.rs`
+  (`buildings_through_the_system_and_the_stars`: saved and loaded in every stage),
+  `rom-ai/tests/airlift.rs` (a besieged barracks flies to the safe city on another planet of its
+  system), `rom-app` selection tests (a right click on a planet in the system view, the ghost on that
+  planet, a click lands it). Each scenario runs twice and compares state hashes.

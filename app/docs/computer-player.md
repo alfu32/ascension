@@ -1805,6 +1805,15 @@ where it may land `World::check_touch_down`; no definition is named.
   13, 17 and 21 tiles about it, where `World::check_touch_down` passes; with no safe city, or no
   room there, as near as it fits to where it is. It never flies a building toward enemies or
   into combat.
+- **Another planet, another star (task 170b).** When its planet holds no safe city, the building's
+  reach (`World::lift_reach`) decides where else it may go: with reach 1 the safe city on another
+  planet of its star system whose place in the system's plane lies nearest its planet's; with reach
+  2, failing that, a safe city in the system fewest legs away along the routes its owner may take
+  (`World::travel_path`, so the cluster tier holds), ties to the lower system id. A safe city there
+  is one with no enemy seen within 30 tiles. The landing beside it is looked for as above, on that
+  planet, and the `touch_down` order takes the building there: up to orbit, across the plane, through
+  the jumps, down over its landing. A building in orbit or in space with nowhere to go stays where it
+  is.
 - **In the air** a producer is offered no training and no research (`View::producers`, the
   research manager's free producers).
 

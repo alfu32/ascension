@@ -1,0 +1,17 @@
+# Task 170b: a building crossing its star system. Seed 1, player one in the Starfaring age with the
+# barracks's Lift-off Engines and the Starfaring age's research, and a colony on the nearest other
+# planet of its system; a barracks north-east of the city lifts off and is sent to that planet's
+# orbit, as a right click on the planet in the system view sends it. It climbs to orbit, leaves it
+# and crosses the system's plane at 1.3 tiles a second; the camera follows it there.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun fixed --size 1600x900 \
+#     --script app/docs/tasks/170b-system-script.txt --after 30 --screenshot app/docs/img/170b-crossing.png
+0 grant-age age.expansion
+0 grant-tech tech.lift_engines.barracks
+0 grant-tech tech.age.expansion
+0 colony 1
+0 place 1 bld.barracks @12,-8
+4 producers
+5 hud tab 1
+6 hud slot 5
+10 orbit planet1
+12 speed 400
