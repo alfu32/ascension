@@ -39,6 +39,12 @@ Swimming is task 168.
    - **Landing:** the units arrive after a short fall (a few seconds, deterministic), and can be
      shot at while falling by planetary defences and anti-air.
    - **Without the research** the ship must land first, as today (task 72).
+   - **Look and sound (owner, issue #172, 2026-11-27):** "make the orbital drop have an
+     animation of some kind, the user has to get the feeling of an orbital drop ( like, for
+     instance pods dropping like balistic missiles from above with speed, punch, kaboom and
+     fury )". The units fall in pods, steep and fast, with glowing re-entry trails. Each pod
+     lands with an impact flash, a ground ring, a short nearby camera shake and fading
+     scorch marks, plus a whistle and a boom; then the pod opens. This is presentation only.
 3. **Computer players.**
    - **Jetpacks:** they use them to cross walls and gaps when attacking.
    - **Orbital drop:** they use it to land an attack on an enemy planet once they hold orbit
