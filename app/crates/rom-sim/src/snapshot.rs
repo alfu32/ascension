@@ -11,7 +11,6 @@ use crate::{
     BodyId, BodyInfo, Entity, EntityId, MapGrid, MatchOptions, Order, OrderId, OrderStatus,
     Outcome, Player, PlayerId, PlayerStatus, Pos, RememberedBuilding, RouteInfo, SimError, SimRng,
     Stats, SystemInfo, Topology, TradeRoute, World,
-    avoidance::Motion,
     capture::CaptureState,
     combat::{PendingHit, PendingShot},
     construction::footprint,
@@ -1364,7 +1363,7 @@ impl World {
                 side,
             );
             let motion = (container.is_none() && world.walks(*id))
-                .then(|| Motion::of(&rules, type_id))
+                .then(|| world.motion_of(*id))
                 .flatten();
             world.avoid.set(*id, motion, pos);
             if et.gather_site.is_some() {

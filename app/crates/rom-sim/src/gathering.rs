@@ -189,7 +189,8 @@ impl World {
                         && !b.neutralised
                         && b.assimilation_until.is_none()
                         && geo.within(worker.pos, b.pos, radius)
-                        && self.reachable(worker.type_id, worker.pos, b.pos) == Some(true)
+                        && self.reachable_for(owner, worker.type_id, worker.pos, b.pos)
+                            == Some(true)
                 })
                 .map(|b| (geo.rank_distance(worker.pos, b.pos), b.id))
                 .min()

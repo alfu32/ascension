@@ -7610,4 +7610,50 @@ INSERT INTO formation(id,shape,rank_ratio_pct,spacing_pct) VALUES
  ((SELECT id FROM def WHERE key='form.circle'),'circle',100,130),
  ((SELECT id FROM def WHERE key='form.double_line'),'double_line',100,130);
 
+
+-- ── swimming (task 168) ─────────────────────────────────────────────────────
+-- Citizens cross shallow water once the dock's Swimming is researched (Industrial age), foot
+-- infantry once the barracks' Combat Swimming is (Fusion age). Water a swimmer may cross is a
+-- terrain tagged `shallow`; who may learn to swim is the tag `swimmer`; how fast it swims, as a
+-- percentage of its speed on plain land, is the stat `swim` (0: it cannot); whether it fires
+-- while swimming is the stat `swim_fire` (docs/database.md, "Swimming").
+INSERT INTO tag(key,category) VALUES ('shallow','terrain'), ('swimmer','movement');
+INSERT INTO def_tag(def_id,tag_id)
+ SELECT d.id, t.id FROM def d JOIN tag t ON t.key='shallow' WHERE d.key='ter.coast';
+-- Citizens, and every infantry type on foot with a living body (not the drones and robots).
+INSERT INTO def_tag(def_id,tag_id)
+ SELECT et.id, (SELECT id FROM tag WHERE key='swimmer') FROM entity_type et
+ JOIN def d ON d.id=et.id
+ JOIN et_movement m ON m.entity_type_id=et.id JOIN movement_class c ON c.id=m.movement_class_id
+ WHERE c.key='foot'
+   AND et.id IN (SELECT def_id FROM def_tag WHERE tag_id=(SELECT id FROM tag WHERE key='biological'))
+   AND (d.key='unit.citizen'
+        OR et.id IN (SELECT def_id FROM def_tag WHERE tag_id=(SELECT id FROM tag WHERE key='infantry')))
+ ORDER BY et.id;
+INSERT INTO stat(key,scope,note) VALUES
+ ('swim','entity','task 168: speed on shallow water, % of the speed on plain land, for a unit tagged swimmer; 0 = cannot swim'),
+ ('swim_fire','entity','task 168: above 0 = fires its weapons while swimming');
+INSERT INTO def(kind,key,name,descr) VALUES
+ ('tech','tech.swimming','Swimming','Citizens swim across shallow water, slowly; they cannot work or fight while in it.'),
+ ('tech','tech.combat_swimming','Combat Swimming','Foot soldiers swim across shallow water and fire from it.');
+INSERT INTO tech(id,kind,track,level,research_ticks) VALUES
+ ((SELECT id FROM def WHERE key='tech.swimming'),'upgrade','',0,450),
+ ((SELECT id FROM def WHERE key='tech.combat_swimming'),'upgrade','',0,700);
+WITH v(t,r,n) AS (VALUES ('tech.swimming','res.food',150), ('tech.swimming','res.wealth',150),
+  ('tech.combat_swimming','res.food',300), ('tech.combat_swimming','res.wealth',500),
+  ('tech.combat_swimming','res.knowledge',250))
+INSERT INTO cost(def_id,resource_id,amount,ramp)
+ SELECT t.id, r.id, v.n, 0 FROM v JOIN def t ON t.key=v.t JOIN def r ON r.key=v.r;
+INSERT INTO prerequisite(def_id,requires_def_id) VALUES
+ ((SELECT id FROM def WHERE key='tech.swimming'),(SELECT id FROM def WHERE key='age.industrial')),
+ ((SELECT id FROM def WHERE key='tech.combat_swimming'),(SELECT id FROM def WHERE key='age.fusion'));
+WITH v(t,s,n,g) AS (VALUES ('tech.swimming','swim',40,'civilian'),
+  ('tech.combat_swimming','swim',50,'infantry'), ('tech.combat_swimming','swim_fire',1,'infantry'))
+INSERT INTO modifier(source_def_id,target_tag_id,stat_key,op,value)
+ SELECT t.id, g.id, v.s, 'add', v.n FROM v JOIN def t ON t.key=v.t JOIN tag g ON g.key=v.g;
+-- The next free places of the dock's and the barracks' research pages.
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES
+ ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM def WHERE key='tech.swimming'),'research','research',2,2),
+ ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='tech.combat_swimming'),'research','research_2',1,2);
+
 COMMIT;

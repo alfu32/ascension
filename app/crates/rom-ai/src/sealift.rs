@@ -247,7 +247,7 @@ fn walkable(view: &View<'_>, units: &[&Entity], to: Pos) -> bool {
     let (mut yes, mut all) = (0, 0);
     for (type_id, (from, count)) in kinds {
         all += count;
-        if view.world.reachable(type_id, from, to) == Some(true) {
+        if crate::swimming::reaches(view, type_id, from, to) == Some(true) {
             yes += count;
         }
     }
@@ -710,8 +710,8 @@ fn ashore(plan: &mut Plan<'_>, memory: &mut Memory, ferry: &mut Army) {
     let mut orders: Vec<(EntityId, Pos)> = Vec::new();
     for e in members {
         let view = &plan.view;
-        let at_home =
-            rally.is_some_and(|r| view.world.reachable(e.type_id, e.pos, r) == Some(true));
+        let at_home = rally
+            .is_some_and(|r| crate::swimming::reaches(view, e.type_id, e.pos, r) == Some(true));
         if at_home {
             ferry.members.remove(&e.id.0);
             memory
@@ -726,7 +726,7 @@ fn ashore(plan: &mut Plan<'_>, memory: &mut Memory, ferry: &mut Army) {
             .enemies
             .values()
             .filter(|x| x.building && x.pos.body == e.pos.body)
-            .filter(|x| view.world.reachable(e.type_id, e.pos, x.pos) == Some(true))
+            .filter(|x| crate::swimming::reaches(view, e.type_id, e.pos, x.pos) == Some(true))
             .min_by_key(|x| (view.distance(e.pos, x.pos), x.pos.face, x.pos.x, x.pos.y))
             .map(|x| x.pos)
             .or(target);

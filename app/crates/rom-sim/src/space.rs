@@ -2,7 +2,7 @@
 
 use crate::{
     BodyId, Command, Entity, EntityId, MapGrid, Order, OrderStatus, PlayerId, Pos, SimError,
-    Topology, World, avoidance::Motion,
+    Topology, World,
 };
 use rom_rules::{BodyKind, ClaimMode, DefId, EntityClass, Layer, ProductionMode};
 use std::collections::{BTreeMap, BTreeSet};
@@ -159,9 +159,9 @@ impl World {
 
     pub(crate) fn leave_orbit(&mut self, id: EntityId) {
         if self.space.orbits.remove(&id).is_some() {
-            let e = self.entity(id).expect("orbit ship");
-            self.avoid
-                .set(id, Motion::of(&self.rules, e.type_id), e.pos);
+            let pos = self.entity(id).expect("orbit ship").pos;
+            let motion = self.motion_of(id);
+            self.avoid.set(id, motion, pos);
             self.refresh_viewer(id);
         }
     }
@@ -899,7 +899,6 @@ impl World {
                     .expect("arrival edge"),
             };
             entity.pos = pos;
-            let motion = Motion::of(&self.rules, entity.type_id);
             if let Some(mut order) = entity
                 .orders
                 .pop_front_if(|o| o.target_pos.is_some_and(|p| p.body == pos.body))
@@ -910,6 +909,7 @@ impl World {
             self.entities[id.0 as usize] = Some(entity);
             let slot = self.slot(pos.body);
             self.surfaces[slot].spatial.insert(id, pos);
+            let motion = self.motion_of(id);
             self.avoid.set(id, motion, pos);
             self.refresh_entity_stats(id);
             self.refresh_income(id);

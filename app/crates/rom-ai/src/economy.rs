@@ -595,7 +595,8 @@ pub(crate) fn unattended_wishes(
     }
 }
 
-/// The site with a free slot for `resource` nearest to a worker.
+/// The site with a free slot for `resource` nearest to a worker, among those it can get to
+/// (task 168: across shallow water once it swims).
 fn free_site(plan: &Plan<'_>, eco: &Economy, worker: &Entity, resource: DefId) -> Option<EntityId> {
     let view = &plan.view;
     eco.free
@@ -603,7 +604,12 @@ fn free_site(plan: &Plan<'_>, eco: &Economy, worker: &Entity, resource: DefId) -
         .filter(|(_, free)| **free > 0)
         .filter_map(|(site, _)| view.world.entity(*site))
         .filter(|site| {
-            site.pos.body == worker.pos.body && site_resource(view, site.type_id) == Some(resource)
+            site.pos.body == worker.pos.body
+                && site_resource(view, site.type_id) == Some(resource)
+                && view
+                    .world
+                    .reachable_for(view.me, worker.type_id, worker.pos, site.pos)
+                    != Some(false)
         })
         .min_by_key(|site| (view.distance(worker.pos, site.pos), site.id))
         .map(|site| site.id)

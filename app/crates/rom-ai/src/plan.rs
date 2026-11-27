@@ -460,10 +460,21 @@ impl<'a> Plan<'a> {
                 return Outcome::Impossible;
             }
         };
+        // A builder that can get there first (task 168: a swimmer reaches an island).
         let builder = builders
             .into_iter()
             .filter(|e| e.pos.body == site.body)
-            .min_by_key(|e| (!self.view.is_idle(e), self.view.distance(e.pos, site), e.id))
+            .min_by_key(|e| {
+                (
+                    self.view
+                        .world
+                        .reachable_for(self.view.me, e.type_id, e.pos, site)
+                        == Some(false),
+                    !self.view.is_idle(e),
+                    self.view.distance(e.pos, site),
+                    e.id,
+                )
+            })
             .map(|e| e.id);
         let Some(builder) = builder else {
             return Outcome::Impossible;

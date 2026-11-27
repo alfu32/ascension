@@ -2,7 +2,7 @@
 
 use crate::{
     BodyId, SimError,
-    avoidance::{Avoidance, Motion},
+    avoidance::Avoidance,
     construction::footprint,
     entity::{Entity, EntityId, Player, PlayerId},
     geometry::{Geometry, Topology},
@@ -141,6 +141,8 @@ pub struct World {
     pub(crate) alert: crate::alerts::AlertState,
     /// Stain lifetime and cap per surface, from the rules (task 80).
     pub(crate) stain_rules: crate::stains::StainRules,
+    /// Who swims where (task 168), derived from the rules.
+    pub(crate) swim: crate::swimming::SwimRules,
     /// Buildings pulled down by their owners this tick (no stain); empty between ticks.
     pub(crate) razed: Vec<EntityId>,
     /// Market constants from the rules; `None` when the rules have no complete set (task 107).
@@ -333,6 +335,7 @@ impl World {
         let shield = crate::shields::ShieldState::of(&rules);
         let fields = crate::fields::FieldState::of(&rules);
         let stain_rules = crate::stains::StainRules::of(&rules);
+        let swim = crate::swimming::SwimRules::of(&rules);
         // Rules with a market need a complete, valid set of market constants (task 107).
         let market_rules = crate::market::MarketRules::of(&rules);
         if market_rules.is_none() && rules.entity_types.values().any(|e| e.market.is_some()) {
@@ -388,6 +391,7 @@ impl World {
             strikes: Vec::new(),
             alert: crate::alerts::AlertState::default(),
             stain_rules,
+            swim,
             razed: Vec::new(),
             market_rules,
             market: BTreeMap::new(),
@@ -629,8 +633,9 @@ impl World {
         surface
             .pathing
             .occupy(et, pos.face, footprint(et, pos, facing), true, side);
-        self.avoid.set(id, Motion::of(&self.rules, type_id), pos);
-        if et.gather_site.is_some() {
+        let motion = self.motion_of(id);
+        self.avoid.set(id, motion, pos);
+        if self.rules.entity_types[&type_id].gather_site.is_some() {
             self.economy.sites.insert(id);
         }
         self.refresh_income(id);
@@ -666,10 +671,7 @@ impl World {
         );
         let after = &self.rules.entity_types[&new];
         pathing.occupy(after, pos.face, footprint(after, pos, facing), true, side);
-        let motion = self
-            .walks(id)
-            .then(|| Motion::of(&self.rules, new))
-            .flatten();
+        let motion = self.walks(id).then(|| self.motion_of(id)).flatten();
         self.avoid.set(id, motion, pos);
         if after.gather_site.is_some() {
             self.economy.sites.insert(id);
@@ -716,11 +718,7 @@ impl World {
             let from_slot = self.slot(from.body);
             self.surfaces[from_slot].spatial.remove(id, from);
             self.surfaces[slot].spatial.insert(id, to);
-            let entity = self.entity(id).expect("relocated entity");
-            let motion = self
-                .walks(id)
-                .then(|| Motion::of(&self.rules, entity.type_id))
-                .flatten();
+            let motion = self.walks(id).then(|| self.motion_of(id)).flatten();
             self.avoid.set(id, motion, to);
             self.refresh_viewer(id);
             return;

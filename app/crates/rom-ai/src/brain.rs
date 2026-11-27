@@ -430,6 +430,7 @@ impl Brain {
             &plan.view,
             &self.weights,
             &eco,
+            &memory.enemies,
             in_age,
             slip(&mut rng),
             &mut wishes,

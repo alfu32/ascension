@@ -231,6 +231,11 @@ impl World {
             .movement
             .as_ref()?
             .movement_class_id;
+        self.reachable_class(class, from, to)
+    }
+
+    /// [`World::reachable`] for a path class.
+    pub(crate) fn reachable_class(&self, class: u32, from: Pos, to: Pos) -> Option<bool> {
         let surface = self.surface(from.body)?;
         let a = surface.geo.pos_index(from)?;
         if from.body != to.body {

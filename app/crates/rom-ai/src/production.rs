@@ -473,7 +473,9 @@ pub(crate) fn rally_point(view: &View<'_>, moves: u32) -> Option<Pos> {
             view.world.terrain_at(*at).is_some_and(|t| {
                 let terrain = &view.rules.terrains[&t];
                 terrain.buildable && terrain.layer == Layer::Ground
-            }) && walker.is_none_or(|w| view.world.reachable(w.type_id, w.pos, *at) != Some(false))
+            }) && walker.is_none_or(|w| {
+                view.world.reachable_for(view.me, w.type_id, w.pos, *at) != Some(false)
+            })
                 // Inside own borders: enemy land wears waiting units down.
                 && view.world.territory_owner_on_body(
                     at.body,

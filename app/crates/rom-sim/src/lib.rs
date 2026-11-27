@@ -51,6 +51,7 @@ mod sphere_tests;
 mod stains;
 mod stance;
 mod surface;
+mod swimming;
 mod tactics;
 mod tally;
 mod territory;
