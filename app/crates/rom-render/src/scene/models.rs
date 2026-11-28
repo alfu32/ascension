@@ -316,6 +316,9 @@ pub(super) struct ModelGpu {
     pub(super) lockstep: bool,
     /// The index of the lift engine model drawn under a building in the air (task 170).
     engine: Option<usize>,
+    /// The index of the first drop-pod model (task 174), the others following it in the order
+    /// of `rom_kit::pods::drop_pods`.
+    pods: Option<usize>,
 }
 
 impl ModelGpu {
@@ -324,13 +327,16 @@ impl ModelGpu {
         if models.is_empty() {
             return None;
         }
-        // The lift engines come last, after every model of the rules (task 170).
+        // The lift engines come after every model of the rules (task 170), then the drop pods
+        // (task 174).
+        let ruled = models.len();
         let models: Vec<ModelLook> = models
             .iter()
             .cloned()
             .chain([rom_kit::engines::lift_engine()])
+            .chain(rom_kit::pods::drop_pods())
             .collect();
-        let engine = Some(models.len() - 1);
+        let (engine, pods) = (Some(ruled), Some(ruled + 1));
         let models = models.as_slice();
         let bakes: Vec<_> = models.iter().map(|look| bake_model(&look.spec)).collect();
         let rigs: Vec<&Rig> = bakes.iter().map(|b| &b.rig).collect();
@@ -385,6 +391,7 @@ impl ModelGpu {
             time: 0.0,
             lockstep: false,
             engine,
+            pods,
         })
     }
 
@@ -410,6 +417,11 @@ impl ModelGpu {
             list.clear();
         }
         for view in views {
+            // A unit falling from orbit is drawn as its drop pod (task 174).
+            if view.pod > 0.0 {
+                self.place_falling_pod(view, ground);
+                continue;
+            }
             let Some(model) = view.model else {
                 continue;
             };
@@ -529,6 +541,110 @@ impl ModelGpu {
                 progress: None,
             });
         }
+    }
+
+    /// The drop pod a unit falls from orbit in (task 174): white-hot shield down, turning,
+    /// drawn larger high up.
+    fn place_falling_pod(&mut self, view: &EntityView, ground: &dyn Footing) {
+        let frame = entity_frame(view, ground);
+        let pose = crate::pod_pose::falling(view.pod, view.id);
+        let team = crate::entities::owner_color(view.owner);
+        let phase = phase_of(view.id);
+        self.place_pod(
+            0,
+            &frame,
+            frame.origin,
+            pose.yaw_deg,
+            pose.size,
+            team,
+            phase,
+        );
+    }
+
+    /// The drop pods standing where they struck (task 174), from the impacts of `blasts`, the
+    /// game at `ticks_per_second`: hot for a moment, their petals folding out, then sinking.
+    pub(super) fn place_landed_pods(
+        &mut self,
+        blasts: &[crate::HudBlast],
+        ticks_per_second: u32,
+        ground: &dyn Footing,
+    ) {
+        let tps = ticks_per_second.max(1) as f32;
+        for blast in blasts.iter().filter(|b| b.pod) {
+            let Some(pose) = crate::pod_pose::landed(blast.age_ticks as f32 / tps) else {
+                continue;
+            };
+            let Some(meshes) = self
+                .pods
+                .and_then(|p| self.models.get(p + pose.model))
+                .and_then(Option::as_ref)
+            else {
+                continue;
+            };
+            let depth = (rom_kit::pods::DROP_POD_SINK + pose.sink * meshes.top) * meshes.scale;
+            let (x, y) = (blast.x as f32 / 1000.0, blast.y as f32 / 1000.0);
+            let frame = ground.frame(blast.face, x, y);
+            let origin = std::array::from_fn(|k| frame.origin[k] - frame.up[k] * depth);
+            let team = crate::entities::owner_color(blast.owner);
+            let phase = (blast.seed >> 8) as f32 / (1u32 << 24) as f32;
+            self.place_pod(pose.model, &frame, origin, 0.0, 1.0, team, phase);
+        }
+    }
+
+    /// Places pod model `which` (of `rom_kit::pods::drop_pods`) at `origin` on `frame`, turned
+    /// `yaw_deg`, `size` times its own size, in the owner colour `team`.
+    #[allow(clippy::too_many_arguments)]
+    fn place_pod(
+        &mut self,
+        which: usize,
+        frame: &crate::entities::GroundFrame,
+        origin: [f32; 3],
+        yaw_deg: f32,
+        size: f32,
+        team: [f32; 3],
+        phase: f32,
+    ) {
+        let Some(index) = self.pods.map(|p| p + which) else {
+            return;
+        };
+        let Some(Some(meshes)) = self.models.get(index) else {
+            return;
+        };
+        let s = meshes.scale * size;
+        let (h, u) = (heading_of(frame, yaw_deg), frame.up);
+        let x = [
+            u[1] * h[2] - u[2] * h[1],
+            u[2] * h[0] - u[0] * h[2],
+            u[0] * h[1] - u[1] * h[0],
+        ];
+        let transform = Matrix {
+            m0: x[0] * s,
+            m1: x[1] * s,
+            m2: x[2] * s,
+            m3: team[0],
+            m4: u[0] * s,
+            m5: u[1] * s,
+            m6: u[2] * s,
+            m7: team[1],
+            m8: h[0] * s,
+            m9: h[1] * s,
+            m10: h[2] * s,
+            m11: team[2],
+            m12: origin[0],
+            m13: origin[1],
+            m14: origin[2],
+            m15: 1.0,
+        };
+        self.casters[index].push(transform);
+        let phase = if self.lockstep { 0.0 } else { phase };
+        self.placed.push(Placed {
+            model: index,
+            transform: Matrix {
+                m15: Activity::Idle.index() as f32 + phase.min(0.999),
+                ..transform
+            },
+            progress: None,
+        });
     }
 
     /// Sorts this frame's finished models into near and far lists for an eye at `eye`.

@@ -250,12 +250,17 @@ not depend on the age). Every part has a name inside its model, so a part is
 `bld.temple@classical/roof`. Ids are printed under each model in the gallery
 and on the review page; use them in instructions.
 
-1. **Gallery in the game.** `--gallery <age|key|units|all>` lays the models
+1. **Gallery in the game.** `--gallery <age|key|units|kit|all>` lays the models
    out in a grid on plain ground, labelled with their ids (units turned
    three-quarters to the camera); `--model <id>` shows one model from four
    angles; `--parts` labels each part; `--pose <idle|move|attack|work>` sets
    what the units do and `--anim-time <seconds>` stops the motion at that
-   moment of every cycle. All work with `--screenshot`.
+   moment of every cycle. All work with `--screenshot`. `kit` shows the part
+   kit's own models, which no entity has and no `db/models` file holds: the
+   drop pod of task 174 (`kit.drop_pod_hot` falling, `kit.drop_pod` closed,
+   its opening stages, `kit.drop_pod_open`), built in `rom-kit/src/pods.rs`
+   and drawn by the renderer in place of a unit falling from orbit and where
+   it lands.
 2. **Review page.** The orchestrator publishes a private page with every
    model: its pictures, part list, parameters and status (draft, needs work,
    approved). Comment per model there or in chat, using the ids.

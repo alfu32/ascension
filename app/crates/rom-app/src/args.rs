@@ -10,7 +10,7 @@ pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <f
 [--sun <orbit|fixed|low|midnight>] [--graticule <on|off>] [--grass <on|off>] [--detail <min|medium|max|ultra>] [--projectiles <on|off>] [--look-at <terrain>[+<terrain>][,<distance>]] \
 [--mute] [--volume <percent>] [--music-volume <percent>] [--units-volume <percent>] [--buildings-volume <percent>] [--environment-volume <percent>] [--announcements-volume <percent>] [--mute-unfocused <on|off>] \
 [--middle-drag <turn|pan>] [--invert-horizontal-turn] [--invert-vertical-turn] \
-[--gallery <all|units|age|entity key|model id>] [--gallery-view <game|front|side|top|close>] [--team <n>] \
+[--gallery <all|units|kit|age|entity key|model id>] [--gallery-view <game|front|side|top|close>] [--team <n>] \
 [--model <model id>] [--parts] [--pose <idle|move|attack|work>] [--anim-time <seconds>] \
 [--gallery-manifest <file.json>] [--script <file>] \
 [--host <port>] [--remote-players <n>] [--connect <http(s)://url>] [--key <key>] [--token <token>] [--name <name>] [--serve] [--bind <address>] \

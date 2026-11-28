@@ -859,7 +859,10 @@ fn instances_on(
         let frame = entity_frame(view, ground);
         let base = ground.height_at(view.face, view.x, view.y);
         let body_start = out.len();
-        let top = if let Some(model) = view.model {
+        let top = if view.pod > 0.0 {
+            // Falling from orbit: the drop pod model stands for it (task 174).
+            unit_height(view)
+        } else if let Some(model) = view.model {
             push_model_base(view, &frame, model, out)
         } else if view.building && drawn_as_objects(view.kind) {
             push_plot(view, &frame, out)

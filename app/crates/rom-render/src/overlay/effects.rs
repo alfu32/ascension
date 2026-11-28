@@ -433,14 +433,12 @@ fn draw_blast(
     }
 }
 
-/// Seconds an opened drop pod stays on the ground, the last of them fading (task 169).
-const POD_SECS: f32 = 6.0;
 /// Seconds the hard flash of a pod's impact lasts.
 const POD_FLASH_SECS: f32 = 0.35;
 /// Seconds the ring of dust takes to roll out.
 const POD_DUST_SECS: f32 = 1.6;
-/// Seconds the pod takes to open, after it struck.
-const POD_OPEN: (f32, f32) = (0.5, 1.3);
+/// Tiles above the ground the smoke of a cooling pod starts from: its shield's rim (task 174).
+const POD_RIM: f32 = 0.3;
 /// Tiles of fire behind a falling pod at the end of its fall, and of smoke above that.
 const POD_FIRE: f32 = 8.0;
 const POD_SMOKE: f32 = 14.0;
@@ -718,28 +716,35 @@ fn draw_pod_impact(
             );
         }
     }
-    // The pod: a squat hull whose four petals swing open, hot at first, cooling to grey.
-    if t < POD_SECS {
-        let fade = ((POD_SECS - t) / 1.0).clamp(0.0, 1.0);
-        let open = ((t - POD_OPEN.0) / (POD_OPEN.1 - POD_OPEN.0)).clamp(0.0, 1.0);
-        let angle = ease_out(open) * 1.1;
-        let hot = (1.0 - t / 2.5).clamp(0.0, 1.0);
-        let colour = mix([78, 80, 88], [255, 130, 50], hot * 0.8);
-        let half = 0.4;
-        let length = 0.9;
-        let sides = [
-            (frame.ex, frame.ey),
-            (frame.ey, frame.ex),
-            (frame.ex.map(|v| -v), frame.ey),
-            (frame.ey.map(|v| -v), frame.ex),
-        ];
-        for (n, side) in sides {
-            let base = add(frame.origin, n, half);
-            let (a, b) = (add(base, side, -half), add(base, side, half));
-            let reach: [f32; 3] =
-                std::array::from_fn(|i| frame.up[i] * angle.cos() + n[i] * angle.sin());
-            let tip = |p: [f32; 3]| add(add(p, reach, length), frame.up, 0.02);
-            out.quad([a, b, tip(b), tip(a)], rgba(colour, fade));
+    // The pod itself is a model (task 174); it cools, wisps of smoke curling up from its hot
+    // shield while it stands there.
+    let standing = crate::pod_pose::POD_SECS - crate::pod_pose::SINK_SECS;
+    if t < standing {
+        let cooling = 1.0 - t / standing;
+        for i in 0..4u32 {
+            // Each wisp rises and widens over a cycle of its own, then starts again.
+            let cycle = 1.6 + 0.6 * noise(blast.seed, 500 + i);
+            let k = ((t + cycle * noise(blast.seed, 520 + i)) / cycle).fract();
+            let angle = noise(blast.seed, 540 + i) * std::f32::consts::TAU;
+            let drift = 0.25 + 0.5 * k;
+            let base = add(
+                at(drift * angle.cos(), drift * angle.sin(), 0.0),
+                frame.up,
+                POD_RIM * (1.0 + noise(blast.seed, 560 + i)) + 2.2 * k,
+            );
+            let size = 0.45 + 0.8 * k;
+            puff(
+                out,
+                base,
+                right,
+                frame.up,
+                size,
+                size * 1.2,
+                rgba(
+                    mix([96, 90, 86], [150, 146, 140], k),
+                    0.75 * cooling * (1.0 - k * k),
+                ),
+            );
         }
     }
 }
@@ -907,6 +912,7 @@ mod tests {
             age_ticks,
             seed: 7,
             pod: false,
+            owner: 1,
         }
     }
 
@@ -944,8 +950,9 @@ mod tests {
         assert!(reach(&wave) > 8.0, "{}", reach(&wave));
     }
 
-    /// Task 169: a drop pod's impact flashes and throws dust, its open petals stay a few
-    /// seconds and nothing is left after the scorch; no fireball rises like a blast's.
+    /// Task 169: a drop pod's impact flashes and throws dust, the pod (a model, task 174)
+    /// smokes for a few seconds and nothing is left after the scorch; no fireball rises like a
+    /// blast's.
     #[test]
     fn a_pod_strikes_opens_and_fades() {
         let pod = |age_ticks| HudBlast {
@@ -957,7 +964,7 @@ mod tests {
         let opened = drawn(&hud(vec![pod(40)], Vec::new()));
         let gone = drawn(&hud(vec![pod(400)], Vec::new()));
         assert!(fresh.tris.len() > opened.tris.len());
-        // The petals stand out of the ground once open.
+        // Smoke curls up above the cooling pod.
         let top = |o: &OverlayGeometry| {
             o.tris
                 .iter()
@@ -965,7 +972,7 @@ mod tests {
                 .map(|p| p[1])
                 .fold(0.0, f32::max)
         };
-        assert!(top(&opened) > 0.3, "{}", top(&opened));
+        assert!(top(&opened) > 1.2, "{}", top(&opened));
         assert!(gone.tris.is_empty());
         // Smaller than a bombardment: nothing reaches past four tiles once the flash is over.
         let reach = |o: &OverlayGeometry| {
