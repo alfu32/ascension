@@ -1037,13 +1037,14 @@ impl Controller {
                 modifiers,
                 double,
                 on_screen,
+                place,
                 ..
             } => self.click(
                 world,
                 self.pos_of(surface),
                 entity,
                 modifiers,
-                double,
+                (double, place),
                 &on_screen,
             ),
             PickEvent::BoxSelect {
@@ -1117,13 +1118,16 @@ impl Controller {
         }
     }
 
+    /// A left click: `double` is the second of a double click, `place` a hit on a place in
+    /// space (a planet, a star, a system, a cluster or a route's end), which never changes the
+    /// selection (task 176).
     fn click(
         &mut self,
         world: &mut OrderSink<'_>,
         at: Pos,
         entity: Option<u32>,
         mods: Modifiers,
-        double: bool,
+        (double, place): (bool, bool),
         on_screen: &[u32],
     ) {
         let me = self.me();
@@ -1216,7 +1220,9 @@ impl Controller {
             return;
         }
         let Some(id) = entity.map(EntityId) else {
-            if !mods.shift {
+            // Empty space or ground clears the selection; a place in space keeps it, so its
+            // double click can fly the camera there with the ships still in hand.
+            if !mods.shift && !place {
                 self.set_selection(Vec::new());
             }
             return;

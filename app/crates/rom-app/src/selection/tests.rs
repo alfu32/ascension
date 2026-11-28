@@ -107,6 +107,7 @@ impl Fx {
                 },
                 double: false,
                 on_screen: Vec::new(),
+                place: false,
             },
         );
     }
@@ -120,6 +121,7 @@ impl Fx {
                 modifiers: Modifiers::default(),
                 double: false,
                 on_screen: Vec::new(),
+                place: false,
             },
         );
     }
@@ -232,6 +234,7 @@ fn click_and_shift_click_selection() {
             modifiers: Modifiers::default(),
             double: true,
             on_screen: vec![a.0, b.0, c.0, foe.0],
+            place: false,
         },
     );
     assert_eq!(ids(&fx), vec![a.0, b.0, c.0]);
@@ -302,6 +305,7 @@ fn box_takes_medics_and_supply_carts_with_soldiers_not_workers() {
             on_screen: vec![
                 soldier.0, medic.0, wagon.0, citizen.0, priest.0, archer.0, other.0,
             ],
+            place: false,
         },
     );
     assert_eq!(ids(&fx), vec![soldier.0, medic.0, wagon.0, other.0]);
@@ -315,6 +319,7 @@ fn box_takes_medics_and_supply_carts_with_soldiers_not_workers() {
             modifiers: Modifiers::default(),
             double: true,
             on_screen: vec![soldier.0, medic.0, wagon.0],
+            place: false,
         },
     );
     assert_eq!(ids(&fx), vec![medic.0]);
@@ -1093,6 +1098,7 @@ fn right_click_on_a_body_orders_orbit_and_on_a_system_orders_travel() {
             modifiers: Modifiers::default(),
             double: false,
             on_screen: Vec::new(),
+            place: false,
         },
     );
     assert_eq!(ctl.selection(), &[ship]);
@@ -1269,6 +1275,127 @@ fn right_click_in_another_system_orders_travel_to_that_point() {
     let order = front(&game.world);
     assert_eq!(order.kind, "travel");
     assert_eq!(order.target_pos, game.world.body_position(planet));
+}
+
+/// Task 176: a single or a double click on a place in space (a planet, a star, a system, a
+/// cluster or a route's end, which the space pick marks `place`) keeps a selection of ships, and
+/// so does the camera's flight there; after it a right click on that far system sends the ships.
+/// A click on empty space clears the selection.
+#[test]
+fn focusing_a_place_in_space_keeps_the_selection() {
+    let (content, mut game) = crate::match_setup::universe_game_for_tests();
+    let home = game.world.home_body(PLAYER).expect("home");
+    let system = game.world.body(home).unwrap().system;
+    let ship_type = game.world.rules().id_of("unit.survey_ship").unwrap();
+    let star = game.world.space_of(system).unwrap();
+    let mut at = game.world.body_position(star).unwrap();
+    at.x += 4000;
+    let a = game.world.spawn(ship_type, PLAYER, at).unwrap();
+    at.y += 1000;
+    let b = game.world.spawn(ship_type, PLAYER, at).unwrap();
+    game.world.step();
+    let far = content
+        .universe
+        .routes
+        .iter()
+        .find_map(|r| {
+            (r.system_a == system)
+                .then_some(r.system_b)
+                .or((r.system_b == system).then_some(r.system_a))
+        })
+        .unwrap();
+    let mut ctl = Controller::new();
+    let view_of = |system: u32| ViewCtx {
+        planet: home,
+        system: Some(system),
+        in_space: true,
+        frame: crate::space_view::SpaceFrame::of(&game.world, system),
+    };
+    let (here, there) = (view_of(system), view_of(far));
+    ctl.set_view(here);
+    let select = |ctl: &mut Controller, world: &mut World| {
+        ctl.handle(
+            world,
+            PickEvent::BoxSelect {
+                entities: vec![a.0, b.0],
+                modifiers: Modifiers::default(),
+            },
+        );
+        assert_eq!(ctl.selection(), &[a, b]);
+    };
+    select(&mut ctl, &mut game.world);
+    let click = |double: bool, place: bool| PickEvent::Click {
+        world_point: (30.0, -20.0),
+        surface: SurfacePos {
+            face: 0,
+            x: 30_000,
+            y: -20_000,
+        },
+        entity: None,
+        modifiers: Modifiers::default(),
+        double,
+        on_screen: if double { vec![a.0, b.0] } else { Vec::new() },
+        place,
+    };
+    // A planet, a star, a cluster and a route's end are each a place to the pick: neither the
+    // first click of a double click nor the second takes the ships from the hand.
+    for place in ["planet", "star", "cluster", "route end"] {
+        ctl.handle(&mut game.world, click(false, true));
+        assert_eq!(ctl.selection(), &[a, b], "single click on a {place}");
+        ctl.handle(&mut game.world, click(true, true));
+        assert_eq!(ctl.selection(), &[a, b], "double click on a {place}");
+    }
+    // The camera flies to the far system: the ships stay selected and listed, out of view.
+    ctl.set_view(there);
+    game.world.step();
+    assert_eq!(ctl.selection(), &[a, b]);
+    let mut hud = HudSnapshot::default();
+    ctl.fill(&game.world, &mut hud);
+    assert_eq!(hud.selected, vec![a.0, b.0]);
+    assert!(matches!(
+        hud.selection,
+        HudSelection::Multiple { total: 2, .. }
+    ));
+    // A right click on that system sends them there.
+    ctl.handle(
+        &mut game.world,
+        PickEvent::SpaceRightClick {
+            surface: SurfacePos {
+                face: 0,
+                x: 0,
+                y: 0,
+            },
+            entity: None,
+            body: None,
+            system: Some(far),
+            modifiers: Modifiers::default(),
+        },
+    );
+    game.world.step();
+    for ship in [a, b] {
+        let order = game
+            .world
+            .entity(ship)
+            .unwrap()
+            .orders()
+            .front()
+            .cloned()
+            .unwrap();
+        assert_eq!(order.kind, "travel");
+        assert_eq!(
+            order.target_pos.unwrap().body,
+            game.world.space_of(far).unwrap()
+        );
+    }
+    // A click on empty space clears the selection; Shift keeps it.
+    let mut shifted = click(false, false);
+    if let PickEvent::Click { modifiers, .. } = &mut shifted {
+        modifiers.shift = true;
+    }
+    ctl.handle(&mut game.world, shifted);
+    assert_eq!(ctl.selection(), &[a, b]);
+    ctl.handle(&mut game.world, click(false, false));
+    assert!(ctl.selection().is_empty());
 }
 
 fn pos_of(surface: SurfacePos) -> Pos {
@@ -3617,6 +3744,7 @@ fn the_own_capital_is_marked_from_the_first_tick_and_an_unknown_one_is_not() {
             modifiers: Modifiers::default(),
             double: false,
             on_screen: Vec::new(),
+            place: false,
         },
     );
     let mut hud = HudSnapshot::default();
@@ -4403,6 +4531,7 @@ fn the_ghost_turns_with_r_shift_r_and_ctrl_wheel_and_the_order_carries_it() {
             },
             double: false,
             on_screen: Vec::new(),
+            place: false,
         },
     );
     fx.step(1);
@@ -4743,6 +4872,7 @@ fn a_building_lifts_off_flies_and_lands_through_the_palette() {
             modifiers: Modifiers::default(),
             double: false,
             on_screen: Vec::new(),
+            place: false,
         },
     );
     assert!(fx.ctl.placement.is_none());
@@ -4860,6 +4990,7 @@ fn a_building_flies_to_another_planet_from_the_system_view_and_lands_there() {
             modifiers: Modifiers::default(),
             double: false,
             on_screen: Vec::new(),
+            place: false,
         },
     );
     assert_eq!(fx.ctl.selection(), &[barracks]);
@@ -4952,6 +5083,7 @@ fn a_building_flies_to_another_planet_from_the_system_view_and_lands_there() {
             modifiers: Modifiers::default(),
             double: false,
             on_screen: Vec::new(),
+            place: false,
         },
     );
     assert!(fx.ctl.placement.is_none());

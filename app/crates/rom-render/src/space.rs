@@ -1501,10 +1501,17 @@ pub struct SpaceContext<'a> {
     /// Pixels beyond a ship's pick box that still take it ([`crate::PICK_SLACK`] at the HUD's
     /// scale).
     pub slack: f32,
+    /// The camera, whose [`crate::zoom::ZoomCamera::target_at`] finds the place under the
+    /// pointer exactly as a double click does; without it, the nearest of `markers`.
+    pub zoom: Option<&'a crate::zoom::ZoomCamera>,
 }
 
 impl SpaceContext<'_> {
+    /// The place under `cursor` that a double click would fly to.
     fn target_at(&self, cursor: (f32, f32)) -> Option<Target> {
+        if let Some(zoom) = self.zoom {
+            return zoom.target_at(&self.view, cursor.0, cursor.1);
+        }
         let rects: Vec<(f32, f32, f32)> = self.markers.iter().map(|m| m.1).collect();
         crate::zoom::nearest_marker(&rects, cursor).map(|i| self.markers[i].0)
     }
@@ -1627,7 +1634,7 @@ impl SpacePicker {
             } => {
                 self.pointer = Some((x, y));
                 if let Some(press) = self.press.take() {
-                    out.push(self.finish(press, ctx, (x, y), mods, now_ms));
+                    out.extend(self.finish(press, ctx, (x, y), mods, now_ms));
                 }
             }
             InputEvent::ReleaseAll => self.press = None,
@@ -1667,7 +1674,7 @@ impl SpacePicker {
         (x, y): (f32, f32),
         mods: Modifiers,
         now_ms: u64,
-    ) -> PickEvent {
+    ) -> Option<PickEvent> {
         let mods = Modifiers {
             shift: mods.shift || press.mods.shift,
             ctrl: mods.ctrl || press.mods.ctrl,
@@ -1681,21 +1688,27 @@ impl SpacePicker {
                 (x - press.x).abs(),
                 (y - press.y).abs(),
             );
-            return PickEvent::BoxSelect {
+            return Some(PickEvent::BoxSelect {
                 entities: ships_in_rect(&ctx.view, ctx.ships, rect),
                 modifiers: mods,
-            };
+            });
         }
+        // A click on a place in space keeps the selection (task 176): its double click flies
+        // the camera there, and the selected ships wait for a right click.
+        let place = ctx.target_at((x, y)).is_some();
         if ctx.star_map {
             // On the star map a click takes the ships of the mark under it: a ship between
-            // systems, or the fleet beside a system.
-            let entities = ctx
-                .ship_at((x, y))
-                .map_or_else(Vec::new, |id| ctx.mark_of(id));
-            return PickEvent::BoxSelect {
+            // systems, or the fleet beside a system. A click on a system, a cluster or a
+            // route's end with no ship there gives nothing.
+            let ship = ctx.ship_at((x, y));
+            if ship.is_none() && place {
+                return None;
+            }
+            let entities = ship.map_or_else(Vec::new, |id| ctx.mark_of(id));
+            return Some(PickEvent::BoxSelect {
                 entities,
                 modifiers: mods,
-            };
+            });
         }
         let double = self.last_click.is_some_and(|(at, lx, ly)| {
             now_ms.saturating_sub(at) <= DOUBLE_CLICK_MS && (lx - x).hypot(ly - y) <= DRAG_PIXELS
@@ -1708,14 +1721,15 @@ impl SpacePicker {
         } else {
             Vec::new()
         };
-        PickEvent::Click {
+        Some(PickEvent::Click {
             world_point: point,
             surface: surface_of(point),
             entity: ctx.ship_at((x, y)),
             modifiers: mods,
             double,
             on_screen,
-        }
+            place,
+        })
     }
 }
 
@@ -2298,6 +2312,7 @@ mod tests {
             scene: &scene,
             outermost,
             slack: 0.0,
+            zoom: None,
         };
         let mut picker = SpacePicker::default();
         let (x, y) = at(10);
@@ -2395,6 +2410,128 @@ mod tests {
                 entity: Some(10),
                 ..
             }]
+        ));
+    }
+
+    /// Task 176: a click on a place in space (a planet, a star, a system, a cluster or a route's
+    /// end) is told apart from a click on empty space, so it keeps the selection; on the star
+    /// map it gives nothing at all.
+    #[test]
+    fn a_click_on_a_place_is_told_from_empty_space() {
+        let click = |picker: &mut SpacePicker, ctx: &SpaceContext, (x, y): (f32, f32), t: u64| {
+            let mods = Modifiers::default();
+            let button = PointerButton::Left;
+            let mut out = picker.handle(InputEvent::ButtonDown { button, x, y, mods }, ctx, t);
+            out.extend(picker.handle(InputEvent::ButtonUp { button, x, y, mods }, ctx, t + 5));
+            out
+        };
+        // The system level: the star and a planet of system 1.
+        let scene = sample_scene();
+        let placed = scene.place_system(1);
+        let view = View::looking(
+            [0.0, 7000.0, 6000.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            (1280.0, 720.0),
+            0.0,
+        );
+        let markers: Vec<_> = placed
+            .iter()
+            .filter_map(|p| {
+                let (x, y, _) = view.project(p.pos)?;
+                Some((Target::Body(p.body), (x, y, 12.0)))
+            })
+            .collect();
+        let ctx = SpaceContext {
+            view,
+            star_map: false,
+            ships: &[],
+            markers: &markers,
+            scene: &scene,
+            outermost: scene.system_outermost(1),
+            slack: 0.0,
+            zoom: None,
+        };
+        let pixel_of = |id: u32| {
+            let p = placed
+                .iter()
+                .find(|p| scene.bodies[p.body].id == id)
+                .unwrap();
+            let (x, y, _) = view.project(p.pos).unwrap();
+            (x, y)
+        };
+        let mut picker = SpacePicker::default();
+        for (body, t) in [(1, 0), (2, 1000)] {
+            // A single click, then the second click of a double click.
+            let first = click(&mut picker, &ctx, pixel_of(body), t);
+            let second = click(&mut picker, &ctx, pixel_of(body), t + 100);
+            assert!(
+                matches!(
+                    first.as_slice(),
+                    [PickEvent::Click {
+                        entity: None,
+                        double: false,
+                        place: true,
+                        ..
+                    }]
+                ),
+                "body {body}: {first:?}"
+            );
+            assert!(
+                matches!(
+                    second.as_slice(),
+                    [PickEvent::Click {
+                        entity: None,
+                        double: true,
+                        place: true,
+                        ..
+                    }]
+                ),
+                "body {body}: {second:?}"
+            );
+        }
+        let empty = click(&mut picker, &ctx, (20.0, 700.0), 5000);
+        assert!(matches!(
+            empty.as_slice(),
+            [PickEvent::Click {
+                entity: None,
+                place: false,
+                ..
+            }]
+        ));
+        // The star map: a system, and a route's end toward another cluster.
+        let view = View::looking(
+            [0.0, 60_000.0, 40_000.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            (1280.0, 720.0),
+            0.0,
+        );
+        let positions = scene.place_systems();
+        let (sx, sy, _) = view.project(positions[1]).unwrap();
+        let markers = [
+            (Target::System(1), (sx, sy, 14.0)),
+            (Target::Cluster(1), (640.0, 60.0, 14.0)),
+        ];
+        let ctx = SpaceContext {
+            view,
+            star_map: true,
+            ships: &[],
+            markers: &markers,
+            scene: &scene,
+            outermost: 1.0,
+            slack: 0.0,
+            zoom: None,
+        };
+        let mut picker = SpacePicker::default();
+        for (at, t) in [((sx, sy), 0), ((640.0, 60.0), 1000)] {
+            assert!(click(&mut picker, &ctx, at, t).is_empty(), "{at:?}");
+            assert!(click(&mut picker, &ctx, at, t + 100).is_empty(), "{at:?}");
+        }
+        let empty = click(&mut picker, &ctx, (20.0, 700.0), 5000);
+        assert!(matches!(
+            empty.as_slice(),
+            [PickEvent::BoxSelect { entities, .. }] if entities.is_empty()
         ));
     }
 
@@ -2654,6 +2791,7 @@ mod tests {
             scene: &scene,
             outermost: 1.0,
             slack: 0.0,
+            zoom: None,
         };
         let (x, y, _) = view.project(positions[1]).unwrap();
         let mut picker = SpacePicker::default();

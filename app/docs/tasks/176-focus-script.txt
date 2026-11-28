@@ -1,0 +1,15 @@
+# Task 176, replayed by --script in --universe mode (--ai none, seed 1, --view cluster,home): a
+# fleet of player one is placed in its home system (Beta Trianguli) and selected; in the cluster
+# view a single click on Algol, then a double click on Gamma Trianguli, which flies the camera
+# there. The selection panel still lists the four ships, out of view in the home system.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun fixed --view cluster,home \
+#     --size 1280x800 --script app/docs/tasks/176-focus-script.txt --after 8 \
+#     --screenshot app/docs/img/176-focus-keeps-selection.png
+0 grant-age age.expansion
+0 place-space 1 unit.corvette -40,30
+0 place-space 1 unit.corvette -36,30
+0 place-space 1 unit.space_frigate -40,34
+0 place-space 1 unit.battleship -34,35
+2 ships
+20 cam click 700,105
+40 cam dblclick 605,448

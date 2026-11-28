@@ -646,6 +646,7 @@ fn parse_line(
                     modifiers,
                     double,
                     on_screen: Vec::new(),
+                    place: false,
                 }
             } else {
                 PickEvent::RightClick {
@@ -1079,6 +1080,7 @@ pub fn live_pick(
                 modifiers,
                 double: false,
                 on_screen: Vec::new(),
+                place: false,
             }
         });
     }
@@ -1212,6 +1214,7 @@ pub fn live_pick(
             modifiers,
             double: false,
             on_screen: Vec::new(),
+            place: false,
         }
     })
 }
