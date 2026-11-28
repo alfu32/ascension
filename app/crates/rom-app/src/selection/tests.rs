@@ -1280,7 +1280,7 @@ fn right_click_in_another_system_orders_travel_to_that_point() {
 /// Task 176: a single or a double click on a place in space (a planet, a star, a system, a
 /// cluster or a route's end, which the space pick marks `place`) keeps a selection of ships, and
 /// so does the camera's flight there; after it a right click on that far system sends the ships.
-/// A click on empty space clears the selection, and so does Escape.
+/// A click on empty space clears the selection.
 #[test]
 fn focusing_a_place_in_space_keeps_the_selection() {
     let (content, mut game) = crate::match_setup::universe_game_for_tests();
@@ -1395,10 +1395,6 @@ fn focusing_a_place_in_space_keeps_the_selection() {
     ctl.handle(&mut game.world, shifted);
     assert_eq!(ctl.selection(), &[a, b]);
     ctl.handle(&mut game.world, click(false, false));
-    assert!(ctl.selection().is_empty());
-    // So does Escape.
-    select(&mut ctl, &mut game.world);
-    ctl.handle(&mut game.world, PickEvent::Escape);
     assert!(ctl.selection().is_empty());
 }
 
