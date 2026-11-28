@@ -19,7 +19,7 @@ exclude = ["vendor"]
 resolver = "3"
 
 [workspace.package]
-version = "0.160.0"
+version = "0.160.1"
 edition = "2024"
 rust-version = "1.99.1"
 license = "LicenseRef-Ascension-All-Rights-Reserved"  # see ../LICENSE (owner, 2026-11-28)
