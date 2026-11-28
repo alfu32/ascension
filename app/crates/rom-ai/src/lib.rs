@@ -9,7 +9,9 @@
 //! It runs a civilisation (perception, opening book, economy, construction, research and
 //! production), fights with armies (defence, attack, raids, scouting, siege, formations) and,
 //! from the starfaring ages, flies: survey ships claim resource bodies, warships escort and
-//! contest them and attack enemy orbits, transports carry armies and found colonies.
+//! contest them and attack enemy orbits, transports carry armies and found colonies; a scout
+//! ship looks over the other worlds, and transports invade the enemy worlds it finds with force
+//! enough for what was seen there (task 173).
 //! Where an enemy can be reached by water, a naval manager keeps a small navy (task 97); where
 //! it can be reached only over water on the same planet, a sea lift carries the army across
 //! (task 167).
@@ -29,6 +31,7 @@ mod fleet;
 mod formations;
 mod fortify;
 pub mod governor;
+mod invasion;
 mod jetpacks;
 mod market;
 mod memory;
@@ -41,6 +44,7 @@ mod rebuild;
 mod research;
 mod sealift;
 mod sites;
+mod survey;
 mod swimming;
 mod view;
 

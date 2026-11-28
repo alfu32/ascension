@@ -98,6 +98,11 @@ fn soldier(rules: &Rules) -> DefId {
 /// city, five builders, a dock on the shore and twelve soldiers; player two's east with a city
 /// and five builders. Only player one has a brain.
 fn strait(rules: &Arc<Rules>, seed: u64) -> (World, Brain) {
+    strait_at(rules, seed, WATER)
+}
+
+/// The world of `strait` with the water in the columns `water`.
+fn strait_at(rules: &Arc<Rules>, seed: u64, water: (i32, i32)) -> (World, Brain) {
     let city_type = rules
         .entity_types
         .values()
@@ -134,8 +139,8 @@ fn strait(rules: &Arc<Rules>, seed: u64) -> (World, Brain) {
         .collect();
     let mut terrain = vec![ground; (SIDE * SIDE) as usize];
     for y in 0..SIDE {
-        for x in WATER.0..WATER.1 {
-            let shore = x < WATER.0 + SHALLOWS || x >= WATER.1 - SHALLOWS;
+        for x in water.0..water.1 {
+            let shore = x < water.0 + SHALLOWS || x >= water.1 - SHALLOWS;
             terrain[(y * SIDE + x) as usize] = if shore { shallows } else { deep };
         }
     }
@@ -204,7 +209,7 @@ fn strait(rules: &Arc<Rules>, seed: u64) -> (World, Brain) {
         }
     }
     world
-        .place_for_setup(dock, ME, Pos::flat((WATER.0 - 2) * 1000, 48_000))
+        .place_for_setup(dock, ME, Pos::flat((water.0 - 2) * 1000, 48_000))
         .unwrap();
     for i in 0..12 {
         let at = Pos::flat(24_500 + (i % 4) * 1500, 52_500 + (i / 4) * 1500);
@@ -216,12 +221,17 @@ fn strait(rules: &Arc<Rules>, seed: u64) -> (World, Brain) {
 
 /// Player one's units a sea transport carries that stand on the enemy's shore.
 fn across(world: &World) -> usize {
+    across_from(world, WATER.1)
+}
+
+/// Player one's units standing east of the column `shore`.
+fn across_from(world: &World, shore: i32) -> usize {
     world
         .entities()
         .filter(|e| {
             e.owner == ME
                 && e.container_id.is_none()
-                && e.pos.x >= WATER.1 * 1000
+                && e.pos.x >= shore * 1000
                 && world.rules().entity_types[&e.type_id].class == EntityClass::Unit
         })
         .count()
@@ -266,6 +276,36 @@ fn the_army_is_carried_over_the_strait_to_an_enemy_it_cannot_walk_to() {
             .map_or(0, |(_, a)| a.members.len());
         assert!(ferried >= 6, "{ferried} in the sea lift's army");
         world.hash()
+    };
+    assert_eq!(run(), run());
+}
+
+/// Task 173: without sight of the enemy, the sea lift searches the coasts; the enemy lives
+/// inland, out of sight from the sea, so the transport sets a soldier ashore on the far coast,
+/// which finds the enemy on foot. The same match twice gives equal hashes.
+#[test]
+fn the_sea_search_sets_a_soldier_ashore_that_finds_an_inland_enemy() {
+    let rules = common::rules();
+    let run = || {
+        // The shores off the edges of the map cells the search looks at.
+        let (mut world, mut brain) = strait_at(&rules, 5, (37, 53));
+        let mut ashore = None;
+        let mut found = None;
+        while world.tick() < 30_000 && found.is_none() {
+            brain.step(&mut world);
+            world.step();
+            if ashore.is_none() && across_from(&world, 53) > 0 {
+                ashore = Some(world.tick());
+            }
+            if brain.known_enemies().any(|(_, e)| e.owner == PlayerId(2)) {
+                found = Some(world.tick());
+            }
+        }
+        let ashore = ashore.unwrap_or_else(|| panic!("nobody ashore by tick {}", world.tick()));
+        let found =
+            found.unwrap_or_else(|| panic!("no sight of the enemy by tick {}", world.tick()));
+        assert!(ashore <= found, "set ashore at {ashore}, found at {found}");
+        (found, world.hash())
     };
     assert_eq!(run(), run());
 }

@@ -106,6 +106,98 @@ pub struct PlayerResult {
     pub sea: SeaLift,
     /// Task 169: its units' jumps and drops from orbit.
     pub leaps: Leaps,
+    /// Task 173: when it learnt of the enemy, at home and on other worlds, and invaded.
+    pub explore: Exploration,
+    /// Its cities at the end.
+    pub cities_left: usize,
+    /// Its status at the end.
+    pub status: Option<rom_sim::PlayerStatus>,
+}
+
+/// What a player learnt of its enemies and did about it over a match (task 173), sampled.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Exploration {
+    /// The first tick its brain remembered an enemy building anywhere.
+    pub first_seen: Option<u64>,
+    /// The first tick its brain remembered an enemy building on a world other than its home,
+    /// and that world.
+    pub first_world: Option<(u64, u32)>,
+    /// The first tick a transport of its set off on an invasion.
+    pub first_invasion: Option<u64>,
+    /// Invasion voyages set off: (ship, tick the stage began).
+    pub invasions: std::collections::BTreeSet<(u32, u64)>,
+    /// The first tick one of its ground units stood on a world where an enemy city stands,
+    /// other than its home.
+    pub first_ashore: Option<u64>,
+    /// Worlds its space scout had looked over at the end.
+    pub surveyed: usize,
+    /// The first tick it had ascended (task 76): it owns nothing then.
+    pub ascended: Option<u64>,
+}
+
+/// Records what each brain knows of its enemies and its invasions (index `i` is player `i + 1`).
+fn sample_exploration(
+    world: &World,
+    brains: &[Brain],
+    homes: &[Option<Pos>],
+    explore: &mut [Exploration],
+) {
+    let tick = world.tick();
+    for (i, brain) in brains.iter().enumerate() {
+        let x = &mut explore[i];
+        if world.player_status(brain.player()) == Some(rom_sim::PlayerStatus::Ascended) {
+            x.ascended.get_or_insert(tick);
+        }
+        let home = homes[i].map(|p| p.body);
+        for (_, seen) in brain.known_enemies().filter(|(_, e)| e.building) {
+            x.first_seen.get_or_insert(tick);
+            if Some(seen.pos.body) != home && x.first_world.is_none() {
+                x.first_world = Some((tick, seen.pos.body.0));
+            }
+        }
+        for (ship, voyage) in brain.voyages() {
+            if voyage.job == rom_ai::Job::Invade && voyage.stage >= 1 {
+                x.first_invasion.get_or_insert(voyage.since);
+                x.invasions.insert((ship, voyage.since));
+            }
+        }
+    }
+    if explore.iter().all(|x| x.first_ashore.is_some()) {
+        return;
+    }
+    // Worlds with a city of each player.
+    let mut held: BTreeMap<BodyId, std::collections::BTreeSet<u32>> = BTreeMap::new();
+    for brain in brains {
+        for city in world.cities(brain.player()) {
+            if let Some(e) = world.entity(city) {
+                held.entry(e.pos.body).or_default().insert(brain.player().0);
+            }
+        }
+    }
+    for e in world.entities() {
+        let Some(i) = (e.owner.0 as usize)
+            .checked_sub(1)
+            .filter(|&i| i < explore.len())
+        else {
+            continue;
+        };
+        let et = &world.rules().entity_types[&e.type_id];
+        if explore[i].first_ashore.is_some()
+            || e.container_id.is_some()
+            || et.class != rom_rules::EntityClass::Unit
+            || world.is_spacecraft_type(e.type_id)
+            || world.orbit(e.id).is_some()
+            || Some(e.pos.body) == homes[i].map(|p| p.body)
+        {
+            continue;
+        }
+        if held
+            .get(&e.pos.body)
+            .is_some_and(|owners| owners.iter().any(|o| *o != e.owner.0))
+        {
+            explore[i].first_ashore = Some(tick);
+        }
+    }
 }
 
 /// The jumps a player's units made and the units it dropped from orbit (task 169).
@@ -603,6 +695,7 @@ pub fn run_match(rules: &Arc<Rules>, request: &Request) -> Result<MatchResult, S
     let mut reach = vec![ClusterReach::default(); count];
     let mut sea = vec![SeaLift::default(); count];
     let mut leaps = vec![Leaps::default(); count];
+    let mut explore = vec![Exploration::default(); count];
     // Task 167: where each player's first city stands, and whether they can walk to each other.
     let homes: Vec<Option<Pos>> = brains
         .iter()
@@ -678,6 +771,7 @@ pub fn run_match(rules: &Arc<Rules>, request: &Request) -> Result<MatchResult, S
         count_leaps(&world, &mut leaps);
         if tick % SAMPLE_TICKS == 0 {
             sample_sea(&world, &homes, &riders, &mut sea);
+            sample_exploration(&world, &brains, &homes, &mut explore);
         }
         if let Some(universe) = &universe
             && tick % SAMPLE_TICKS == 0
@@ -710,6 +804,90 @@ pub fn run_match(rules: &Arc<Rules>, request: &Request) -> Result<MatchResult, S
                         )
                     })
                     .collect();
+                // Task 173: the space scout, the worlds it looked over and the invasion.
+                let scout = brain
+                    .armies()
+                    .find(|(role, _)| *role == rom_ai::Role::Survey)
+                    .map(|(_, a)| a.clone())
+                    .unwrap_or_default();
+                let at = scout
+                    .members
+                    .iter()
+                    .next()
+                    .and_then(|id| world.entity(rom_sim::EntityId(*id)))
+                    .map_or("-".to_owned(), |e| {
+                        world.orbit(e.id).map_or(format!("{}", e.pos.body.0), |o| {
+                            format!("orbit:{}", o.body.0)
+                        })
+                    });
+                let surveyed: Vec<String> = brain
+                    .surveyed_worlds()
+                    .map(|(body, tick)| format!("{body}@{tick}"))
+                    .collect();
+                let mut known: BTreeMap<u32, (usize, usize)> = BTreeMap::new();
+                for (_, e) in brain.known_enemies() {
+                    let k = known.entry(e.pos.body.0).or_default();
+                    if e.building {
+                        k.0 += 1;
+                    } else {
+                        k.1 += 1;
+                    }
+                }
+                let known: Vec<String> = known
+                    .iter()
+                    .map(|(body, (b, u))| format!("{body}:{b}b{u}u"))
+                    .collect();
+                let voyages: Vec<String> = brain
+                    .voyages()
+                    .map(|(ship, v)| format!("{ship}:{:?}{}>{}", v.job, v.stage, v.body))
+                    .collect();
+                let main = brain
+                    .armies()
+                    .filter(|(role, _)| matches!(role, rom_ai::Role::Attack | rom_ai::Role::Escort))
+                    .map(|(role, a)| {
+                        format!(
+                            "{role:?}:{:?}{}>{}",
+                            a.phase,
+                            a.members.len(),
+                            a.target.map_or("-".to_owned(), |t| t.to_string())
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("/");
+                let invading = brain
+                    .armies()
+                    .find(|(role, _)| *role == rom_ai::Role::Invade)
+                    .map_or(0, |(_, a)| a.members.len());
+                println!(
+                    "survey tick={} player={} scout={} at={} target={} points={:b} surveyed={} invading={} known={} main={} voyages={}",
+                    world.tick(),
+                    brain.player().0,
+                    scout
+                        .members
+                        .iter()
+                        .next()
+                        .map_or("-".to_owned(), |id| id.to_string()),
+                    at,
+                    scout.target.map_or("-".to_owned(), |b| b.to_string()),
+                    scout.peak,
+                    if surveyed.is_empty() {
+                        "-".to_owned()
+                    } else {
+                        surveyed.join(",")
+                    },
+                    invading,
+                    if known.is_empty() {
+                        "-".to_owned()
+                    } else {
+                        known.join(",")
+                    },
+                    main,
+                    if voyages.is_empty() {
+                        "-".to_owned()
+                    } else {
+                        voyages.join(",")
+                    },
+                );
                 println!(
                     "trace tick={} player={} age={} pop={}/{} workers={} idle={} military={} cities={} buildings={} techs={} {}",
                     world.tick(),
@@ -773,6 +951,12 @@ pub fn run_match(rules: &Arc<Rules>, request: &Request) -> Result<MatchResult, S
                 space: reach[i].clone(),
                 sea: sea[i].clone(),
                 leaps: leaps[i].clone(),
+                explore: Exploration {
+                    surveyed: brain.surveyed_worlds().count(),
+                    ..explore[i].clone()
+                },
+                cities_left: world.cities(brain.player()).len(),
+                status: world.player_status(brain.player()),
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
@@ -994,6 +1178,51 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
             tick(p.leaps.first_drop)
         );
     }
+    for p in &result.players {
+        let tick = |t: Option<u64>| t.map_or("-".to_owned(), |t| t.to_string());
+        let x = &p.explore;
+        println!(
+            "explore player={} first_enemy_seen_tick={} first_enemy_world_tick={} \
+             first_enemy_world={} first_invasion_tick={} invasions={} first_ashore_tick={} \
+             worlds_surveyed={} first_ascended_tick={}",
+            p.player.0,
+            tick(x.first_seen),
+            tick(x.first_world.map(|(t, _)| t)),
+            x.first_world
+                .map_or("-".to_owned(), |(_, body)| body.to_string()),
+            tick(x.first_invasion),
+            x.invasions.len(),
+            tick(x.first_ashore),
+            x.surveyed,
+            tick(x.ascended),
+        );
+    }
+    // Victory rules are off: the winner is the only player with cities left, if there is one.
+    let standing: Vec<u32> = result
+        .players
+        .iter()
+        .filter(|p| p.cities_left > 0)
+        .map(|p| p.player.0)
+        .collect();
+    let cities: Vec<String> = result
+        .players
+        .iter()
+        .map(|p| p.cities_left.to_string())
+        .collect();
+    let statuses: Vec<String> = result
+        .players
+        .iter()
+        .map(|p| p.status.map_or("-".to_owned(), |s| format!("{s:?}")))
+        .collect();
+    println!(
+        "outcome cities={} status={} winner={}",
+        cities.join("/"),
+        statuses.join("/"),
+        match standing.as_slice() {
+            [one] => one.to_string(),
+            _ => "none".to_owned(),
+        }
+    );
     for p in &result.players {
         for (reason, count) in &p.rejections {
             println!(

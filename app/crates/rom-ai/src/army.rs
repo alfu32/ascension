@@ -19,9 +19,9 @@ use rom_sim::{BodyId, Entity, EntityId, Pos, Topology, integer_sqrt};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// How far around a target or an army's front enemies count, in milli-tiles.
-const THREAT_REACH: u64 = 12_000;
+pub(crate) const THREAT_REACH: u64 = 12_000;
 /// The fewest units sent to attack.
-const MIN_WAVE: usize = 6;
+pub(crate) const MIN_WAVE: usize = 6;
 /// The main army never waits for more than this many units before it may attack.
 const MAX_WAVE: usize = 16;
 /// The fewest units sent raiding.
@@ -34,7 +34,7 @@ const CHASE_SLACK: u64 = 2 * SLACK;
 /// How far beyond its weapon's reach a unit turns on a target, in milli-tiles.
 const FOCUS_SLACK: u64 = 2000;
 /// A sighting this recent counts as an enemy present now.
-const RECENT_TICKS: u64 = 400;
+pub(crate) const RECENT_TICKS: u64 = 400;
 /// The longest retreat before an army counts as gathered again.
 const RETREAT_TICKS: u64 = 1200;
 /// An advance that has not reached its goal after this long has a target it cannot reach.
@@ -44,7 +44,7 @@ const SIEGE_TICKS: u64 = 7200;
 /// Buildings stand still: this share of their strength counts as a threat to an army.
 const BUILDING_THREAT_PCT: i64 = 25;
 /// A cell is worth another look after this long.
-const LOOK_AGAIN_TICKS: u64 = 12_000;
+pub(crate) const LOOK_AGAIN_TICKS: u64 = 12_000;
 /// Cells the scouting search examines at most per scout.
 const SCOUT_CELLS: usize = 4096;
 /// Supply units ordered in one thought at most.
@@ -109,7 +109,7 @@ fn enemy_power(view: &View<'_>, e: &EnemySighting) -> i64 {
 }
 
 /// Known enemy strength within `reach` of `pos`; units count only when seen lately.
-fn threat_near(view: &View<'_>, memory: &Memory, pos: Pos, reach: u64) -> i64 {
+pub(crate) fn threat_near(view: &View<'_>, memory: &Memory, pos: Pos, reach: u64) -> i64 {
     memory
         .enemies
         .values()
@@ -124,7 +124,7 @@ fn threat_near(view: &View<'_>, memory: &Memory, pos: Pos, reach: u64) -> i64 {
 
 /// The defence around an enemy city now: units seen lately and every remembered building,
 /// armed ones at full strength (cities, towers and forts fire on an army at their walls).
-fn defence_now(view: &View<'_>, memory: &Memory, at: Pos) -> i64 {
+pub(crate) fn defence_now(view: &View<'_>, memory: &Memory, at: Pos) -> i64 {
     memory
         .enemies
         .values()
@@ -147,6 +147,18 @@ const PATIENCE_FLOOR_PCT: i64 = 60;
 /// A measured defence counts half after this long without being matched again.
 const DEFENCE_HALF_TICKS: u64 = 24_000;
 
+/// The share of the defence measured at a target, in percent, a wave's strength must reach
+/// before it sets off: the profile's attack ratio, falling over a long war (`PATIENCE_TICKS`),
+/// and at most even after a blunder.
+pub(crate) fn wave_ratio(weights: &Weights, tick: u64, blunder: bool) -> i64 {
+    let minutes = tick.saturating_sub(PATIENCE_TICKS) / 1200;
+    let ratio = weights
+        .attack_ratio
+        .saturating_sub(minutes as i64 * PATIENCE_PCT_PER_MINUTE)
+        .max(PATIENCE_FLOOR_PCT.min(weights.attack_ratio));
+    if blunder { ratio.min(100) } else { ratio }
+}
+
 /// Notes the strongest defence seen around every remembered enemy city: a wave holds
 /// until it clearly exceeds it. What is out of sight is assumed to stand there still.
 fn measure_defences(view: &View<'_>, memory: &mut Memory) {
@@ -167,7 +179,7 @@ fn measure_defences(view: &View<'_>, memory: &mut Memory) {
 
 /// Raises the defence measured at a city to `strength` when it is more than the measure
 /// standing now.
-fn note_defence(memory: &mut Memory, city: u32, strength: i64, tick: u64) {
+pub(crate) fn note_defence(memory: &mut Memory, city: u32, strength: i64, tick: u64) {
     if strength > measured(memory, city, tick) {
         memory.defence.insert(city, (strength, tick));
     }
@@ -176,7 +188,7 @@ fn note_defence(memory: &mut Memory, city: u32, strength: i64, tick: u64) {
 /// The defence a wave must beat at a target: the strongest measured there, halved for
 /// every `DEFENCE_HALF_TICKS` since. A wave that was beaten there counts in it with all
 /// the strength it set off with.
-fn measured(memory: &Memory, target: u32, tick: u64) -> i64 {
+pub(crate) fn measured(memory: &Memory, target: u32, tick: u64) -> i64 {
     memory.defence.get(&target).map_or(0, |(strength, since)| {
         strength >> (tick.saturating_sub(*since) / DEFENCE_HALF_TICKS).min(62)
     })
@@ -208,7 +220,7 @@ fn known_army(view: &View<'_>, memory: &Memory) -> i64 {
 }
 
 /// The price of a definition summed over resources, before the player's ramps.
-fn worth(view: &View<'_>, type_id: DefId) -> i64 {
+pub(crate) fn worth(view: &View<'_>, type_id: DefId) -> i64 {
     view.rules
         .cost_of_ramped(type_id, &view.active, 0)
         .iter()
@@ -244,7 +256,24 @@ fn dps_on(view: &View<'_>, attacker: DefId, units: &[&Entity]) -> i64 {
 
 /// Whether an army can destroy a target before the defence around it (the target itself,
 /// buildings and units seen lately) has cost it half its hit points.
-fn can_take(view: &View<'_>, memory: &Memory, units: &[&Entity], target: &EnemySighting) -> bool {
+pub(crate) fn can_take(
+    view: &View<'_>,
+    memory: &Memory,
+    units: &[&Entity],
+    target: &EnemySighting,
+) -> bool {
+    can_take_from(view, memory, units, target, &|_| true)
+}
+
+/// As [`can_take`], counting in the defence only the remembered enemies `counts` lets through
+/// (task 173: an invasion on the ground leaves out what fires only at the orbit).
+pub(crate) fn can_take_from(
+    view: &View<'_>,
+    memory: &Memory,
+    units: &[&Entity],
+    target: &EnemySighting,
+    counts: &dyn Fn(&EnemySighting) -> bool,
+) -> bool {
     let rules = view.rules;
     let Some(et) = rules.entity_types.get(&target.type_id) else {
         return false;
@@ -261,6 +290,7 @@ fn can_take(view: &View<'_>, memory: &Memory, units: &[&Entity], target: &EnemyS
             e.pos.body == target.pos.body
                 && (e.building || e.tick + RECENT_TICKS >= view.tick)
                 && view.distance(e.pos, target.pos) <= THREAT_REACH
+                && counts(e)
         })
         .map(|e| dps_on(view, e.type_id, units))
         .sum();
@@ -376,7 +406,7 @@ fn held_capital(view: &View<'_>) -> Option<Pos> {
 }
 
 /// Whether a type emits territory.
-fn holds_land(view: &View<'_>, type_id: DefId) -> bool {
+pub(crate) fn holds_land(view: &View<'_>, type_id: DefId) -> bool {
     view.rules
         .entity_types
         .get(&type_id)
@@ -384,7 +414,7 @@ fn holds_land(view: &View<'_>, type_id: DefId) -> bool {
 }
 
 /// Whether a type is a city: what the main army conquers.
-fn is_city(view: &View<'_>, type_id: DefId) -> bool {
+pub(crate) fn is_city(view: &View<'_>, type_id: DefId) -> bool {
     view.rules
         .entity_types
         .get(&type_id)
@@ -393,7 +423,7 @@ fn is_city(view: &View<'_>, type_id: DefId) -> bool {
 }
 
 /// The cells of a body: every face, `CELL` milli-tiles square.
-fn body_cells(view: &View<'_>, body: BodyId) -> Vec<Cell> {
+pub(crate) fn body_cells(view: &View<'_>, body: BodyId) -> Vec<Cell> {
     let topology = view
         .world
         .surface(body)
@@ -414,7 +444,7 @@ fn body_cells(view: &View<'_>, body: BodyId) -> Vec<Cell> {
 }
 
 /// The centre of a cell.
-fn cell_centre(cell: Cell) -> Pos {
+pub(crate) fn cell_centre(cell: Cell) -> Pos {
     let (body, face, x, y) = cell;
     Pos::on(BodyId(body), face, x * CELL + CELL / 2, y * CELL + CELL / 2)
 }
@@ -441,7 +471,7 @@ fn passable(view: &View<'_>, type_id: DefId, pos: Pos) -> bool {
 
 /// The cell a unit should look at next: one nobody has looked at for the longest, nearest
 /// first, on ground its type can walk, away from known danger.
-fn next_look(
+pub(crate) fn next_look(
     view: &View<'_>,
     memory: &Memory,
     unit: &Entity,
@@ -1389,13 +1419,7 @@ fn lead(
             // A long war wears patience down: past `PATIENCE_TICKS` the ratio a wave needs
             // falls by `PATIENCE_PCT_PER_MINUTE` a minute, to `PATIENCE_FLOOR_PCT`; equal
             // armies would otherwise wait for each other until the end.
-            let minutes = tick.saturating_sub(PATIENCE_TICKS) / 1200;
-            let ratio = cmd
-                .weights
-                .attack_ratio
-                .saturating_sub(minutes as i64 * PATIENCE_PCT_PER_MINUTE)
-                .max(PATIENCE_FLOOR_PCT.min(cmd.weights.attack_ratio));
-            let ratio = if cmd.blunder { ratio.min(100) } else { ratio };
+            let ratio = wave_ratio(cmd.weights, tick, cmd.blunder);
             if own * 100 < ratio * needed && !enemy_land_race(&plan.view) {
                 return;
             }
@@ -1809,7 +1833,7 @@ fn batter(plan: &mut Plan<'_>, memory: &Memory, army: &Army, units: &[&Entity]) 
 /// Concentrates fire: members in a fight turn on the weakest armed enemy seen now within
 /// their reach (unarmed ones when none is armed). Every order comes out of the budget, so a
 /// mind with few orders a minute leaves its units to pick their own targets.
-fn focus(plan: &mut Plan<'_>, memory: &Memory, units: &[&Entity]) {
+pub(crate) fn focus(plan: &mut Plan<'_>, memory: &Memory, units: &[&Entity]) {
     let view = &plan.view;
     let rules = view.rules;
     let mut orders: Vec<(EntityId, EntityId)> = Vec::new();
