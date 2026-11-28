@@ -22,7 +22,7 @@ resolver = "3"
 version = "0.158.0"
 edition = "2024"
 rust-version = "1.99.1"
-license = "MIT OR Apache-2.0"
+license = "LicenseRef-Ascension-All-Rights-Reserved"  # see ../LICENSE (owner, 2026-11-28)
 
 [workspace.dependencies]
 rom-rules = { path = "crates/rom-rules" }

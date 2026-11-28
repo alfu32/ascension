@@ -52,6 +52,13 @@ The current state of every task is in `app/docs/tasks/STATUS.md`.
 - Simulation fixed at 20 ticks per game second; game speed is a user setting.
 - SQLite is the authoring and save format; the tick loop never runs SQL.
 - In-match HUD is drawn by raylib; all other screens are GPUI.
+- **Licence (owner, 2026-11-28):** the free version is "all rights reserved" (`LICENSE`).
+  People may download it from the official channels and play it, host it free of charge and show
+  it in videos and streams. Redistribution, modification, reuse and commercial use need the
+  author's written agreement. Versions up to 0.158.0 were declared MIT OR Apache-2.0. This
+  repository stays public. The commercial Steam edition (better models, rendering, effects and
+  sound) keeps its premium content in a separate private repository; that content never enters
+  this one.
 
 ## Orchestration
 

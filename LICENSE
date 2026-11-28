@@ -1,0 +1,86 @@
+Ascension — Rise of Man
+Copyright (c) 2026 alfu32 (https://github.com/alfu32), the author. All rights reserved.
+
+This licence covers the game "Ascension — Rise of Man": its source code, data, models, art,
+textures, music, sounds, text, documentation and the programs built from them (together, "the
+Game"), in this repository and in every download of the Game. It applies to every version
+released after 0.158.0 and to the contents of this repository from 28 November 2026 on.
+
+It does not cover the third-party components listed in THIRD-PARTY-NOTICES.md, which keep their
+own licences.
+
+1. Ownership
+
+   The Game is the work of its author and is protected by copyright law. Everything not expressly
+   permitted below is reserved to the author. Making the source code readable in this public
+   repository grants no licence to it beyond what this document says.
+
+2. What you may do, free of charge
+
+   a. Play. You may download the free version of the Game from the author's official channels
+      (this repository's releases, the author's store listings and site) and install and play it
+      on your own devices, alone or with others.
+
+   b. Host matches for others without charge. You may run the Game's server, unmodified, to host
+      matches that cost the players nothing.
+
+   c. Show it. You may take screenshots and record or stream video of the Game, and publish them,
+      including on channels that earn advertising or donation income, as long as you do not sell
+      the Game itself or present it as your own work.
+
+   d. Read the source. You may read the source code and data in this repository to learn from
+      them and to report problems or suggest changes to the author.
+
+3. What you may not do without the author's prior written agreement
+
+   a. Redistribute: copy, upload, mirror, sell, rent, lend, sublicense or otherwise make the Game
+      or any part of it available to others, whether for payment or free of charge, except by
+      pointing people to the author's official channels.
+
+   b. Modify or derive: change, translate, adapt or build on the Game, or publish modified
+      versions, forks, mods, ports or other works derived from it.
+
+   c. Reuse: take source code, data, models, art, music, sounds or text from the Game for use in
+      any other work, product or service.
+
+   d. Use commercially: use the Game or any part of it in or for any commercial product, service,
+      offering or activity, including paid hosting, paid access, bundling, or sale, except as
+      permitted in section 2(c).
+
+   e. Remove notices: remove or alter copyright, licence or attribution notices.
+
+   Contributions sent to the author (for example issues or patches) do not give the contributor
+   any right in the Game. Unless agreed otherwise in writing, the contributor allows the author to
+   use, change and include them in any version of the Game, free or commercial, without payment.
+
+4. Commercial editions
+
+   The author may offer commercial editions of the Game under separate terms. Those terms, not
+   this licence, govern the commercial editions and any content that ships only with them.
+
+5. Earlier versions
+
+   Versions up to and including 0.158.0 were published with a declared licence of
+   "MIT OR Apache-2.0". Copies of those versions obtained before 28 November 2026 remain under the
+   terms they were obtained with. Everything published after that date, including all later
+   versions and all new or changed files in this repository, is under this licence only.
+
+6. No warranty
+
+   The Game is provided "as is", without warranty of any kind, express or implied, including
+   warranties of merchantability, fitness for a particular purpose and non-infringement.
+
+7. Limitation of liability
+
+   To the extent permitted by law, the author is not liable for any claim, damages or other
+   liability arising from the Game or its use, whether in contract, tort or otherwise.
+
+8. Termination
+
+   This licence ends automatically if you break its terms. When it ends you must stop using the
+   Game and delete your copies.
+
+9. Contact
+
+   For permissions, commercial agreements or questions, contact the author through
+   https://github.com/alfu32.

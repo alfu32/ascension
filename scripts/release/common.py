@@ -125,5 +125,7 @@ def check_desktop(groups: dict, version: str) -> list:
 def payload_files() -> list[tuple[Path, str]]:
     """Documents that travel in every package: (source, name in the package)."""
     files = [(ROOT / "README.md", "README.md"),
+             (ROOT / "LICENSE", "LICENSE"),
+             (ROOT / "THIRD-PARTY-NOTICES.md", "THIRD-PARTY-NOTICES.md"),
              (WORKSPACE / "assets/fonts/LICENSE-DejaVu.txt", "licenses/LICENSE-DejaVu.txt")]
     return [(src, name) for src, name in files if src.is_file()]
