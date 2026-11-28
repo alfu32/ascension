@@ -1037,13 +1037,14 @@ impl Controller {
                 modifiers,
                 double,
                 on_screen,
+                place,
                 ..
             } => self.click(
                 world,
                 self.pos_of(surface),
                 entity,
                 modifiers,
-                double,
+                (double, place),
                 &on_screen,
             ),
             PickEvent::BoxSelect {
@@ -1098,6 +1099,11 @@ impl Controller {
                 self.turn_placement(world, steps);
             }
             PickEvent::Escape => {
+                // Escape drops a tool or a pick in hand; with none, it clears the selection
+                // (task 176).
+                if !self.holds_tool() {
+                    self.set_selection(Vec::new());
+                }
                 self.placement = None;
                 self.line = None;
                 self.descend_pick = false;
@@ -1117,13 +1123,34 @@ impl Controller {
         }
     }
 
+    /// Whether a tool or a pick is in hand: what Escape drops before it clears the selection.
+    fn holds_tool(&self) -> bool {
+        self.placement.is_some()
+            || self.line.is_some()
+            || self.descend_pick
+            || self.life_pick
+            || self.brush.is_some()
+            || self.stroke.is_some()
+            || self.attack_move
+            || self.patrol
+            || self.trade_pick
+            || self.land_pick
+            || self.ground_pick
+            || self.jump_pick
+            || self.drop_pick
+            || self.delete_confirm.is_some()
+    }
+
+    /// A left click: `double` is the second of a double click, `place` a hit on a place in
+    /// space (a planet, a star, a system, a cluster or a route's end), which never changes the
+    /// selection (task 176).
     fn click(
         &mut self,
         world: &mut OrderSink<'_>,
         at: Pos,
         entity: Option<u32>,
         mods: Modifiers,
-        double: bool,
+        (double, place): (bool, bool),
         on_screen: &[u32],
     ) {
         let me = self.me();
@@ -1216,7 +1243,9 @@ impl Controller {
             return;
         }
         let Some(id) = entity.map(EntityId) else {
-            if !mods.shift {
+            // Empty space or ground clears the selection; a place in space keeps it, so its
+            // double click can fly the camera there with the ships still in hand.
+            if !mods.shift && !place {
                 self.set_selection(Vec::new());
             }
             return;

@@ -515,8 +515,10 @@ mod cluster_tests {
     use super::*;
     use crate::terrain::load_rules;
     use rom_render::galaxy::{GalaxyLayout, system_view_clearance};
+    use rom_render::pick::View;
+    use rom_render::space::{SpaceContext, SpacePicker};
     use rom_render::zoom::{Target, ZoomCamera, ZoomScale};
-    use rom_render::{OrbitCamera, planet_radius};
+    use rom_render::{InputEvent, Modifiers, OrbitCamera, PickEvent, PointerButton, planet_radius};
     use std::sync::Arc;
 
     /// Every catalogue star as a system, joined to the next star of its cluster, as a Galaxy
@@ -663,6 +665,101 @@ mod cluster_tests {
             }
             assert!(clusters >= 20, "{level:?}: {clusters} clusters on screen");
         }
+    }
+
+    /// The pick events of a left click at `at` on the star map, as the render thread makes them.
+    fn star_map_click(zoom: &ZoomCamera, view: View, at: (f32, f32)) -> Vec<PickEvent> {
+        let markers = zoom.markers(&view);
+        let ctx = SpaceContext {
+            view,
+            star_map: true,
+            ships: &[],
+            markers: &markers,
+            scene: zoom.scene(),
+            outermost: 1.0,
+            slack: 0.0,
+            zoom: Some(zoom),
+        };
+        let mut picker = SpacePicker::default();
+        let (button, mods, (x, y)) = (PointerButton::Left, Modifiers::default(), at);
+        let mut out = picker.handle(InputEvent::ButtonDown { button, x, y, mods }, &ctx, 0);
+        out.extend(picker.handle(InputEvent::ButtonUp { button, x, y, mods }, &ctx, 5));
+        out
+    }
+
+    /// Task 176: on the star map a click on a system or a route's end (the cluster view) or on a
+    /// cluster (the disk), where a double click flies, gives no pick event, so the selection
+    /// stays; a click on empty space still gives the empty box that clears it.
+    #[test]
+    fn a_click_on_a_place_of_the_star_map_keeps_the_selection() {
+        let rules = load_rules().expect("rules");
+        let size = (1280.0, 800.0);
+        let (mut zoom, mut orbit) = camera(catalogue_scene(&rules));
+        let groups = zoom.layout().groups.len();
+        let (mut systems, mut ends) = (0, 0);
+        for group in (0..groups).step_by(16) {
+            zoom.fly_to_target(Target::Cluster(group), &mut orbit);
+            for _ in 0..600 {
+                zoom.advance(1.0 / 30.0);
+                zoom.sync_orbit(&mut orbit);
+                if !zoom.flying() {
+                    break;
+                }
+            }
+            assert_eq!(zoom.level(), Level::Cluster);
+            let view = zoom.map_view(&orbit).view(size, 0.0);
+            for (target, (x, y, _)) in zoom.markers(&view) {
+                if x < 0.0 || y < 0.0 || x > size.0 || y > size.1 {
+                    continue;
+                }
+                if zoom.target_at(&view, x, y) != Some(target) {
+                    continue;
+                }
+                let events = star_map_click(&zoom, view, (x, y));
+                assert!(events.is_empty(), "{target:?}: {events:?}");
+                match target {
+                    Target::System(_) => systems += 1,
+                    Target::Cluster(_) => ends += 1,
+                    Target::Body(_) => {}
+                }
+            }
+        }
+        assert!(
+            systems > 20 && ends > 0,
+            "{systems} systems, {ends} route ends"
+        );
+        // On the disk, a cluster at its centre and at each of its stars.
+        zoom.set_view(Level::Quadrant, &mut orbit);
+        assert!(zoom.on_disk());
+        let view = zoom.map_view(&orbit).view(size, 0.0);
+        let positions = zoom.map_positions();
+        let mut clusters = 0;
+        for group in &zoom.layout().groups {
+            let points =
+                std::iter::once(group.centre).chain(group.members.iter().map(|&i| positions[i]));
+            for point in points {
+                let Some((x, y, _)) = view.project(point) else {
+                    continue;
+                };
+                if x < 0.0 || y < 0.0 || x > size.0 || y > size.1 {
+                    continue;
+                }
+                let events = star_map_click(&zoom, view, (x, y));
+                assert!(events.is_empty(), "{}: {events:?}", group.name);
+                clusters += 1;
+            }
+        }
+        assert!(clusters > 20, "{clusters} cluster points");
+        // Empty space between the clusters still clears.
+        let empty = (0..64)
+            .flat_map(|i| (0..40).map(move |j| (i as f32 * 20.0, j as f32 * 20.0)))
+            .find(|&(x, y)| zoom.target_at(&view, x, y).is_none())
+            .expect("an empty pixel");
+        let events = star_map_click(&zoom, view, empty);
+        assert!(matches!(
+            events.as_slice(),
+            [PickEvent::BoxSelect { entities, .. }] if entities.is_empty()
+        ));
     }
 
     /// Wheel notches from the whole system to the whole galaxy, for the record.

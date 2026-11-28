@@ -86,6 +86,9 @@ pub enum PickEvent {
         double: bool,
         /// With `double`: every entity whose centre is on screen.
         on_screen: Vec<u32>,
+        /// True when the click hit a place in space that a double click flies to (a planet, a
+        /// star, a system, a cluster or a route's end): such a click keeps the selection.
+        place: bool,
     },
     /// A rectangle dragged in the world.
     BoxSelect {
@@ -1242,6 +1245,7 @@ impl PickController {
             modifiers: mods,
             double,
             on_screen,
+            place: false,
         });
     }
 }

@@ -586,6 +586,7 @@ mod tests {
                 modifiers: Modifiers::default(),
                 double: false,
                 on_screen: Vec::new(),
+                place: false,
             },
         );
         world.step();

@@ -2608,6 +2608,7 @@ struct OwnedSpaceContext<'a> {
     scene: &'a crate::universe::UniverseScene,
     outermost: f32,
     slack: f32,
+    zoom: &'a ZoomCamera,
 }
 
 impl OwnedSpaceContext<'_> {
@@ -2620,6 +2621,7 @@ impl OwnedSpaceContext<'_> {
             scene: self.scene,
             outermost: self.outermost,
             slack: self.slack,
+            zoom: Some(self.zoom),
         }
     }
 }
@@ -2645,6 +2647,7 @@ fn space_context<'a>(
             .system_id()
             .map_or(1.0, |s| zoom.scene().system_outermost(s)),
         slack: crate::PICK_SLACK * canvas.scale.max(0.25),
+        zoom,
     }
 }
 
