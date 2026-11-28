@@ -55,8 +55,9 @@ The current state of every task is in `app/docs/tasks/STATUS.md`.
 - **Licence (owner, 2026-11-28):** the free version is "all rights reserved" (`LICENSE`).
   People may download it from the official channels and play it, host it free of charge and show
   it in videos and streams. Redistribution, modification, reuse and commercial use need the
-  author's written agreement. Versions up to 0.158.0 were declared MIT OR Apache-2.0. This
-  repository stays public. The commercial Steam edition (better models, rendering, effects and
+  author's written agreement. The licence applies from the version after 0.158.0; earlier
+  versions keep the terms they were published with (not named in public texts, owner
+  2026-11-28). This repository stays public. The commercial Steam edition (better models, rendering, effects and
   sound) keeps its premium content in a separate private repository; that content never enters
   this one.
 

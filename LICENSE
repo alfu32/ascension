@@ -60,10 +60,9 @@ own licences.
 
 5. Earlier versions
 
-   Versions up to and including 0.158.0 were published with a declared licence of
-   "MIT OR Apache-2.0". Copies of those versions obtained before 28 November 2026 remain under the
-   terms they were obtained with. Everything published after that date, including all later
-   versions and all new or changed files in this repository, is under this licence only.
+   This licence applies to versions released after 0.158.0. Earlier versions remain under the
+   terms they were published with. Everything published from 28 November 2026 on, including all
+   later versions and all new or changed files in this repository, is under this licence only.
 
 6. No warranty
 

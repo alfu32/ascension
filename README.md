@@ -352,5 +352,4 @@ Copyright © 2026 alfu32. All rights reserved. The free version may be downloade
 official releases and played, hosted free of charge and shown in videos and streams. It may not
 be redistributed, modified, reused or used commercially without the author's written agreement.
 The full terms are in [LICENSE](LICENSE); the third-party components keep their own licences,
-listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Versions up to 0.158.0 were
-published as MIT OR Apache-2.0.
+listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
