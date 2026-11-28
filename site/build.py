@@ -43,7 +43,7 @@ README_WIDTH = 1600
 # Age keys in the game's order, as the review page sorts them; "any" holds models of every age.
 AGES = ["ancient", "classical", "medieval", "gunpowder", "enlightenment", "industrial", "modern",
         "information", "automation", "fusion", "starfaring", "expansion", "abundance", "galactic",
-        "any"]
+        "federation", "any"]
 KINDS = {"unit": "Units", "bld": "Buildings", "node": "Sites"}
 KIND_ONE = {"unit": "unit", "bld": "building", "node": "site"}
 EVENTS = [("select", "Selected"), ("move", "Move"), ("attack", "Attack"), ("build", "Build"),
@@ -284,16 +284,20 @@ def privacy(dist: Dist, ctx: dict):
 
 
 def load_ages():
-    """The fourteen ages as the game's new-age dialog tells them (app/assets/text/ages.toml, kept
+    """The fifteen ages as the game's new-age dialog tells them (app/assets/text/ages.toml, kept
     in step with app/docs/ages-story.md): key, number from one, name, era and story."""
     rows = tomllib.loads((APP / "assets" / "text" / "ages.toml").read_text())["age"]
     ages = []
     for row in sorted(rows, key=lambda r: r["ordinal"]):
-        key = row["theme"].split(".", 1)[0]
-        if AGES[row["ordinal"]] != key:
-            sys.exit(f"ages.toml: age {row['ordinal']} is {key!r}, the site expects "
-                     f"{AGES[row['ordinal']]!r}")
-        ages.append({"key": key, "n": row["ordinal"] + 1, "name": row["name"],
+        # The theme names the age's music; an age may share another's (age 14 plays age 13's
+        # until it has its own, task 164), so the key comes from the order, not the theme.
+        if row["ordinal"] >= len(AGES) - 1:
+            sys.exit(f"ages.toml: age {row['ordinal']} is beyond the site's list of ages")
+        key = AGES[row["ordinal"]]
+        theme = row["theme"].split(".", 1)[0]
+        if theme not in AGES:
+            sys.exit(f"ages.toml: age {row['ordinal']} plays {theme!r}, not an age's theme")
+        ages.append({"key": key, "theme": theme, "n": row["ordinal"] + 1, "name": row["name"],
                      "era": row["subtitle"], "story": " ".join(row["story"].split())})
     if len(ages) != len(AGES) - 1:
         sys.exit(f"ages.toml: expected {len(AGES) - 1} ages, found {len(ages)}")
@@ -391,7 +395,7 @@ def catalogue(dist: Dist, ctx: dict, data: dict, binary: Path, cache: Path, spri
         jump.append(f'<li><a href="#age-{a["key"]}">{num}{html.escape(a["name"])}'
                     f'<span class="n">{count}</span></a></li>')
         if a["n"]:
-            theme = dist.asset(music / f"{a['key']}.theme.ogg", "music", f"{a['key']}.theme")
+            theme = dist.asset(music / f"{a['theme']}.theme.ogg", "music", f"{a['theme']}.theme")
             tale = f'<blockquote class="tale"><p>{html.escape(a["story"])}</p></blockquote>'
             player = f'''<div class="player">
     <span class="label">Main theme of the {html.escape(a["name"])} age</span>
@@ -460,7 +464,7 @@ def catalogue(dist: Dist, ctx: dict, data: dict, binary: Path, cache: Path, spri
 <script type="application/json" id="sound-data">{sound_data.replace("</", "<\\/")}</script>'''
     check_public(content, "catalogue.html")
     page(dist, ctx, "catalogue.html", "Catalogue — Ascension",
-         f"The fourteen ages of Ascension, each with its story and main theme, and all "
+         f"The fifteen ages of Ascension, each with its story and main theme, and all "
          f"{len(models)} building and unit models with their sounds.",
          content, "catalogue", ctx["js_tag"])
     return len(models), len(sounds), len(index)
