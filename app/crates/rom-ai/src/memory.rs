@@ -17,10 +17,11 @@ use std::collections::{BTreeMap, BTreeSet};
 /// ends after the fleet, without the age clock (task 65); version 3 ends after the age
 /// clock, without the measured defences, the enemy peak and the rally moves (task 67);
 /// version 4 ends after the rally moves, without the buildings standing and lost, the militia
-/// and the raided cities (task 152). All still read. The navy (task 97) is one more role code
-/// in the same layout, and so are the units of the sea lift (task 167), whose transports' errands
-/// are one more job code.
-pub(crate) const VERSION: u32 = 5;
+/// and the raided cities (task 152); version 5 ends after the raided cities, without the worlds
+/// surveyed (task 173). All still read. The navy (task 97) is one more role code in the same
+/// layout, and so are the units of the sea lift (task 167), whose transports' errands are one
+/// more job code, and the space scout and the troops sent to another world (task 173).
+pub(crate) const VERSION: u32 = 6;
 
 /// What an army is for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -40,11 +41,18 @@ pub enum Role {
     /// Units the sea lift carries over the water and leads ashore (task 167); its target is
     /// the enemy building they are carried to, its goal the land they are put ashore on.
     Ferry,
+    /// The space scout (task 173): one ship that looks at the other worlds; its target is the
+    /// body it is looking at, its goal the point over it it heads for, its peak the points of
+    /// that body's tour done, its `since` the tick the last scout was lost.
+    Survey,
+    /// Troops carried to an enemy world (task 173); its target is the enemy building the
+    /// invasion is for, its goal where it stood, its peak the strength that set off.
+    Invade,
 }
 
 impl Role {
     /// Every role, in the order armies are served.
-    pub const ALL: [Role; 7] = [
+    pub const ALL: [Role; 9] = [
         Role::Defend,
         Role::Attack,
         Role::Raid,
@@ -52,6 +60,8 @@ impl Role {
         Role::Escort,
         Role::Navy,
         Role::Ferry,
+        Role::Survey,
+        Role::Invade,
     ];
 
     fn code(self) -> u8 {
@@ -262,6 +272,8 @@ pub(crate) struct Memory {
     pub militia: BTreeMap<u32, u32>,
     /// Own cities with enemies inside their borders lately, by city id.
     pub raids: BTreeMap<u32, Raid>,
+    /// Worlds the space scout has looked over, by body id, and the tick it finished (task 173).
+    pub surveyed: BTreeMap<u32, u64>,
 }
 
 fn put_pos(w: &mut Writer, pos: Pos) {
@@ -401,6 +413,7 @@ impl Memory {
             w.u64(raid.since);
             w.u64(raid.last);
         });
+        put_map(&mut w, &self.surveyed, |w, tick| w.u64(*tick));
         w.0
     }
 
@@ -536,6 +549,10 @@ impl Memory {
                 })
             })?;
         }
+        let mut surveyed = BTreeMap::new();
+        if version >= 6 {
+            surveyed = get_map(&mut r, |r| r.u64())?;
+        }
         if !r.is_done() {
             return Err(AiError::CorruptState);
         }
@@ -573,6 +590,7 @@ impl Memory {
             lost,
             militia,
             raids,
+            surveyed,
         })
     }
 }
@@ -666,22 +684,33 @@ mod tests {
                 },
             )]
             .into(),
+            surveyed: [(5, 7_000)].into(),
         }
     }
 
-    /// The sample as an older layout wrote it: without what task 152 added.
+    /// The sample as the fifth layout wrote it: without what task 173 added.
+    fn before_173() -> Memory {
+        Memory {
+            surveyed: BTreeMap::new(),
+            ..sample()
+        }
+    }
+
+    /// The sample as an older layout wrote it: without what tasks 152 and 173 added.
     fn before_152() -> Memory {
         Memory {
             standing: BTreeMap::new(),
             lost: BTreeMap::new(),
             militia: BTreeMap::new(),
             raids: BTreeMap::new(),
-            ..sample()
+            ..before_173()
         }
     }
 
-    /// Bytes of the four empty collections task 152 appended.
-    const EMPTY_152: usize = 4 * 4;
+    /// Bytes of the four empty collections task 152 appended, and the one task 173 did.
+    const EMPTY_152: usize = 4 * 4 + EMPTY_173;
+    /// Bytes of the empty collection task 173 appended.
+    const EMPTY_173: usize = 4;
 
     #[test]
     fn memory_survives_its_byte_form() {
@@ -754,6 +783,16 @@ mod tests {
         // and the raided cities follow them.
         bytes.truncate(bytes.len() - EMPTY_152);
         bytes[..4].copy_from_slice(&4_u32.to_le_bytes());
+        assert_eq!(Memory::from_bytes(&bytes).unwrap(), memory);
+    }
+
+    #[test]
+    fn the_fifth_layout_still_reads() {
+        let memory = before_173();
+        let mut bytes = memory.to_bytes();
+        // Version 5 ended after the raided cities; the worlds surveyed follow them.
+        bytes.truncate(bytes.len() - EMPTY_173);
+        bytes[..4].copy_from_slice(&5_u32.to_le_bytes());
         assert_eq!(Memory::from_bytes(&bytes).unwrap(), memory);
     }
 

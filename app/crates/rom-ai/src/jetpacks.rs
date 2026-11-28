@@ -171,36 +171,3 @@ pub(crate) fn drop_troops(plan: &mut Plan<'_>, memory: &Memory, ship: &Entity) -
     };
     plan.order(ship.id, "drop", None, None, Some(at))
 }
-
-/// Troops a transport takes to an invasion, before the profile's share kept at home.
-pub(crate) const INVASION_TROOPS: usize = 12;
-
-/// Whether some infantry type of this player can be dropped from orbit now.
-pub(crate) fn drops(view: &View<'_>) -> bool {
-    view.own
-        .iter()
-        .any(|e| view.world.droppable_for(view.me, e.type_id))
-}
-
-/// Enemy worlds to invade, in reach and with a remembered enemy building, without an own city:
-/// lowest body id first.
-pub(crate) fn invasion_targets(
-    view: &View<'_>,
-    memory: &Memory,
-    systems: &std::collections::BTreeSet<u32>,
-) -> Vec<rom_sim::BodyId> {
-    let mut out: Vec<rom_sim::BodyId> = memory
-        .enemies
-        .values()
-        .filter(|e| e.building)
-        .map(|e| e.pos.body)
-        .filter(|b| {
-            view.world.body(*b).is_some_and(|info| {
-                info.kind == rom_rules::BodyKind::Habitable && systems.contains(&info.system)
-            }) && !view.cities.iter().any(|c| c.pos.body == *b)
-        })
-        .collect();
-    out.sort_unstable();
-    out.dedup();
-    out
-}

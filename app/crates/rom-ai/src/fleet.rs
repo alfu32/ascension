@@ -26,6 +26,9 @@ use std::collections::{BTreeMap, BTreeSet};
 const SPACEPORT_SCORE: i64 = 620;
 /// Score of the wish for a transport when a colony is waiting for one.
 const TRANSPORT_SCORE: i64 = 540;
+/// Score of the wish for a transport when troops at home are enough for an invasion (task 173):
+/// as the ground scout's, above the military units the wave is made of.
+const INVASION_TRANSPORT_SCORE: i64 = 700;
 /// Score of the wish for a satellite over a planet with a spaceport.
 const WATCHER_SCORE: i64 = 400;
 /// Ticks a transport waits at home for its passengers before it leaves with what it has.
@@ -303,12 +306,12 @@ impl Ships {
 }
 
 /// The body the player's capital stands on.
-fn home(view: &View<'_>) -> Option<BodyId> {
+pub(crate) fn home(view: &View<'_>) -> Option<BodyId> {
     view.cities.first().map(|c| c.pos.body)
 }
 
 /// The system a body belongs to.
-fn system_of(view: &View<'_>, body: BodyId) -> Option<u32> {
+pub(crate) fn system_of(view: &View<'_>, body: BodyId) -> Option<u32> {
     view.world.body(body).map(|b| b.system)
 }
 
@@ -316,16 +319,23 @@ fn system_of(view: &View<'_>, body: BodyId) -> Option<u32> {
 /// routes the simulation lets it jump (task 163: within its home's star cluster until the
 /// galactic tier, every cluster after it), so the navy, the claims and the colonies never ask
 /// for a voyage the simulation refuses.
-fn reachable(view: &View<'_>) -> BTreeSet<u32> {
+pub(crate) fn reachable(view: &View<'_>) -> BTreeSet<u32> {
+    legs(view).into_keys().collect()
+}
+
+/// The systems of [`reachable`], each with the fewest jumps along the routes from the home
+/// system (task 173: the order the space scout visits them in).
+pub(crate) fn legs(view: &View<'_>) -> BTreeMap<u32, u32> {
     let Some(start) = home(view).and_then(|b| system_of(view, b)) else {
-        return BTreeSet::new();
+        return BTreeMap::new();
     };
-    let mut seen = BTreeSet::from([start]);
+    let mut seen = BTreeMap::from([(start, 0)]);
     if rank(view) < rom_rules::JUMP_RANK {
         return seen;
     }
-    let mut open = vec![start];
-    while let Some(system) = open.pop() {
+    let mut open = std::collections::VecDeque::from([start]);
+    while let Some(system) = open.pop_front() {
+        let depth = seen[&system] + 1;
         for route in view.world.routes() {
             let next = if route.system_a == system {
                 route.system_b
@@ -334,8 +344,9 @@ fn reachable(view: &View<'_>) -> BTreeSet<u32> {
             } else {
                 continue;
             };
-            if view.world.jump_allowed(view.me, system, next) && seen.insert(next) {
-                open.push(next);
+            if !seen.contains_key(&next) && view.world.jump_allowed(view.me, system, next) {
+                seen.insert(next, depth);
+                open.push_back(next);
             }
         }
     }
@@ -352,7 +363,7 @@ fn own_ships<'a>(view: &View<'a>) -> Vec<&'a Entity> {
 }
 
 /// Whether a ship is still the player's, here or between systems.
-fn exists(view: &View<'_>, id: u32) -> bool {
+pub(crate) fn exists(view: &View<'_>, id: u32) -> bool {
     view.world
         .entity(EntityId(id))
         .is_some_and(|e| e.owner == view.me && e.hp > 0)
@@ -374,7 +385,8 @@ fn resource_bodies(view: &View<'_>, systems: &BTreeSet<u32>) -> Vec<(BodyId, Bod
 }
 
 /// Habitable bodies in reach where the player has no city, the home planet left out:
-/// those without known enemies first, then by system and id.
+/// those without known enemies first, then by system and id. A world where an enemy city is
+/// known is no colony's (task 173): it is invaded, with the force the invasion needs.
 fn colony_targets(view: &View<'_>, memory: &Memory, systems: &BTreeSet<u32>) -> Vec<BodyId> {
     let home = home(view);
     let mut out: Vec<(bool, u32, BodyId)> = view
@@ -386,6 +398,10 @@ fn colony_targets(view: &View<'_>, memory: &Memory, systems: &BTreeSet<u32>) -> 
                 && systems.contains(&b.system)
                 && Some(b.id) != home
                 && !view.cities.iter().any(|c| c.pos.body == b.id)
+                && !memory
+                    .enemies
+                    .values()
+                    .any(|e| e.building && e.pos.body == b.id && view.is_city(e.type_id))
         })
         .map(|b| {
             let hostile = memory
@@ -439,16 +455,22 @@ pub(crate) fn wishes(view: &View<'_>, weights: &Weights, memory: &Memory, wishes
         }
         return;
     }
+    // A scout looks over the other worlds (task 173).
+    crate::survey::wishes(view, memory, wishes);
     let systems = reachable(view);
     let bodies = resource_bodies(view, &systems);
     let tags = claim_tags(view);
-    // Ships that fight or keep station, with those in training.
+    // Ships that fight or keep station, with those in training; the scout is not one of them.
+    let scouting = crate::survey::scout(view, memory)
+        .and_then(|id| view.world.entity(EntityId(id)))
+        .is_some_and(|e| kind(view, &tags, e.type_id) == Kind::Ship);
     let fleet: i64 = view
         .have
         .iter()
         .filter(|(t, _)| view.world.is_spacecraft_type(**t) && kind(view, &tags, **t) == Kind::Ship)
         .map(|(_, n)| *n)
-        .sum();
+        .sum::<i64>()
+        - i64::from(scouting);
     let count =
         |test: &dyn Fn(&BodyClaim) -> bool| bodies.iter().filter(|(_, c)| test(c)).count() as i64;
     let free = count(&|c| *c == BodyClaim::Unclaimed);
@@ -542,17 +564,28 @@ pub(crate) fn wishes(view: &View<'_>, weights: &Weights, memory: &Memory, wishes
             });
         }
     }
-    // A transport for a colony, or, with every city standing, to drop troops on an enemy world
-    // (task 169).
+    // A transport for a colony, and one to carry troops to a known enemy world (task 173); the
+    // latter comes before most else once the troops at home are enough for the invasion.
+    let invasion = crate::invasion::choose(view, memory);
+    let want = i64::from(!colony_targets(view, memory, &systems).is_empty() && city_room(view))
+        + i64::from(invasion.is_some());
     if let Some(transport) = ships.transport
-        && view.count(transport) == 0
-        && ((!colony_targets(view, memory, &systems).is_empty() && city_room(view))
-            || (!city_room(view)
-                && crate::jetpacks::drops(view)
-                && !crate::jetpacks::invasion_targets(view, memory, &systems).is_empty()))
+        && view.count(transport) < want
     {
+        let room = view.rules.entity_types[&transport]
+            .container
+            .as_ref()
+            .map_or(0, |c| c.capacity);
+        let ready = invasion.filter(|i| !i.held).is_some_and(|i| {
+            let wave = crate::invasion::wave(view, memory, transport, room);
+            crate::invasion::enough(view, memory, weights, &i, &wave)
+        });
         wishes.push(Wish {
-            score: TRANSPORT_SCORE,
+            score: if ready {
+                INVASION_TRANSPORT_SCORE
+            } else {
+                TRANSPORT_SCORE
+            },
             act: Act::Train(transport),
             reserve: false,
             opening: false,
@@ -571,7 +604,7 @@ fn city_room(view: &View<'_>) -> bool {
 /// `formation` when one is given (the ships sent together in one thought are laid out about the
 /// body or the point they jump to, task 153). Returns whether it is there (in orbit of a
 /// habitable body, or beside a resource body).
-fn fly(
+pub(crate) fn fly(
     plan: &mut Plan<'_>,
     ship: &Entity,
     body: BodyId,
@@ -698,7 +731,12 @@ pub(crate) fn command(
     }
     let tick = plan.view.tick;
     memory.voyages.retain(|id, _| exists(&plan.view, *id));
-    let ships = own_ships(&plan.view);
+    // The scout first (task 173): the rest of the fleet leaves it alone.
+    let scout = crate::survey::command(plan, memory);
+    let ships: Vec<&Entity> = own_ships(&plan.view)
+        .into_iter()
+        .filter(|s| Some(s.id.0) != scout)
+        .collect();
     let tags = claim_tags(&plan.view);
     let systems = reachable(&plan.view);
     for ship in &ships {
@@ -734,14 +772,20 @@ pub(crate) fn command(
         .collect();
     // No strike on an enemy world during the difficulty's grace period.
     let strikes = tick >= difficulty.grace_ticks.max(0) as u64;
+    // The enemy world to invade, once known (task 173): its orbit is taken first when held.
+    let invasion = strikes
+        .then(|| crate::invasion::choose(&plan.view, memory))
+        .flatten();
     escort(
         plan,
         memory,
         &warships,
         &systems,
         (strikes, difficulty.uses_formations),
+        invasion.filter(|i| i.held).map(|i| i.body),
     );
-    colonise(plan, memory, &transports, &systems, weights, tick);
+    colonise(plan, memory, &transports, &systems, (weights, invasion));
+    crate::invasion::lead(plan, memory);
 }
 
 /// Orbital craft: idle on the ground they climb to their planet's orbit; in orbit beside a
@@ -890,6 +934,7 @@ fn escort(
     ships: &[&Entity],
     systems: &BTreeSet<u32>,
     (strikes, uses_formations): (bool, bool),
+    held: Option<BodyId>,
 ) {
     let mut army = memory.armies.remove(&Role::Escort).unwrap_or_default();
     army.members.retain(|id| exists(&plan.view, *id));
@@ -900,18 +945,21 @@ fn escort(
     }
     let view = &plan.view;
     let bodies = resource_bodies(view, systems);
-    // Where enemy buildings are known on a habitable body in reach, and the batteries there.
-    let enemy_world = memory
-        .enemies
-        .values()
-        .filter(|e| strikes && e.building)
-        .map(|e| e.pos.body)
-        .filter(|b| {
-            view.world.body(*b).is_some_and(|info| {
-                info.kind == BodyKind::Habitable && systems.contains(&info.system)
+    // Where enemy buildings are known on a habitable body in reach, and the batteries there; the
+    // world an invasion waits to reach while enemy ships hold its orbit first (task 173).
+    let enemy_world = held.or_else(|| {
+        memory
+            .enemies
+            .values()
+            .filter(|e| strikes && e.building)
+            .map(|e| e.pos.body)
+            .filter(|b| {
+                view.world.body(*b).is_some_and(|info| {
+                    info.kind == BodyKind::Habitable && systems.contains(&info.system)
+                })
             })
-        })
-        .min();
+            .min()
+    });
     let batteries = |body: BodyId| {
         memory
             .enemies
@@ -1024,6 +1072,15 @@ fn escort(
                         .world
                         .entity(EntityId(**id))
                         .is_some_and(|live| live.hp > 0 && !live.neutralised)
+                    // In sight now: a building remembered in the fog is refreshed every thought
+                    // but cannot be fired on (task 173: the strike first met it there).
+                    && plan.view.world.is_visible_on_body(
+                        plan.view.me,
+                        e.pos.body,
+                        e.pos.face,
+                        e.pos.x.div_euclid(1000),
+                        e.pos.y.div_euclid(1000),
+                    )
             })
             .min_by_key(|(id, e)| (rank(e.type_id), plan.view.distance(below, e.pos), **id))
             .map(|(id, e)| (EntityId(*id), rank(e.type_id)));
@@ -1098,18 +1155,20 @@ fn patrol_home(plan: &mut Plan<'_>, ships: &[&Entity]) {
 
 /// Transports: load a builder and troops at home, fly to a planet without an own city,
 /// land, found a city (troops ashore beside an enemy attack the nearest building), lift
-/// off and come home for the next one.
+/// off and come home for the next one. A transport takes an invasion instead (task 173) when an
+/// enemy world is known and the troops at home are enough for it: it carries them there, holds
+/// orbit over the target and drops them, or lands beside it and sets them down.
 fn colonise(
     plan: &mut Plan<'_>,
     memory: &mut Memory,
     ships: &[&Entity],
     systems: &BTreeSet<u32>,
-    weights: &Weights,
-    tick: u64,
+    (weights, invasion): (&Weights, Option<crate::invasion::Invasion>),
 ) {
     let Some(home_body) = home(&plan.view) else {
         return;
     };
+    let tick = plan.view.tick;
     for ship in ships.iter().copied() {
         let voyage = match memory.voyages.get(&ship.id.0).copied() {
             Some(v) if tick < v.since + STAGE_TICKS => v,
@@ -1118,19 +1177,24 @@ fn colonise(
                     memory.voyages.remove(&ship.id.0);
                 }
                 let taken: BTreeSet<u32> = memory.voyages.values().map(|v| v.body).collect();
-                // No room for another city: troops go to drop on an enemy world, once the
-                // player can drop them from orbit (task 169).
-                let (job, targets) = if city_room(&plan.view) {
-                    (Job::Colonise, colony_targets(&plan.view, memory, systems))
-                } else if crate::jetpacks::drops(&plan.view) {
-                    (
-                        Job::Invade,
-                        crate::jetpacks::invasion_targets(&plan.view, memory, systems),
-                    )
+                // An invasion when the troops at home are enough for it, else a colony.
+                let room =
+                    plan.view.world.carry_capacity(ship.id) - plan.view.world.carried_load(ship.id);
+                let invade = invasion.filter(|i| {
+                    !i.held && {
+                        let wave = crate::invasion::wave(&plan.view, memory, ship.type_id, room);
+                        crate::invasion::enough(&plan.view, memory, weights, i, &wave)
+                    }
+                });
+                let (job, body) = if let Some(i) = invade {
+                    (Job::Invade, i.body)
+                } else if city_room(&plan.view)
+                    && let Some(body) = colony_targets(&plan.view, memory, systems)
+                        .into_iter()
+                        .find(|b| !taken.contains(&b.0))
+                {
+                    (Job::Colonise, body)
                 } else {
-                    continue;
-                };
-                let Some(body) = targets.into_iter().find(|b| !taken.contains(&b.0)) else {
                     continue;
                 };
                 let voyage = Voyage {
@@ -1144,6 +1208,7 @@ fn colonise(
             }
         };
         let body = BodyId(voyage.body);
+        let invade = voyage.job == Job::Invade;
         let next = |memory: &mut Memory, stage: u8| {
             memory.voyages.insert(
                 ship.id.0,
@@ -1175,37 +1240,21 @@ fn colonise(
                     continue;
                 }
                 let view = &plan.view;
-                let invade = voyage.job == Job::Invade;
-                // An invasion takes troops only (task 169): it sets off with whom it has.
-                let has_builder = invade
-                    || view.world.passengers(ship.id).iter().any(|id| {
-                        view.world
-                            .entity(*id)
-                            .is_some_and(|e| view.rules.entity_types[&e.type_id].builder.is_some())
-                    });
-                let aboard = !view.world.passengers(ship.id).is_empty();
                 let room = view.world.carry_capacity(ship.id) - view.world.carried_load(ship.id);
-                if has_builder
-                    && (!invade || aboard)
-                    && (room <= 0 || tick >= voyage.since + LOAD_TICKS)
-                {
+                if invade {
+                    embark(plan, memory, ship, voyage, (room, weights, invasion));
+                    continue;
+                }
+                let has_builder = view.world.passengers(ship.id).iter().any(|id| {
+                    view.world
+                        .entity(*id)
+                        .is_some_and(|e| view.rules.entity_types[&e.type_id].builder.is_some())
+                });
+                if has_builder && (room <= 0 || tick >= voyage.since + LOAD_TICKS) {
                     next(memory, 1);
                     continue;
                 }
-                let troops = if invade {
-                    crate::jetpacks::INVASION_TROOPS
-                } else {
-                    ESCORT_TROOPS
-                };
-                board(
-                    plan,
-                    memory,
-                    ship,
-                    home_body,
-                    has_builder,
-                    room,
-                    (weights, troops),
-                );
+                board(plan, memory, ship, home_body, has_builder, room, weights);
             }
             1 => {
                 // Loaded on the ground: up again first (task 68).
@@ -1234,23 +1283,135 @@ fn colonise(
                     next(memory, 1);
                     continue;
                 };
-                // Over an enemy world it holds, its infantry are dropped first (task 169).
-                if crate::jetpacks::drop_troops(plan, memory, ship) {
+                if invade {
+                    descend(plan, memory, ship, below);
                     continue;
                 }
-                // An invasion ends once its troops are down: the ship is free for the next.
-                if voyage.job == Job::Invade {
-                    if plan.view.world.droppable_passengers(ship.id).is_empty() {
-                        memory.voyages.remove(&ship.id.0);
-                    }
+                // Over an enemy world it holds, its infantry are dropped first (task 169).
+                if crate::jetpacks::drop_troops(plan, memory, ship) {
                     continue;
                 }
                 if let Some(site) = landing(&plan.view, ship.id, below) {
                     plan.order(ship.id, "land", None, None, Some(site));
                 }
             }
+            _ if invade => {
+                // Its troops are down: up again, and free for the next.
+                let view = &plan.view;
+                if !view.world.is_landed(ship.id) {
+                    memory.voyages.remove(&ship.id.0);
+                } else if ship.orders().is_empty()
+                    && !view.busy.contains(&ship.id)
+                    && view.world.passengers(ship.id).is_empty()
+                {
+                    plan.order(ship.id, "lift", None, None, None);
+                }
+            }
             _ => settle(plan, memory, ship, body),
         }
+    }
+}
+
+/// How near the point below it an invading transport brings its target before it drops or
+/// lands its troops, in milli-tiles: the ground around the target is then in sight.
+pub(crate) const APPROACH: u64 = 12_000;
+/// How long an invading transport waits at home past its loading time for a wave strong enough
+/// before it gives up and sets the troops down again.
+const WAVE_WAIT_TICKS: u64 = 2 * LOAD_TICKS;
+
+/// An invading transport landed at home (task 173): the wave boards; it sets off once full, or
+/// after `LOAD_TICKS` with what it has when that is still enough for the invasion. Past
+/// `WAVE_WAIT_TICKS` without that (the target gone, the troops called away) it sets them down
+/// and is free again.
+fn embark(
+    plan: &mut Plan<'_>,
+    memory: &mut Memory,
+    ship: &Entity,
+    voyage: Voyage,
+    (room, weights, invasion): (i64, &Weights, Option<crate::invasion::Invasion>),
+) {
+    let view = &plan.view;
+    let tick = view.tick;
+    let invasion = invasion.filter(|i| i.body.0 == voyage.body && !i.held);
+    let walking = view.own.iter().any(|e| {
+        e.orders()
+            .front()
+            .is_some_and(|o| o.kind == "enter" && o.target_entity == Some(ship.id))
+    });
+    let carried = crate::invasion::aboard(view, ship.id);
+    let strong = invasion
+        .is_some_and(|i| carried * 100 >= crate::army::wave_ratio(weights, tick, false) * i.needed);
+    if strong && !walking && (room <= 0 || tick >= voyage.since + LOAD_TICKS) {
+        memory.voyages.insert(
+            ship.id.0,
+            Voyage {
+                stage: 1,
+                since: tick,
+                ..voyage
+            },
+        );
+        return;
+    }
+    if invasion.is_none() || tick >= voyage.since + LOAD_TICKS + WAVE_WAIT_TICKS {
+        if !view.world.passengers(ship.id).is_empty() {
+            if !view.busy.contains(&ship.id) {
+                plan.order(ship.id, "unload", None, Some(ship.id), None);
+            }
+        } else if !walking {
+            memory.voyages.remove(&ship.id.0);
+        }
+        return;
+    }
+    if let Some(invasion) = invasion
+        && room > 0
+    {
+        crate::invasion::board(plan, memory, ship, room, &invasion);
+    }
+}
+
+/// An invading transport in orbit over its world (task 173): it moves within its orbit to above
+/// the invasion's target, then drops its infantry from orbit (task 169) or, when it carries
+/// none it may drop or the orbit is contested, lands beside the target; the troops come out
+/// there. With nobody aboard the voyage is over.
+fn descend(plan: &mut Plan<'_>, memory: &mut Memory, ship: &Entity, below: Pos) {
+    let view = &plan.view;
+    if view.world.passengers(ship.id).is_empty() {
+        memory.voyages.remove(&ship.id.0);
+        return;
+    }
+    let goal = memory
+        .armies
+        .get(&Role::Invade)
+        .and_then(|a| a.goal)
+        .filter(|g| g.body == below.body)
+        .or_else(|| {
+            memory
+                .enemies
+                .values()
+                .filter(|e| e.building && e.pos.body == below.body)
+                .min_by_key(|e| (view.distance(below, e.pos), e.pos.face, e.pos.x, e.pos.y))
+                .map(|e| e.pos)
+        });
+    if let Some(goal) = goal
+        && view.distance(below, goal) > APPROACH
+    {
+        let heading = ship
+            .orders()
+            .front()
+            .is_some_and(|o| o.kind == "move" && o.target_pos == Some(goal));
+        if !heading {
+            plan.order(ship.id, "move", None, None, Some(goal));
+        }
+        return;
+    }
+    if crate::jetpacks::drop_troops(plan, memory, ship) {
+        return;
+    }
+    if ship.orders().front().is_some_and(|o| o.kind == "move") {
+        return;
+    }
+    if let Some(site) = landing(&plan.view, ship.id, below) {
+        plan.order(ship.id, "land", None, None, Some(site));
     }
 }
 
@@ -1272,7 +1433,7 @@ fn board(
     home: BodyId,
     has_builder: bool,
     room: i64,
-    (weights, troops): (&Weights, usize),
+    weights: &Weights,
 ) {
     let view = &plan.view;
     let walking_in = |e: &Entity| {
@@ -1314,19 +1475,14 @@ fn board(
         room -= view.rules.entity_types[&builder.type_id].pop_cost.max(0);
     }
     // Troops from the main army while it waits at home, as many as the profile spares.
-    let spare = (troops as i64 * (100 - weights.defense_share) / 100).max(1) as usize;
+    let spare = (ESCORT_TROOPS as i64 * (100 - weights.defense_share) / 100).max(1) as usize;
     let walking = view.own.iter().filter(|e| walking_in(e)).count();
-    // An invasion (task 169) also takes members of an army out at home with nothing to do: an
-    // army whose enemy is on another planet never sets off on foot.
-    let invading = troops == crate::jetpacks::INVASION_TROOPS;
     if let Some(army) = memory.armies.get(&Role::Attack)
-        && (army.phase == Phase::Gather || invading)
+        && army.phase == Phase::Gather
     {
-        let gathering = army.phase == Phase::Gather;
         for e in fighters(view)
             .into_iter()
             .filter(|e| army.members.contains(&e.id.0) && e.pos.body == home)
-            .filter(|e| gathering || e.orders().is_empty())
             .filter(|e| !walking_in(e))
             .take(spare.saturating_sub(walking))
         {
