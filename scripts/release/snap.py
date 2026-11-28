@@ -87,7 +87,7 @@ plugs:
     target: $SNAP/gpu-2404
 confinement: strict
 grade: stable
-license: MIT OR Apache-2.0
+license: Proprietary
 apps:
   {name}:
     command: bin/{game}

@@ -268,9 +268,10 @@ pub struct HudLayout {
     pub scale: f32,
 }
 
-/// The largest automatic scale: the one a 1280 × 800 window gets (the owner, 2026-11-23: the top
-/// and bottom bars stop growing there; a larger window shows more of the world instead).
-pub const MAX_AUTO_SCALE: f32 = 1280.0 / DESIGN_WIDTH;
+/// The largest automatic scale: 20 % above the one a 1280 × 800 window gets (the owner,
+/// 2026-11-23: the top and bottom bars stop growing there, a larger window shows more of the
+/// world instead; 2026-11-28: 20 % taller, the writing was hard to read).
+pub const MAX_AUTO_SCALE: f32 = 1.2 * 1280.0 / DESIGN_WIDTH;
 
 impl HudLayout {
     /// Layout for a `width` × `height` frame; `percent` overrides the automatic scale, which fits
@@ -512,13 +513,14 @@ mod tests {
     }
 
     #[test]
-    fn the_automatic_scale_stops_growing_at_1280_by_800() {
-        let at_1280 = HudLayout::new(1280, 800, None).scale;
-        assert_eq!(at_1280, MAX_AUTO_SCALE);
+    fn the_automatic_scale_stops_growing_at_a_fifth_above_1280_by_800() {
+        // A 1280 × 800 window still fits the design to its width; larger ones grow up to the cap.
+        assert_eq!(HudLayout::new(1280, 800, None).scale, 1280.0 / DESIGN_WIDTH);
         for (width, height) in [(1920, 1080), (2560, 1440), (3840, 2160)] {
-            assert_eq!(HudLayout::new(width, height, None).scale, at_1280);
+            assert_eq!(HudLayout::new(width, height, None).scale, MAX_AUTO_SCALE);
         }
-        assert!(HudLayout::new(1024, 640, None).scale < at_1280);
+        assert!((MAX_AUTO_SCALE / (1280.0 / DESIGN_WIDTH) - 1.2).abs() < 1e-6);
+        assert!(HudLayout::new(1024, 640, None).scale < MAX_AUTO_SCALE);
         assert_eq!(HudLayout::new(3840, 2160, Some(150)).scale, 1.5);
     }
 

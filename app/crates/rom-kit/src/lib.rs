@@ -7,6 +7,7 @@ pub mod engines;
 pub mod kit;
 pub mod material;
 pub mod models;
+pub mod pods;
 pub mod rig;
 
 pub use material::{MaterialLook, Program};

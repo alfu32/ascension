@@ -1,0 +1,31 @@
+# Task 174: drop pods just landed, close. As 174-fall-script.txt, the game all but stopped a
+# second after the pods struck: scorched pods in their craters, petals folded out flat, the
+# marines standing in them, dust and smoke round them.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun fixed --size 1600x900 \
+#     --script app/docs/tasks/174-impact-script.txt --after 47 --screenshot app/docs/img/174-pods-landed.png
+0 grant-age age.expansion
+0 grant-tech tech.orbital_drop
+0 place-orbit 1 unit.transport_ship @0,16
+0 place 1 unit.marine @-3,8
+0 place 1 unit.marine @-2,8
+0 place 1 unit.marine @-1,8
+0 place 1 unit.marine @1,8
+0 place 1 unit.marine @2,8
+0 place 1 unit.marine @3,8
+1 speed 400
+100 ships
+101 rclick @0,18
+250 ships
+251 hud slot 6
+420 box-near army1 6
+421 rclick landed1
+680 click landed1
+681 hud slot 5
+760 ships
+761 hud slot 8
+762 speed 20
+763 click @9,9
+764 cam drag 960,380 800,560 shift
+766 cam wheel 1 800,450
+868 speed 1
+869 cam wheel 3 810,570

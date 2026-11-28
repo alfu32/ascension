@@ -407,16 +407,64 @@ fn part_marks(entry: &ModelEntry, view: &EntityView) -> (Vec<WorldLabel>, Vec<Li
     (labels, lines)
 }
 
+/// The part kit's own models, which no entity has, for review (task 174): the drop pod falling,
+/// then its opening stages from closed to flat. Their entity is no type of the rules.
+fn kit_entries() -> Vec<ModelEntry> {
+    rom_render::pods::drop_pods()
+        .into_iter()
+        .map(|look| ModelEntry {
+            id: look.id.clone(),
+            entity: rom_rules::DefId(0),
+            faction: None,
+            age: None,
+            candidate: None,
+            mesh: rom_rules::DefId(0),
+            material: None,
+            baked: rom_render::models::bake_model(&look.spec),
+            look,
+        })
+        .collect()
+}
+
+/// The kit models `filter` selects, as book indices from `first` on: every one for `kit`, one
+/// by its id (`kit.drop_pod_open`); `None` when the filter is not about the kit.
+fn select_kit(kit: &[ModelEntry], first: usize, filter: &str) -> Option<Vec<usize>> {
+    if filter != "kit" && !filter.starts_with("kit.") {
+        return None;
+    }
+    Some(
+        kit.iter()
+            .enumerate()
+            .filter(|(_, e)| filter == "kit" || e.id == filter)
+            .map(|(i, _)| first + i)
+            .collect(),
+    )
+}
+
 /// Publishes a gallery or a model sheet for `options` to the render thread.
 pub fn start(options: &Options, bridge: &rom_render::RenderBridge) -> Result<(), String> {
     let rules = crate::terrain::load_rules()?;
-    let book = ModelBook::new(&rules);
+    let mut book = ModelBook::new(&rules);
     let (filter, single) = match (&options.model, &options.gallery) {
         (Some(id), _) => (id.clone(), true),
         (None, Some(filter)) => (filter.clone(), false),
         (None, None) => return Err("no gallery or model asked for".into()),
     };
-    let chosen = select(&book, &rules, &filter)?;
+    // The kit's own models follow the rules' models in the looks published below.
+    let kit = kit_entries();
+    let chosen = match select_kit(&kit, book.entries.len(), &filter) {
+        Some(chosen) if chosen.is_empty() => {
+            let ids: Vec<&str> = kit.iter().map(|e| e.id.as_str()).collect();
+            return Err(format!(
+                "no kit model matches {filter:?}; kit models: {}",
+                ids.join(", ")
+            ));
+        }
+        Some(chosen) => chosen,
+        None => select(&book, &rules, &filter)?,
+    };
+    let kit_looks: Vec<rom_render::ModelLook> = kit.iter().map(|e| e.look.clone()).collect();
+    book.entries.extend(kit);
     if single && book.entries[chosen[0]].id != filter {
         return Err(format!("--model expects a model id, got {filter:?}"));
     }
@@ -449,7 +497,7 @@ pub fn start(options: &Options, bridge: &rom_render::RenderBridge) -> Result<(),
         }
     }
     bridge.publish_hud_options(false, None);
-    bridge.publish_looks(Arc::new(scene_looks(
+    let mut looks = scene_looks(
         &rules,
         options.seed,
         rom_mapgen::BaseTerrains {
@@ -458,7 +506,9 @@ pub fn start(options: &Options, bridge: &rom_render::RenderBridge) -> Result<(),
             deep: rules.id_of("ter.deep").unwrap_or(rom_rules::DefId(0)),
             space: rules.id_of("ter.space").unwrap_or(rom_rules::DefId(0)),
         },
-    )));
+    );
+    looks.models.extend(kit_looks);
+    bridge.publish_looks(Arc::new(looks));
     let camera = gallery_camera(&layout, options.gallery_view, aspect);
     bridge.publish_terrain(Arc::new(layout.terrain));
     let waiting = std::time::Instant::now();
@@ -1458,6 +1508,25 @@ mod tests {
         assert_eq!(changed.len(), 1);
         assert!(changed[0].starts_with("unit.citizen@any"));
         assert!(approved(APPROVED).values().all(|f| f.len() == 16));
+    }
+
+    /// Task 174: `--gallery kit` shows the drop pod falling and opening, `--model` one of them.
+    #[test]
+    fn the_kit_gallery_shows_the_drop_pod_closed_and_open() {
+        let kit = kit_entries();
+        let ids: Vec<&str> = kit.iter().map(|e| e.id.as_str()).collect();
+        assert!(ids.contains(&"kit.drop_pod") && ids.contains(&"kit.drop_pod_open"));
+        assert!(kit.iter().all(|e| e.baked.near.triangles() > 0));
+        assert_eq!(
+            select_kit(&kit, 10, "kit").map(|c| c.len()),
+            Some(kit.len())
+        );
+        assert_eq!(
+            select_kit(&kit, 10, "kit.drop_pod_open"),
+            Some(vec![10 + kit.len() - 1])
+        );
+        assert_eq!(select_kit(&kit, 10, "kit.nothing"), Some(Vec::new()));
+        assert_eq!(select_kit(&kit, 10, "units"), None);
     }
 
     #[test]
