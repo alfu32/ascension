@@ -37,6 +37,7 @@ mod orbit;
 mod overlay;
 pub mod pick;
 mod pixels;
+mod pod_pose;
 pub mod pointer;
 pub mod projectiles;
 mod readback;
@@ -55,7 +56,7 @@ pub mod vision;
 mod worker;
 pub mod zoom;
 
-pub use rom_kit::{kit, models, rig};
+pub use rom_kit::{kit, models, pods, rig};
 
 pub use camera::{
     Camera, CameraController, InputEvent, Key, Modifiers, PointerButton, TurnSettings, WheelGate,

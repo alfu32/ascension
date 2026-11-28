@@ -1565,6 +1565,7 @@ impl Controller {
                 age_ticks: tick.saturating_sub(b.tick).min(u64::from(u32::MAX)) as u32,
                 seed: seed(b.tick, b.pos),
                 pod: b.drop,
+                owner: u8::try_from(b.owner.0).unwrap_or(u8::MAX),
             })
             .collect();
         let rules = world.rules();

@@ -846,6 +846,10 @@ impl Scene {
         self.shake = [0.0; 3];
         if let (Some(gpu), Some(orbit)) = (&self.globe, orbit) {
             self.shake = pod_shake(hud, &*gpu.globe, orbit, render_tick);
+            // The drop pods standing where they struck (task 174).
+            if let Some(models) = &mut self.models {
+                models.place_landed_pods(&hud.blasts, hud.ticks_per_second, &*gpu.globe);
+            }
             build_overlays_on(views, &*gpu.globe, orbit.right(), hud, &mut self.overlay);
             crate::overlay::pointer_marks(
                 views,

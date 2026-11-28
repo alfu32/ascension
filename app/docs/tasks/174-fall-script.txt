@@ -1,0 +1,31 @@
+# Task 174: drop pods mid-fall, close. Seed 1, player one in the Starfaring age with Orbital
+# Drop (as 169-drop-script.txt): a transport takes six marines up and drops them (the Drop
+# button, F) beside the city; the game slows to 20 %, then all but stops while the pods are
+# halfway down, white-hot shields first, trailing fire and smoke.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun fixed --size 1600x900 \
+#     --script app/docs/tasks/174-fall-script.txt --after 38 --screenshot app/docs/img/174-pods-falling.png
+0 grant-age age.expansion
+0 grant-tech tech.orbital_drop
+0 place-orbit 1 unit.transport_ship @0,16
+0 place 1 unit.marine @-3,8
+0 place 1 unit.marine @-2,8
+0 place 1 unit.marine @-1,8
+0 place 1 unit.marine @1,8
+0 place 1 unit.marine @2,8
+0 place 1 unit.marine @3,8
+1 speed 400
+100 ships
+101 rclick @0,18
+250 ships
+251 hud slot 6
+420 box-near army1 6
+421 rclick landed1
+680 click landed1
+681 hud slot 5
+760 ships
+761 hud slot 8
+762 speed 20
+763 click @9,9
+764 cam drag 960,380 800,560 shift
+766 cam wheel 1 800,450
+832 speed 1

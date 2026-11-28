@@ -244,6 +244,8 @@ pub struct HudBlast {
     /// A drop pod's impact (task 169): a hard flash, a ring of dust and a scorch, then the pod
     /// opens; no fireball.
     pub pod: bool,
+    /// The player who fired it or whose unit landed there: the colour of a pod's band (task 174).
+    pub owner: u8,
 }
 
 /// A building that fell lately on the shown surface (task 75): it collapses, then its ruin
