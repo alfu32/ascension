@@ -346,4 +346,10 @@ job passed. The release helpers are in `scripts/release/`, the package sources i
 | `app/docs/ascension.md`, `app/docs/bringing-life.md` | the Ascension and painting worlds |
 | `app/docs/tasks/STATUS.md` | task ledger: what is running, merged or blocked |
 
-License: MIT OR Apache-2.0.
+## Licence
+
+Copyright © 2026 alfu32. All rights reserved. The free version may be downloaded from the
+official releases and played, hosted free of charge and shown in videos and streams. It may not
+be redistributed, modified, reused or used commercially without the author's written agreement.
+The full terms are in [LICENSE](LICENSE); the third-party components keep their own licences,
+listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

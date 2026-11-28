@@ -103,6 +103,14 @@ not suppress them or relax the gate.
    planet, task 77) are not generation: they are allowed, saved and
    deterministic, and re-bake only what they touch (owner, 2026-11-17).
 
+## Licence
+
+The game is "all rights reserved" (`LICENSE`, owner 2026-11-28); every file you add falls under
+it. Third-party code, data, fonts or sounds may be added only under licences that allow
+proprietary distribution (MIT, Apache-2.0, BSD, Zlib, ISC, CC0 and the like; no GPL, LGPL or
+share-alike). Run `python3 -I scripts/release/third_party_notices.py` after changing
+dependencies. Premium content for the commercial edition never goes into this repository.
+
 ## Naming
 
 - Never write the names of the games this project learned from, their

@@ -2,7 +2,7 @@
 <component type="desktop-application">
   <id>io.github.alfu32.ascension</id>
   <metadata_license>CC0-1.0</metadata_license>
-  <project_license>MIT OR Apache-2.0</project_license>
+  <project_license>LicenseRef-proprietary=https://github.com/alfu32/ascension/blob/main/LICENSE</project_license>
   <name>Ascension</name>
   <summary>Real-time strategy from early history to an age of galactic empires</summary>
   <description>
