@@ -201,6 +201,14 @@ impl Brain {
         self.memory.voyages.iter().map(|(id, v)| (*id, v))
     }
 
+    /// Worlds the space scout has looked over, by body id, with the tick it finished (task 173).
+    pub fn surveyed_worlds(&self) -> impl Iterator<Item = (u32, u64)> + '_ {
+        self.memory
+            .surveyed
+            .iter()
+            .map(|(body, tick)| (*body, *tick))
+    }
+
     /// The state to store in `player_ai_state`.
     pub fn save(&self) -> SavedBrain {
         SavedBrain {
@@ -479,8 +487,10 @@ impl Brain {
         // at most two thirds of the budget, so training and the workers go on.
         let marching = alarmed
             || memory.armies.iter().any(|(role, a)| {
-                !matches!(role, Role::Escort | Role::Navy | Role::Ferry)
-                    && a.phase == Phase::Advance
+                !matches!(
+                    role,
+                    Role::Escort | Role::Navy | Role::Ferry | Role::Survey | Role::Invade
+                ) && a.phase == Phase::Advance
             });
         if marching {
             let all = plan.orders_left;

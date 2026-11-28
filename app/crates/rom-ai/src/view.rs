@@ -3,7 +3,7 @@
 
 use crate::{catalogue::Catalogue, memory::EnemySighting};
 use rom_rules::{ActiveSources, DefId, EntityClass, Owned, ProductionMode, RampMode, Rules};
-use rom_sim::{Entity, EntityId, PlayerId, Pos, Sighting, World};
+use rom_sim::{Entity, EntityId, PlayerId, Pos, Sighting, Topology, World};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Side of a threat-map cell in milli-tiles (8×8 tiles).
@@ -341,6 +341,39 @@ impl<'a> View<'a> {
     /// Distance between two positions in milli-tiles, or a large number when out of reach.
     pub fn distance(&self, a: Pos, b: Pos) -> u64 {
         self.world.distance(a, b).unwrap_or(u64::MAX / 4)
+    }
+
+    /// Distance between two positions for ordering by nearness (task 173): as [`View::distance`]
+    /// where the simulation measures it (on a sphere, within half a face of each other); farther
+    /// apart on one sphere, the chord between them in milli-tiles of its surface, a little short
+    /// of the way round but in the same order.
+    pub fn far(&self, a: Pos, b: Pos) -> u64 {
+        if let Some(d) = self.world.distance(a, b) {
+            return d;
+        }
+        let Some(Topology::Cube(cube)) = self
+            .world
+            .surface(a.body)
+            .filter(|_| a.body == b.body)
+            .map(|s| s.topology())
+        else {
+            return u64::MAX / 4;
+        };
+        let point = |p: Pos| {
+            cube.sphere_point(rom_geo::SurfacePos {
+                face: p.face,
+                x: i64::from(p.x),
+                y: i64::from(p.y),
+            })
+        };
+        let (p, q) = (point(a), point(b));
+        let square: i128 = (0..3)
+            .map(|i| (i128::from(p[i]) - i128::from(q[i])).pow(2))
+            .sum();
+        let chord = i128::from(rom_sim::integer_sqrt(square.max(0) as u128));
+        // The sphere's radius is 2 n / π tiles.
+        let n = i128::from(cube.n);
+        (chord * 2 * n * 1_000_000_000 / (3_141_593 * i128::from(rom_geo::SPHERE_SCALE))) as u64
     }
 }
 

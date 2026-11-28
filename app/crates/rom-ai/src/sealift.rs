@@ -3,9 +3,10 @@
 //! sea transports trained at the dock. The transports wait at the harbour, the main army boards
 //! them there, they sail to the coast nearest the enemy city and put the troops ashore, then
 //! come home for the next wave. Troops ashore attack what they can reach there. While no enemy
-//! is known anywhere the army could walk or sail to, a transport looks for one: it sails in turn
-//! to the water nearest eight points two faces of the planet from the capital (where a planet's
-//! other starts lie), then eight points one face away.
+//! is known anywhere the army could walk or sail to, a transport looks for one along the coasts
+//! (task 173): it sails to the nearest stretch of coast nobody has looked at (a map cell holding
+//! water it can sail to beside land), and everything in its sight as it sails counts as looked
+//! at, until every coast it can reach has been seen; then the oldest seen first.
 //!
 //! A sea transport is a unit whose container takes units and whose movement keeps to a planet's
 //! surface (`World::is_sea_carrier_type`); who may board is the container's tag
@@ -43,21 +44,23 @@ const BEACH_STEP: i32 = 2;
 const MAX_TRANSPORTS: i64 = 3;
 /// Enemy buildings looked at for a beach in one thought, cities and the nearest first.
 const BEACH_LOOKS: usize = 8;
-/// Tiles around a search point searched for water.
-const SEARCH_WATER_TILES: i32 = 24;
 /// How near its search point a transport counts as there, in milli-tiles.
 const SEARCH_SLACK: u64 = 6000;
-/// Eight directions, × 1000.
-const DIRECTIONS: [(i64, i64); 8] = [
-    (1000, 0),
-    (707, 707),
-    (0, 1000),
-    (-707, 707),
-    (-1000, 0),
-    (-707, -707),
-    (0, -1000),
-    (707, -707),
+/// Where in a map cell water and land are looked for, in tiles from its centre: the centre and
+/// eight points around it.
+const COAST_SAMPLES: [(i32, i32); 9] = [
+    (0, 0),
+    (3, 0),
+    (-3, 0),
+    (0, 3),
+    (0, -3),
+    (3, 3),
+    (-3, -3),
+    (3, -3),
+    (-3, 3),
 ];
+/// Cells of coast tried in one thought for a way by sea, nearest first.
+const COAST_TRIES: usize = 16;
 
 /// What the sea lift knows in one thought.
 #[derive(Debug, Default)]
@@ -313,9 +316,16 @@ impl Lift {
             .filter_map(|d| water_near(view, probe, d.pos, HARBOUR_TILES))
             .next();
         lift.dock = harbour.is_some();
+        // Before a dock, the water nearest the capital, else (task 173: an inland capital) the
+        // water nearest another city on its planet.
         lift.harbour = harbour.or_else(|| {
-            let tiles = ((capital.border / 1000) as i32).clamp(1, crate::catalogue::SEARCH_TILES);
-            water_near(view, probe, capital.pos, tiles)
+            view.cities
+                .iter()
+                .filter(|c| c.pos.body == capital.pos.body)
+                .find_map(|c| {
+                    let tiles = ((c.border / 1000) as i32).clamp(1, crate::catalogue::SEARCH_TILES);
+                    water_near(view, probe, c.pos, tiles)
+                })
         });
         let Some(harbour) = lift.harbour else {
             return lift;
@@ -492,7 +502,7 @@ pub(crate) fn command(
                         },
                     );
                 }
-                _ if lift.search => search(plan, &mut ferry, ship, harbour),
+                _ if lift.search => search(plan, memory, &mut ferry, ship, harbour),
                 _ if ship.orders().is_empty() => home(plan, ship, harbour),
                 _ => {}
             }
@@ -593,13 +603,115 @@ fn keep(memory: &mut Memory, ferry: Army) {
     }
 }
 
-/// Sends a transport to look for the enemy: to the water nearest the next search point it can
-/// sail to (`Army::peak` of the sea lift counts the points visited), once it is there or idle.
-fn search(plan: &mut Plan<'_>, ferry: &mut Army, ship: &Entity, harbour: Pos) {
+/// Notes the map cells of the ship's face within its sight as looked at now.
+fn sighted(view: &View<'_>, memory: &mut Memory, ship: &Entity) {
+    let sight = ship.los.max(0);
+    let (body, face, cx, cy) = crate::view::cell_of(ship.pos);
+    let reach = (sight / i64::from(crate::view::CELL)) as i32 + 1;
+    for dy in -reach..=reach {
+        for dx in -reach..=reach {
+            let cell = (body, face, cx + dx, cy + dy);
+            let centre = crate::army::cell_centre(cell);
+            if view
+                .world
+                .distance(ship.pos, centre)
+                .is_some_and(|d| d as i64 <= sight)
+            {
+                memory.looked.insert(cell, view.tick);
+            }
+        }
+    }
+}
+
+/// The water of a map cell beside land, and that land: the first sample point that is water a
+/// ship of `probe` sails on, and the first that is land.
+fn coast(view: &View<'_>, probe: DefId, cell: crate::view::Cell) -> Option<(Pos, Pos)> {
+    let centre = crate::army::cell_centre(cell);
+    let mut water = None;
+    let mut land = None;
+    for (dx, dy) in COAST_SAMPLES {
+        let at = view
+            .world
+            .offset(centre, i64::from(dx) * 1000, i64::from(dy) * 1000);
+        if is_water(view, probe, at) {
+            water.get_or_insert(tile_centre(at));
+        } else if view.world.terrain_at(at).is_some_and(|t| {
+            view.rules
+                .terrains
+                .get(&t)
+                .is_some_and(|t| t.layer != Layer::Fluid)
+        }) {
+            land.get_or_insert(tile_centre(at));
+        }
+    }
+    water.zip(land)
+}
+
+/// Sends a transport to look for the enemy (task 173): what it sees counts as looked at; once it
+/// is near its goal, or idle, it sails to the coast cell looked at longest ago (never first),
+/// nearest first, whose water it can reach from the harbour. `Army::peak` of the sea lift counts
+/// the stretches of coast it set off for. A city inland is out of sight from the sea, so it takes
+/// one soldier along while none of the sea lift's is ashore (the fastest of the gathered main
+/// army, else a ground scout) and sets it down on the first such coast whose land it could not
+/// walk to from home; ashore it looks about on foot (`ashore`).
+fn search(plan: &mut Plan<'_>, memory: &mut Memory, ferry: &mut Army, ship: &Entity, harbour: Pos) {
+    sighted(&plan.view, memory, ship);
     let view = &plan.view;
     if view.busy.contains(&ship.id) {
         return;
     }
+    let Some(capital) = view.cities.first().map(|c| c.pos) else {
+        return;
+    };
+    let aboard: Vec<&Entity> = view
+        .world
+        .passengers(ship.id)
+        .iter()
+        .filter_map(|id| view.world.entity(*id))
+        .collect();
+    // One of the sea lift's soldiers ashore over the water (those back home have rejoined the
+    // main army).
+    let abroad = ferry
+        .members
+        .iter()
+        .filter_map(|id| view.world.entity(EntityId(*id)))
+        .any(|e| e.container_id.is_none() && !boarding(e, ship.id));
+    if aboard.is_empty() && !abroad {
+        if view.own.iter().any(|e| boarding(e, ship.id)) {
+            return;
+        }
+        if view.distance(ship.pos, harbour) <= HARBOUR_SLACK {
+            // The fastest of the gathered main army, else a ground scout on the home land (it
+            // has looked over all of it).
+            let scouts: Vec<&Entity> = memory
+                .armies
+                .get(&Role::Scout)
+                .into_iter()
+                .flat_map(|a| a.members.iter())
+                .filter_map(|id| view.world.entity(EntityId(*id)))
+                .filter(|e| {
+                    e.container_id.is_none()
+                        && operational(e)
+                        && view.world.may_ride(ship.type_id, e.type_id)
+                        && view.world.reachable(e.type_id, e.pos, capital) == Some(true)
+                })
+                .collect();
+            let mut army = waiting(view, memory, ship.type_id, true);
+            army.sort_by_key(|e| {
+                let speed = view.rules.entity_types[&e.type_id]
+                    .movement
+                    .as_ref()
+                    .map_or(0, |m| m.speed);
+                (std::cmp::Reverse(speed), e.id)
+            });
+            if let Some(first) = army.first().or(scouts.first()).copied() {
+                let room = view.world.carry_capacity(ship.id) - view.world.carried_load(ship.id);
+                board(plan, memory, ferry, ship, &[first], room);
+                return;
+            }
+        }
+    }
+    let explorer = aboard.first().map(|e| e.type_id);
     let goal = ship
         .orders()
         .front()
@@ -608,29 +720,55 @@ fn search(plan: &mut Plan<'_>, ferry: &mut Army, ship: &Entity, harbour: Pos) {
     if goal.is_some_and(|g| view.distance(ship.pos, g) > SEARCH_SLACK) {
         return;
     }
-    let Some(capital) = view.cities.first().map(|c| c.pos) else {
-        return;
-    };
-    let Some(n) = view.world.body(capital.body).and_then(|b| b.n) else {
-        return;
-    };
-    let n = i64::from(n) * 1000;
-    for step in 0..16 {
-        let k = (ferry.peak.max(0) + step) as usize % 16;
-        let (dx, dy) = DIRECTIONS[k % 8];
-        let far = if k < 8 { 2 * n } else { n };
-        let at = view.world.offset(capital, dx * far / 1000, dy * far / 1000);
-        let Some(water) = water_near(view, ship.type_id, at, SEARCH_WATER_TILES) else {
+    let tick = view.tick;
+    let mut cells: Vec<(u64, u64, crate::view::Cell)> =
+        crate::army::body_cells(view, ship.pos.body)
+            .into_iter()
+            .filter_map(|cell| {
+                let looked = memory.looked.get(&cell).copied().unwrap_or(0);
+                if looked > 0 && looked + crate::army::LOOK_AGAIN_TICKS > tick {
+                    return None;
+                }
+                let far = view.far(ship.pos, crate::army::cell_centre(cell));
+                (far > SEARCH_SLACK && far < u64::MAX / 8).then_some((looked, far, cell))
+            })
+            .collect();
+    cells.sort_unstable();
+    let mut tries = 0;
+    // With a soldier aboard, the first coast of land it could not walk to from home, where it is
+    // set down; else the first coast.
+    let mut first: Option<Pos> = None;
+    for (_, _, cell) in cells {
+        let Some((water, land)) = coast(view, ship.type_id, cell) else {
             continue;
         };
-        if view.world.reachable(ship.type_id, harbour, water) != Some(true)
-            || view.distance(ship.pos, water) <= SEARCH_SLACK
+        if explorer.is_some_and(|walker| view.world.reachable(walker, land, capital) != Some(false))
         {
+            if first.is_none() && view.world.reachable(ship.type_id, harbour, water) == Some(true) {
+                first = Some(water);
+            }
             continue;
         }
-        ferry.peak = (k + 1) as i64;
-        plan.order(ship.id, "move", None, None, Some(water));
+        if view.world.reachable(ship.type_id, harbour, water) != Some(true) {
+            // No way there by sea: as good as looked at, for a while.
+            memory.looked.insert(cell, tick);
+            tries += 1;
+            if tries >= COAST_TRIES {
+                return;
+            }
+            continue;
+        }
+        ferry.peak += 1;
+        if explorer.is_some() {
+            plan.order(ship.id, "unload", None, None, Some(land));
+        } else {
+            plan.order(ship.id, "move", None, None, Some(water));
+        }
         return;
+    }
+    if let Some(water) = first {
+        ferry.peak += 1;
+        plan.order(ship.id, "move", None, None, Some(water));
     }
 }
 
@@ -661,7 +799,7 @@ fn home(plan: &mut Plan<'_>, ship: &Entity, harbour: Pos) {
 }
 
 /// Orders main army units at home aboard a transport at the harbour, as many as it has room
-/// for; they leave the main army for the sea lift.
+/// for; they leave the main army (or the scouts, task 173) for the sea lift.
 fn board(
     plan: &mut Plan<'_>,
     memory: &mut Memory,
@@ -683,16 +821,18 @@ fn board(
             return;
         }
         room -= need;
-        if let Some(main) = memory.armies.get_mut(&Role::Attack) {
-            main.members.remove(&e.id.0);
+        for role in [Role::Attack, Role::Scout] {
+            if let Some(army) = memory.armies.get_mut(&role) {
+                army.members.remove(&e.id.0);
+            }
         }
         ferry.members.insert(e.id.0);
     }
 }
 
 /// The units the sea lift carried: those ashore over the water attack the nearest enemy
-/// building they can walk to (else the target); those back at home with nothing to do rejoin
-/// the main army.
+/// building they can walk to (else the target), or with none known look about on foot (task
+/// 173); those back at home with nothing to do rejoin the main army.
 fn ashore(plan: &mut Plan<'_>, memory: &mut Memory, ferry: &mut Army) {
     let rally = memory
         .rally
@@ -707,7 +847,7 @@ fn ashore(plan: &mut Plan<'_>, memory: &mut Memory, ferry: &mut Army) {
         .filter_map(|id| plan.view.world.entity(EntityId(*id)))
         .filter(|e| e.container_id.is_none() && e.orders().is_empty())
         .collect();
-    let mut orders: Vec<(EntityId, Pos)> = Vec::new();
+    let mut orders: Vec<(EntityId, Pos, &str)> = Vec::new();
     for e in members {
         let view = &plan.view;
         let at_home = rally
@@ -731,11 +871,16 @@ fn ashore(plan: &mut Plan<'_>, memory: &mut Memory, ferry: &mut Army) {
             .map(|x| x.pos)
             .or(target);
         if let Some(goal) = near {
-            orders.push((e.id, goal));
+            orders.push((e.id, goal, "attack_move"));
+        } else if let Some(goal) =
+            crate::army::next_look(view, memory, e, crate::army::power(view, e), 0)
+        {
+            // Nothing known to strike over there: it looks about (task 173).
+            orders.push((e.id, goal, "move"));
         }
     }
-    for (id, goal) in orders {
-        if !plan.order(id, "attack_move", None, None, Some(goal)) {
+    for (id, goal, kind) in orders {
+        if !plan.order(id, kind, None, None, Some(goal)) {
             return;
         }
     }

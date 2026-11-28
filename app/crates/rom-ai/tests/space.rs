@@ -381,10 +381,23 @@ fn a_strike_fleet_fires_on_the_batteries_first() {
 /// enemy cruisers there a ship with the anti-ship gun.
 #[test]
 fn the_warship_class_follows_the_enemy_ships_seen() {
-    let rules = common::rules();
-    // The survey ship is trained for the claims first; the escort is the pick.
+    // The enemy is in sight from the start (task 173): the scout ship now takes the first place
+    // at the spaceport, so a warship ordered before the enemy craft climbed into view would be
+    // the pick against what the player could field itself.
+    let mut rules = (*common::rules()).clone();
+    for d in rules.ai_difficulties.values_mut() {
+        d.sees_all = true;
+    }
+    let rules = Arc::new(rules);
+    // The survey ship is trained for the claims first, and a scout ship to look over the other
+    // worlds (task 173); the escort's warships are the pick.
     let survey = rules.id_of("unit.survey_ship").unwrap();
-    let warships = |w: &World| -> BTreeMap<rom_rules::DefId, usize> {
+    let warships = |w: &World, brain: &Brain| -> BTreeMap<rom_rules::DefId, usize> {
+        let escort: Vec<u32> = brain
+            .armies()
+            .filter(|(role, _)| *role == rom_ai::Role::Escort)
+            .flat_map(|(_, a)| a.members.iter().copied())
+            .collect();
         let mut out = BTreeMap::new();
         for e in w.entities().filter(|e| e.owner == ME) {
             let et = &rules.entity_types[&e.type_id];
@@ -392,6 +405,7 @@ fn the_warship_class_follows_the_enemy_ships_seen() {
                 && et.container.as_ref().is_none_or(|c| !c.launches)
                 && !et.weapons.is_empty()
                 && e.type_id != survey
+                && escort.contains(&e.id.0)
             {
                 *out.entry(e.type_id).or_default() += 1;
             }
@@ -442,7 +456,10 @@ fn the_warship_class_follows_the_enemy_ships_seen() {
         let mut brain = Brain::new(Arc::clone(&rules), ME, "balanced", "tougher", 61).unwrap();
         for _ in 0..80 {
             run(&mut w, &mut brain, 100);
-            if let Some((t, _)) = warships(&w).into_iter().max_by_key(|(t, n)| (*n, *t)) {
+            if let Some((t, _)) = warships(&w, &brain)
+                .into_iter()
+                .max_by_key(|(t, n)| (*n, *t))
+            {
                 return rules.key(t).to_string();
             }
         }

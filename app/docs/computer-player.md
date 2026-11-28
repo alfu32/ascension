@@ -216,7 +216,10 @@ systems:
   own spaceport, flies (and travels) to a habitable planet without an own
   city — free planets first — lands on open ground, founds a city with the
   builder (troops ashore attack the nearest known enemy building), lifts off
-  and takes the next planet;
+  and takes the next planet (since task 173 never one where an enemy city is
+  known: that one is invaded, see "Other worlds");
+- a **scout ship** looks over the other worlds, and transports carry
+  **invasions** to the enemy worlds it finds (task 173, "Other worlds");
 - **orbital craft** (task 58: movement with `climb_ticks`) climb to their
   planet's orbit and defend it; a **launching carrier** (`et_container.launches`)
   waits at home while craft there board it, then joins the escort and
@@ -1596,6 +1599,10 @@ fighters stood near the stand-in's capital then.
   alike) and `a_walled_in_capital_does_not_eat_the_order_budget`; `space.rs`
   `a_fleet_travels_in_formation` (line abreast, a place of its own for every ship, twice alike);
   `formations.rs` unit tests of the choice.
+- `crates/rom-ai/tests/explore.rs` (task 173) — a scout looks over both other planets of its
+  system, the nearer first, before the planet of the next system; an enemy city it sees is
+  remembered across a save (the restored brain gives the same orders); an invasion sets off
+  against an undefended world and not against one it cannot beat; each twice alike.
 - `crates/rom-ai/tests/ages.rs` — the second age in the ordinary run; every
   profile to the third age on seeds 1–5 with
   `cargo test --release -p rom-ai --test ages -- --ignored`.
@@ -1670,9 +1677,8 @@ it by its container's tag (`World::may_ride`).
   the harbour (`World::reachable` for both). The beach found is kept with the target.
 - **Search.** When no enemy building is known on the home planet that the army can walk or sail to,
   and every cell of the home land the army can walk to has been seen, a transport looks for the
-  enemy: it sails in turn to the water nearest eight points two faces of the planet from the
-  capital (where a planet's other starts lie: they are placed far apart), then eight points one
-  face away. It counts the points visited in the sea lift's army (`peak`).
+  enemy. Since task 173 it searches the coasts (see "Other worlds" below); before, it sailed in
+  turn to the water nearest sixteen fixed points around the capital.
 - **Wishes.** A dock first (640) while there is none; then the transport with the most room
   (610), as many as the main army needs (its units over the room of one, at least one, at most
   three); one for a search.
@@ -1785,7 +1791,9 @@ Otherwise it is never researched.
   over the enemy world and drops them as above; the voyage ends once nobody aboard can be
   dropped. The space manager wishes a transport for it as for a colony. An enemy world that is
   not known (no enemy building remembered there) is not invaded, and a colonising transport that
-  finds nothing in sight below lands as before.
+  finds nothing in sight below lands as before. *Task 173 replaced this paragraph: see "Other
+  worlds" below (invasions are chosen by worth and strength, whether or not cities can still be
+  founded, and land their troops when they cannot drop them).*
 
 ## Buildings that lift off (task 170)
 
@@ -1817,3 +1825,150 @@ where it may land `World::check_touch_down`; no definition is named.
 - **In the air** a producer is offered no training and no research (`View::producers`, the
   research manager's free producers).
 
+
+## Other worlds (task 173)
+
+Found by task 169: in every universe `ai-match` no computer player ever learnt of an enemy building
+on another planet, so none invaded, dropped from orbit or took the war off its home planet; and
+the sea lift's search of task 167 sailed to sixteen fixed points.
+
+### The space scout
+
+`rom-ai/src/survey.rs`. From the first age whose map scale reaches beyond the planet, one ship
+looks over the other worlds (an army of its own, `Role::Survey`: saved as one more role code).
+
+- **Which ship.** A spacecraft the player can train that may leave its planet's orbit
+  (`World::is_orbit_bound`), is no orbital craft, carries no troops (an unarmed carrier), launches
+  no craft and trades nothing: by its rows, never its key. Of those, the cheap ones (at most twice
+  the lowest price before ramps, so a type the player owns many of stays cheap, and twice the
+  lowest population, which still tells in the ages where nothing costs anything), the one that
+  sees farthest. In the seeded rules that is the survey ship (the corvette, cheapest, sees less
+  and was found to die sooner; a scout told to hold its fire died sooner still). The space probe
+  and the satellite are bound to their orbit and are never scouts. No ship can leave its orbit
+  before the Spacefaring age, so in the Fusion age the scout waits.
+- **Wish.** Score 700, as the ground scout's, while no scout is out, a world is left to look at and
+  no ship of the type stands free (a free one is enlisted instead, off the escort).
+- **Order of visits.** Habitable planets in reach other than the home planet (a colony of its own
+  sees little of its planet): those never looked over first, then the longest ago (a world is
+  looked at again 36 000 ticks after); among them a planet where the player's research places an
+  enemy capital (`World::known_capitals`), then the planets of a system where it does (the
+  capital's system is known once the enemy is met, from the Unification), then the fewest jumps
+  along the routes (`fleet::legs`, the order the route plan gives), then the nearest to the scout,
+  then by id. A capital learnt of while the scout is elsewhere takes it there at once.
+- **Over a world** it holds orbit and moves the point it holds over through a tour: where research
+  places an enemy capital first, then the six face centres, then the eight corners (each half a
+  sight radius in), the nearest of the lowest rank first; points within half its sight of the point
+  below are done (bits of the army's `peak`). What comes into sight is remembered as every
+  sighting is (`view::remember`). The tour ends when it is done, when an enemy city is seen there,
+  or after 24 000 ticks; the world is noted with the tick (`Memory::surveyed`, saved: layout
+  version 6, version 5 still reads).
+- **Losses.** A lost scout is replaced after a pause of 1 200 ticks at the default pace, stretched
+  by the pace as the ground scout's wait is (task 166); the next one goes on with the tour where
+  the lost one stopped, unless an enemy city is known there by then.
+- **Nearness on a sphere.** `World::distance` measures only within half a face; the tour and the
+  coast search order far points by `View::far`, the chord between them on the sphere.
+
+### Invasions
+
+`rom-ai/src/invasion.rs`, led by the space manager's transports (`fleet.rs`).
+
+- **Target.** An enemy world is known when an enemy building is remembered on a habitable planet in
+  reach other than the home planet. Its buildings are weighed as the main army weighs a ground
+  target: price over the danger around it (cities four times, a capital eight), over the jumps to
+  its system plus one; first those no known battery covers (a building that fires up at the orbit,
+  within its reach plus 12 tiles), then cities before other buildings that hold land before the
+  rest. Armed enemy ships remembered in the world's orbit, or batteries covering every target,
+  **hold** the world: the escort strikes it first (it takes the held world as its strike target)
+  and no invasion sets off.
+- **Strength.** The wave is the gathered main army's units at home that may ride the transport, as
+  many as its room holds. It sets off only when its strength is at least the profile's attack ratio
+  (falling over a long war as a ground wave's does, `army::wave_ratio`) of what was seen there: the
+  enemy ground army remembered plus the defence around the target at full strength, or the
+  strength of a wave lost there when that is more; it must hold at least `MIN_WAVE` units and be
+  able to take the target (`army::can_take`). Only what fires at troops on the ground counts: a
+  battery that fires only at the orbit (strength 23 400 in the seeded rules, against 60 for a
+  city) would otherwise keep every invasion home.
+- **Voyage** (`Job::Invade`). The transport comes down at home, the wave boards (its units leave
+  the main army for the invasion's army, `Role::Invade`), it sets off once full or after
+  `LOAD_TICKS` when what is aboard is still enough, and gives up and sets them down again after a
+  further 2 400 ticks. Over the world it moves within its orbit to above the target (12 tiles), then
+  drops its infantry where it can (task 169), else lands beside the target and sets them down, and
+  lifts off again.
+- **Ashore** the invasion's units go for the target, or the nearest enemy building they can walk to
+  there, and fire on the weakest armed enemy in reach (`army::focus`); back home with nothing to do
+  they rejoin the main army. A wave lost to its last unit leaves its strength as the defence
+  measured at its target.
+- **Transports.** One for a colony while one can be founded, and one for an invasion while an enemy
+  world is known; the invasion's is wished at 700, as the ground scout, once the troops at home are
+  enough (the colony's stays at 540). A world where an enemy city is known is no longer a colony's
+  target.
+- **The escort** fires only on what it sees now: a remembered building in the fog was refreshed
+  every thought and fired on, and each order was refused ("attack target is hidden", 1 497 times in
+  a Solar match once enemy worlds were known).
+
+### The sea search on one planet
+
+`rom-ai/src/sealift.rs`. The sixteen fixed points are gone. A searching transport counts every map
+cell within its sight as looked at (`Memory::looked`, as the ground scouts do), and when near its
+goal or idle sails to the coast cell looked at longest ago, never-looked first, the nearest first,
+whose water it can reach from the harbour; cells it cannot reach count as looked at for a while.
+A coast cell holds water the transport sails on and land among nine points (its centre and eight
+points three tiles off). Cities inland are out of sight from the sea, so while none of the sea lift's soldiers is
+ashore the transport takes one along from the harbour, the fastest of the gathered main army
+else a ground scout on the home land, and sets it down on the first such coast whose land that
+unit could not walk to from home; ashore with no enemy known it looks about on foot
+(`army::next_look`), and once an enemy building is seen the sea lift's waves follow as before. A
+capital with no water near has its harbour by the water nearest another of its cities on the
+planet.
+
+### Measured (task 173)
+
+`rom ai-match` now prints per player an `explore` line (the first tick its brain remembered an
+enemy building, the first on another world and which, the first invasion set off and how many,
+the first tick one of its ground units stood on a world with an enemy city other than its home,
+the worlds its scout looked over, the tick it ascended) and an `outcome` line (cities left and
+each player's status; victory rules are off, so the winner is the only player with cities left,
+if any). With `--trace` a `survey` line per player shows the scout, its world and tour, the
+worlds looked over, the invasion's army, the enemies known per world, the main army and escort,
+and the voyages.
+
+`rom ai-match --db target/rules.db --universe --style <style> --start-age age.expansion --players
+balanced:moderate,balanced:moderate --ticks 40000` (each race on its home planet, the Starfaring
+age, 100 000 of every resource). Each was run twice with equal hashes. First enemy world seen /
+first invasion set off / first drop, per player (P1, P2); "–" never:
+
+| Style, seed | Main (0.158.0) | Task 173 | Hash |
+| --- | --- | --- | --- |
+| Solar 1 | P1 32 941 / – / –; P2 – | P1 13 821 / – / –; P2 – | `a92180efffbe79e1` |
+| Solar 2 | none | none | `f9542a63d9b44733` |
+| Cluster 1 | none | P1 35 061 / 38 441 / –; P2 12 061 / 14 642 / 18 202 (23 dropped) | `7745645975c27ed1` |
+| Cluster 2 | P1 35 261 / 36 441 / –; P2 9 821 / 33 842 / 9 842 (13, a colonising transport over a world both had colonised) | P1 5 661 / 10 841 / 11 761 (13); P2 11 981 / 14 602 / 18 042 (17) | `aca8033a389006fc` |
+
+No match had a winner within 40 000 ticks (cities at the end 30/11, 18/19, 26/29, 19/19). In Solar
+1 player one found player two's home, but batteries cover all its cities, so no invasion set off:
+the escort struck the planet from orbit instead (player two ended with 11 cities, against 21 on
+main). In Solar 2 the scouts looked over worlds without seeing the enemy's buildings within the
+40 000 ticks (a tour sees bands of a 192-tile planet, not all of it). These matches are chaotic: an
+earlier version of this work (another scout ship type) took Solar 1 to an invasion at 12 521 and a
+drop at 14 601, player two defeated, and player one ascended at 20 561.
+
+The island seeds of task 167 (`--style map.one_world --ticks 72000`, separate landmasses), first
+enemy building seen:
+
+| Seed | Main (0.158.0) | Task 173 | Hash |
+| --- | --- | --- | --- |
+| 2 | P1 39 781; P2 never | P1 49 181; P2 58 581 | `e577e019fd62854b` |
+| 8 | neither | P1 51 981; P2 61 661 | `b4b7096b47a8e2b7` |
+
+In seed 8 player two's capital has no water within its border (its harbour is now found by another
+of its cities, but it built no transport); player one's transport set a soldier ashore at 36 221,
+found player two at 51 981 and carried waves of up to 30 over; player two saw player one's
+buildings when they landed.
+
+`rom duel --profiles balanced:moderate,balanced:easiest --seeds 1..20`: 20–0, mean tick 46 393, the
+same winner and the same last tick in every seed as on main; the state hash is equal in four seeds
+(1, 2, 6, 15) and differs in sixteen: the one part of this task active on a one-planet map is the
+sea lift's search (where the searching transport sails, the soldier it takes along), and it never
+decided a duel. `rom fight-matrix`: `strengths=305 unanswered=0`. `rom playthrough --seed 1` (the
+simulation's own bot): `hash=18de088ac92ec4b0`, ascension `ascended_tick=64731
+hash=d75f72f81ad7b944`, as on main.
