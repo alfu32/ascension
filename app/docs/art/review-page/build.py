@@ -14,6 +14,7 @@ VERSION = sys.argv[3] if len(sys.argv) > 3 else ""
 SOUND_DIR = Path(sys.argv[4]) if len(sys.argv) > 4 else None
 
 LEADS = {
+    "23": "Round 23 brings the <strong>drop pod</strong> (task 174, release 0.159.0), the capsule infantry ride down in during an orbital drop: a scorched heat shield that glows white-hot as it falls, a capsule with your colour band, fins and a thruster cap; on landing the petals fold open and the soldiers stand in it. It is built from the part kit and drawn by the game during a drop, so it has no card of its own below: the pictures above show it closed, falling and open, and in a match. Write your verdict and directions for it in the round's directions box at the end of the page. The sea transports (round 22) and the shield emitters (round 21) are still open below.",
     "22": "Buildings and units built from parts inside the game. Round 22 brings the <strong>sea transports</strong> (task 167, release 0.153.0): one line trained at the dock that carries land units across water, the <strong>cog</strong> (Medieval, 10 aboard), the <strong>fluyt</strong> (Discovery, 15), the <strong>troopship</strong> (Industrial, 20) and the <strong>landing ship</strong> (Modern, 25). They are unarmed; the pictures above show a loaded cog leaving the dock and troops going ashore. The shield emitters and shield gates of round 21 are still open below. Set each model's status and write directions; name a part as <code>model id/part</code>.",
     "21": "Buildings and units built from parts inside the game. Round 21 brings the <strong>shield emitters</strong> (task 156, release 0.150.0), the fortification line of the space ages: the <strong>Shield Emitter</strong> pylon and the three-tile <strong>Shield Gate</strong>, from the Spacefaring age on (three looks: Spacefaring, Abundance, Galactic War, which the Federation reuses). In a match an energy wall stands between neighbouring pylons while they have energy and drops without it (pictures above); defensive lines turn into emitters at the Spacefaring advance. The gates you approved in round 20 are locked. Set each model's status and write directions; name a part as <code>model id/part</code>.",
     "20": "Buildings and units built from parts inside the game. Round 20 brings the <strong>gates redrawn three tiles wide</strong> (task 147b, release 0.0.140), as you asked: the palisade gate, the wall gate (the classical and medieval arches now three bays) and the defensive line's checkpoint, in every age they stand in. In a match they turn along the wall like its segments (pictures above). The walls, lines, minefields and the space probe you approved in round 19 are locked. Set each gate's status and write directions; name a part as <code>model id/part</code>.",
@@ -227,7 +228,14 @@ OVERVIEW22 = [
     ("167-cog-leaving", "A cog leaving the dock with seven soldiers aboard (the Aboard strip, bottom right)"),
     ("167-ashore", "The troops set ashore on another stretch of coast"),
 ]
-OVERVIEW = OVERVIEW22 if ROUND == "22" else OVERVIEW21 if ROUND == "21" else OVERVIEW20 if ROUND == "20" else OVERVIEW19 if ROUND == "19" else OVERVIEW18 if ROUND == "18" else OVERVIEW17 if ROUND == "17" else OVERVIEW16 if ROUND == "16" else OVERVIEW15 if ROUND == "15" else OVERVIEW14 if ROUND == "14" else OVERVIEW13 if ROUND == "13" else OVERVIEW12 if ROUND == "12" else OVERVIEW11 if ROUND == "11" else OVERVIEW10 if ROUND == "10" else OVERVIEW9 if ROUND == "9" else OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
+OVERVIEW23 = [
+    ("kit.drop_pod", "The drop pod closed: heat shield, capsule with the colour band, fins, thruster cap (kit.drop_pod)"),
+    ("kit.drop_pod_hot", "Falling: the heat shield glowing white-hot (kit.drop_pod_hot)"),
+    ("kit.drop_pod_open", "Landed: the petals folded flat, the cap blown off (kit.drop_pod_open)"),
+    ("174-pods-falling", "In a match: pods falling over the city with their fire and smoke trails"),
+    ("174-pods-landed", "In a match: six pods open on the ground, the marines standing in them"),
+]
+OVERVIEW = OVERVIEW23 if ROUND == "23" else OVERVIEW22 if ROUND == "22" else OVERVIEW21 if ROUND == "21" else OVERVIEW20 if ROUND == "20" else OVERVIEW19 if ROUND == "19" else OVERVIEW18 if ROUND == "18" else OVERVIEW17 if ROUND == "17" else OVERVIEW16 if ROUND == "16" else OVERVIEW15 if ROUND == "15" else OVERVIEW14 if ROUND == "14" else OVERVIEW13 if ROUND == "13" else OVERVIEW12 if ROUND == "12" else OVERVIEW11 if ROUND == "11" else OVERVIEW10 if ROUND == "10" else OVERVIEW9 if ROUND == "9" else OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
     ("gallery_ancient", "Ancient age, game camera: <code>--gallery ancient</code>"),
     ("gallery_classical", "Classical age, game camera: <code>--gallery classical</code>"),
     ("gallery_classical_close_team2", "Classical age, close, in player 2's blue to show where team colour sits"),
@@ -253,7 +261,7 @@ def round_of(m):
     site (task 82), 14 the higher-definition spaceships and the two line ships of task 92
     (task 93), 15 the Deep Space Tracking Station (task 118), 16 the rotorcraft (task 119), 17 the drone operator (task 120), 18 the militia (task 141) and the nuclear reactor
     (task 146), 19 the fortifications (task 147a) and the space probe, 20 the gates three tiles
-    wide (task 147b), 21 the shield emitters (task 156), 22 the sea transports (task 167)."""
+    wide (task 147b), 21 the shield emitters (task 156), 22 the sea transports (task 167), 23 the drop pod (task 174, a kit model: overview only)."""
     if m["id"] in ROUND1:
         return 1
     if m["id"] in ROUND22:
