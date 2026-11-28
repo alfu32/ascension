@@ -6,7 +6,7 @@
 
 <p align="center">
   A real-time strategy game from the first villages to an age of galactic empires.<br>
-  Round planets, fourteen ages, star systems, charged jumps, and an ending you choose.
+  Round planets, fifteen ages, star clusters, charged jumps, and an ending you choose.
 </p>
 
 <p align="center">
@@ -23,11 +23,12 @@
 Ascension is a real-time strategy game in which a people grows from an ancient
 settlement into a spacefaring civilisation. You found cities on a round planet, gather
 food, timber and metal, research at the library, trade at the market and raise armies.
-Fourteen ages later your nation has become part of a continental bloc, the blocs have
-united as humanity, and your fleets cross between star systems.
+Fifteen ages later your nation has become part of a continental bloc, the blocs have
+united as humanity, and your fleets cross between the star clusters of the galaxy.
 
 The world is one continuous place: the camera moves from a street between your houses to
-the whole globe, and, once you reach space, out to your star system and the star map.
+the whole globe, and, once you reach space, out to your star system, its star cluster, a
+quadrant of the galaxy and the whole galactic disk.
 Nothing is loaded between those views.
 
 Status: in active development, released often. Everything shown here runs in the current
@@ -56,7 +57,7 @@ star system.
 ### Cities, resources and the market
 
 Citizens gather **food**, **timber** and **metal**; temples and markets bring **wealth**;
-libraries and universities turn **knowledge** into technology (185 of them). Later ages add
+libraries and universities turn **knowledge** into technology (more than two hundred of them). Later ages add
 **oil** and **energy**. Cities claim the land around them, houses raise the population cap,
 and the market buys and sells resources in lots, at prices that move with your own trading. Caravans and
 merchant fleets earn wealth on trade routes, at home and, later, between star systems.
@@ -74,24 +75,29 @@ merchant fleets earn wealth on trade routes, at home and, later, between star sy
 
 <p align="center"><img src="app/docs/img/107-market-panel.png" width="900" alt="The market panel: buy and sell resources"></p>
 
-### Fourteen ages
+**Set the pace.** Two match options slow the economy down without slowing anything else: the
+**gathering rate** (100 % down to 2 % of every income) and the **research speed** (1000 % down
+to 5 %). A game can last two hours or several days.
+
+### Fifteen ages
 
 | # | Age | What it brings |
 | --- | --- | --- |
-| 0 | Ancient | cities, farms, the first soldiers |
-| 1 | Classical | metalwork, temples and priests, stables, siege engines |
-| 2 | Medieval | castles, heavy cavalry |
+| 0 | Ancient | cities, farms, palisades, the first soldiers |
+| 1 | Classical | metalwork, temples and priests, stables, siege engines, stone walls |
+| 2 | Medieval | castles, heavy cavalry, the cog: troop transports at sea |
 | 3 | Discovery | firearms, cannon, ocean-going ships: the first age of discovery |
 | 4 | Enlightenment | line infantry, universities |
-| 5 | Industrial | oil, factories, medics, the first aircraft |
-| 6 | Modern | tanks, carriers, missiles |
+| 5 | Industrial | oil, factories, medics, the first aircraft, trenches and minefields; citizens learn to swim |
+| 6 | Modern | tanks, carriers, missiles, landing ships |
 | 7 | Freedom | drones in the air, at sea and on the ground |
 | 8 | Automation | robot workers and soldiers; nuclear power; nations merge into continental blocs |
-| 9 | Fusion | fusion power; craft that fly, dive and reach near orbit; the first ships and colonies on the other worlds of the home star |
-| 10 | Spacefaring | the whole fleet, and the home star system its own: the second age of discovery; the blocs unite as humanity |
-| 11 | Starfaring | the jump to other stars: colonies on their worlds, trade between systems |
-| 12 | Abundance | everything costs nothing; building still takes time |
-| 13 | Galactic Empires | rival human empires and their great works |
+| 9 | Fusion | fusion power; craft that fly, dive and reach near orbit; the first ships and colonies on the other worlds of the home star; soldiers swim and fight from the water |
+| 10 | Spacefaring | the whole fleet, and the home star system its own; jetpacks, shield walls, buildings that lift off; the blocs unite as humanity |
+| 11 | Starfaring | the jump to the other stars of your cluster; orbital drops; buildings that cross the system |
+| 12 | Abundance | everything costs nothing, building still takes time; jumps to the other clusters |
+| 13 | Galactic War | rival human empires at war across the stars; buildings that jump to other stars |
+| 14 | Galactic Federation | the last age: humanity's federation, and the way to the Ascension |
 
 ### Nations, blocs, humanity
 
@@ -127,23 +133,72 @@ target has a counter within reach.
 </tr>
 </table>
 
+### Walls, gates and shields
+
+Drag a line on the ground to build a wall: a palisade, then stone walls, defensive lines with
+trenches and tank traps, and from the Spacefaring Age shield emitters, whose energy wall stops
+enemies while it has power. Press G while dragging to put a gate in the line; gates let your
+own side through. Minefields hide from the enemy. Any building can be turned before you place
+it (R), and a gate snaps into a finished wall.
+
+<table>
+<tr>
+<td><img src="app/docs/img/147-wall.png" alt="A stone wall with its gatehouse"></td>
+<td><img src="app/docs/img/156-up.png" alt="A shield line with its energy wall"></td>
+</tr>
+<tr>
+<td align="center">A stone wall and its gate</td>
+<td align="center">A shield line in the Spacefaring Age</td>
+</tr>
+</table>
+
+### Over water, through the air, down from orbit
+
+Cogs, fluyts, troopships and landing ships carry an army to another shore. Citizens and later
+soldiers swim across shallow water. Jetpack infantry jump over walls and rivers, and from the
+Starfaring Age troops drop from orbit in pods that come down like missiles. Production
+buildings with lift-off engines fly away from a lost fight: across the planet, through the
+star system and, in the last ages, to other stars.
+
+<table>
+<tr>
+<td><img src="app/docs/img/167-cog-leaving.png" alt="A loaded cog leaving the dock"></td>
+<td><img src="app/docs/img/168-strait.png" alt="Citizens swimming across a strait"></td>
+</tr>
+<tr>
+<td align="center">A cog with soldiers aboard</td>
+<td align="center">Swimming across a strait</td>
+</tr>
+<tr>
+<td><img src="app/docs/img/174-pods-falling.png" alt="Drop pods falling over a city"></td>
+<td><img src="app/docs/img/170-barracks-lift-off.png" alt="A barracks lifting off on its engines"></td>
+</tr>
+<tr>
+<td align="center">An orbital drop</td>
+<td align="center">A barracks lifting off</td>
+</tr>
+</table>
+
 ### Into space: star systems and the star map
 
 From the Fusion Age your view opens beyond the home planet to the moons, asteroid belts and
 gas giants of the home star, and your first ships settle its other worlds; from the Starfaring
-Age ships jump to the other systems on the star map. Resource worlds are **claimed by keeping a
+Age ships jump to the other systems of their star cluster, and from the Age of Abundance to the
+other clusters. Resource worlds are **claimed by keeping a
 starship beside them**; habitable planets take colonies, and ground battles are fought on
 their surfaces. Six map styles set the scale, from a single planet shared by everyone to a
-solar system, a cluster, a sector, a quadrant or a whole galaxy, with real star names.
+solar system, a cluster, a sector, a quadrant or a whole galaxy, with 740 real stars grouped
+into 160 clusters. The camera zooms out in steps: planet, star system, cluster, quadrant and
+the galaxy, whose clusters lie on the galactic disk.
 
 <table>
 <tr>
 <td><img src="app/docs/img/solar-system-homes.png" alt="A star system with the home planets of several players"></td>
-<td><img src="app/docs/img/starmap-style-galaxy.png" alt="The star map of a galaxy-sized match"></td>
+<td><img src="app/docs/img/162-galaxy-view.png" alt="The galaxy view: every star cluster on the galactic disk"></td>
 </tr>
 <tr>
 <td align="center">A star system</td>
-<td align="center">The star map</td>
+<td align="center">The galaxy view</td>
 </tr>
 </table>
 
@@ -177,7 +232,8 @@ the edge of the system and must cross it under fire.
 
 Computer players use the same orders as people and nothing else. Four personalities
 (Balanced, Boom and Build, Rush and Raid, Fortress) at six difficulties from Easiest to
-Toughest. A match can also be watched while computers play every seat.
+Toughest. They scout other worlds, invade them by landing or orbital drop, carry armies over
+the sea and swim across straits. A match can also be watched while computers play every seat.
 
 ### Ascension, and bringing worlds to life
 
